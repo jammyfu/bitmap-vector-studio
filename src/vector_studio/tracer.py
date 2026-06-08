@@ -12,6 +12,7 @@ from .svg_tools import (
     export_svg_to_eps_with_inkscape,
     export_svg_to_pdf,
     export_svg_to_png,
+    name_svg_layers,
     optimize_svg_file,
     svg_stats,
 )
@@ -45,6 +46,7 @@ def trace_image(
     options: TraceOptions | None = None,
     *,
     optimize: bool = True,
+    name_layers: bool = False,
     export_pdf: bool = False,
     export_png: bool = False,
     export_eps: bool = False,
@@ -90,6 +92,9 @@ def trace_image(
 
     if optimize:
         optimize_svg_file(output_path)
+
+    if name_layers:
+        name_svg_layers(output_path)
 
     pdf_path = None
     png_path = None

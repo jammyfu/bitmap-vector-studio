@@ -67,6 +67,7 @@ def trace_command(
     posterize: Optional[int] = typer.Option(None, "--posterize", min=1, max=8, help="Optional Pillow posterize bits."),
     max_input_side: Optional[int] = typer.Option(None, "--max-input-side", min=64, help="Downscale max side before tracing."),
     optimize: bool = typer.Option(True, "--optimize/--no-optimize", help="Conservative SVG cleanup."),
+    name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to the output SVG."),
     export_pdf: bool = typer.Option(False, "--export-pdf", help="Also export PDF via CairoSVG."),
     export_png: bool = typer.Option(False, "--export-png", help="Also export PNG preview via CairoSVG."),
     export_eps: bool = typer.Option(False, "--export-eps", help="Also export EPS via Inkscape CLI."),
@@ -96,6 +97,7 @@ def trace_command(
         out,
         opts,
         optimize=optimize,
+        name_layers=name_layers,
         export_pdf=export_pdf,
         export_png=export_png,
         export_eps=export_eps,
@@ -129,6 +131,7 @@ def batch_command(
     preset: str = typer.Option("poster", "--preset", "-p"),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Scan input folder recursively."),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing SVG files."),
+    name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to each output SVG."),
     export_pdf: bool = typer.Option(False, "--export-pdf"),
     export_png: bool = typer.Option(False, "--export-png"),
     open_editor: bool = typer.Option(False, "--open", help="Open each output SVG in the default external editor after conversion."),
@@ -157,7 +160,7 @@ def batch_command(
             table.add_row(str(image_path), str(out_path), "skipped")
             continue
         try:
-            result = trace_image(image_path, out_path, opts, export_pdf=export_pdf, export_png=export_png)
+            result = trace_image(image_path, out_path, opts, export_pdf=export_pdf, export_png=export_png, name_layers=name_layers)
             table.add_row(str(image_path), str(result.svg_path), "ok")
             if open_editor:
                 try:
