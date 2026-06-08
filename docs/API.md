@@ -1,6 +1,6 @@
 # API 文档
 
-Bitmap Vector Studio v0.4 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
+Bitmap Vector Studio v0.5 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
 
 ---
 
@@ -70,7 +70,7 @@ docker-compose up -d vector-studio
 ```json
 {
   "status": "ok",
-  "version": "0.4.0"
+  "version": "0.5.0"
 }
 ```
 
@@ -373,7 +373,7 @@ client = VectorStudioClient("http://localhost:8000")
 
 # 检查服务健康
 health = client.health()
-print(health)  # {'status': 'ok', 'version': '0.4.0'}
+print(health)  # {'status': 'ok', 'version': '0.5.0'}
 ```
 
 ### 同步转换

@@ -1,6 +1,6 @@
 # 插件开发指南
 
-Bitmap Vector Studio v0.4 引入了基于 Hook 的插件系统，允许用户在矢量化流程的关键节点注入自定义逻辑。
+Bitmap Vector Studio v0.5 的插件系统基于 Hook 架构，允许用户在矢量化流程的关键节点注入自定义逻辑。
 
 ---
 

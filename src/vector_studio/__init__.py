@@ -139,6 +139,58 @@ __all__ = [
     "Config",
     # API client (v0.4)
     "VectorStudioClient",
+    # AI simplify (v0.5)
+    "semantic_simplify",
+    "superpixel_simplify",
+    "cartoon_effect",
+    "adaptive_simplify",
+    # AI OCR (v0.5)
+    "detect_text_regions",
+    "recognize_text",
+    "integrate_text_to_svg",
+    # Live preview (v0.5)
+    "LivePreviewEngine",
+    "PreviewCache",
+    # Region trace (v0.5)
+    "RegionSelector",
+    "region_trace",
+    "trace_region",
+    "merge_region_svg",
+    # Market (v0.5)
+    "PresetMarket",
+    "MarketBackend",
+    "GitHubGistBackend",
+    "GitHubRepoBackend",
+    "MultiBackend",
 ]
 
-__version__ = "0.4.0"
+from .ai_simplify import (
+    semantic_simplify,
+    superpixel_simplify,
+    cartoon_effect,
+    adaptive_simplify,
+)
+from .ai_ocr import (
+    detect_text_regions,
+    recognize_text,
+    integrate_text_to_svg,
+)
+from .live_preview import (
+    LivePreviewEngine,
+    PreviewCache,
+)
+from .region_trace import (
+    RegionSelector,
+    region_trace,
+    trace_region,
+    merge_region_svg,
+)
+from .market import (
+    PresetMarket,
+    MarketBackend,
+    GitHubGistBackend,
+    GitHubRepoBackend,
+    MultiBackend,
+)
+
+__version__ = "0.5.0"

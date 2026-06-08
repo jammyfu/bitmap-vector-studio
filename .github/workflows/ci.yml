@@ -35,8 +35,11 @@ jobs:
       - name: Run tests with coverage
         run: pytest -v --cov=src/vector_studio --cov-report=xml --cov-report=term
 
-      - name: Run API tests
+      - name: Run API and core tests
         run: pytest -v tests/test_api.py tests/test_api_client.py tests/test_plugins.py tests/test_config.py
+
+      - name: Run AI and preview tests
+        run: pytest -v tests/test_ai_simplify.py tests/test_ai_ocr.py tests/test_live_preview.py tests/test_region_trace.py tests/test_market.py
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

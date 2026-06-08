@@ -9,10 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- AI 辅助重绘与 OCR
-- 实时预览与局部重描摹
-- 预设市场与在线分享
 - Tauri 桌面端
+- 拖拽队列
+- 原生文件菜单
+- 自动更新机制
+
+## [0.5.0] - 2026-06-08
+
+### Added
+
+- **实时预览**：调整参数时实时生成低分辨率预览 SVG，无需等待完整转换。
+  - `live_preview.py`：`LivePreviewEngine` 支持快速低分辨率预览生成，内置 LRU + TTL 缓存（`PreviewCache`），重复参数组合近乎即时返回。
+  - CLI `--live-preview` 选项：`vector-studio trace input.png --live-preview` 快速输出预览 SVG。
+- **局部重描摹**：支持矩形、圆形、多边形选区，仅对选中区域重新矢量化并合并回原始 SVG。
+  - `region_trace.py`：`RegionSelector` 定义选区（`rect` / `circle` / `polygon`），`region_trace()` 裁剪 → 转换 → 合并全流程封装。
+  - `crop_region()` 支持非矩形遮罩（圆形/多边形带透明通道）。
+  - `merge_region_svg()` 通过 SVG `<g transform="translate(x,y)">` 将局部结果精确嵌入原图坐标系。
+  - CLI `--region x,y,w,h` 选项：快速矩形局部重描摹。
+- **AI 语义简化**：纯 Pillow / NumPy 实现，无需外部深度学习框架，对复杂照片先做语义简化再进入矢量化。
+  - `ai_simplify.py`：提供四种简化策略。
+    - `semantic_simplify()`：双边滤波模拟 + K-Means 颜色量化 + 边缘保护，适合照片转插画。
+    - `superpixel_simplify()`：网格超像素分割，将图像划分为均匀色块。
+    - `cartoon_effect()`：中值滤波 + 边缘增强，卡通化效果。
+    - `adaptive_simplify()`：自适应策略，根据图像复杂度自动选择 `photo` / `complex` / `sketch` 模式。
+  - CLI `--ai-simplify` 和 `--simplify-type` 选项：支持 `auto`（默认）、`photo`、`complex`、`sketch`。
+- **OCR 文字识别**：检测图片中的文字区域，并在最终 SVG 中保留为可编辑的 `<text>` 元素。
+  - `ai_ocr.py`：`detect_text_regions()` 基于对比度分析和水平线密度启发式检测文字区域（无需外部 OCR 库）。
+  - `recognize_text()` 优先尝试 `pytesseract`，其次 `easyocr`，两者均未安装时返回空文本的区域框。
+  - `integrate_text_to_svg()` 将识别结果插入 SVG，文字层置于最上方，保持可编辑性。
+  - CLI `--ai-ocr` 选项：一键启用文字检测与嵌入。
+- **预设市场**：基于 GitHub Gist / Repo 的在线预设分享平台，支持浏览、搜索、安装、发布、评分。
+  - `market.py`：`PresetMarket` 高层接口，`MarketBackend` 抽象基类。
+  - `GitHubGistBackend`：每个 Gist 存储一个预设，支持描述元数据 + JSON 文件。
+  - `GitHubRepoBackend`：仓库子目录批量存储预设，通过 Contents API 和 raw 链接读写。
+  - `MultiBackend`：聚合多个后端，自动去重和容错降级。
+  - 本地评分持久化：`~/.bitmap_vector_studio/market/ratings.json`。
+  - CLI `market` 子命令：`list`、`search`、`install`、`publish`、`popular`、`info`。
+- **CLI 增强**：
+  - `trace` 新增 `--live-preview`、`--region`、`--ai-simplify`、`--ai-ocr`、`--simplify-type` 选项。
+  - 新增 `market` 子命令组（6 个子命令）。
+- **测试覆盖**：新增 `test_ai_simplify.py`、`test_ai_ocr.py`、`test_live_preview.py`、`test_region_trace.py`、`test_market.py`。
+
+### Changed
+
+- **公开 API 扩展**：`__init__.py` 的 `__all__` 新增 `semantic_simplify`、`superpixel_simplify`、`cartoon_effect`、`adaptive_simplify`、`detect_text_regions`、`recognize_text`、`integrate_text_to_svg`、`LivePreviewEngine`、`PreviewCache`、`RegionSelector`、`region_trace`、`trace_region`、`merge_region_svg`、`PresetMarket`、`MarketBackend`、`GitHubGistBackend`、`GitHubRepoBackend`、`MultiBackend` 等 v0.5 公开 API。
+- **依赖调整**：`pyproject.toml` 新增 `[ai]` 可选依赖组（`pytesseract>=0.3.10`、`easyocr>=1.7`），用于 OCR 文字识别增强。
+- **核心转换流程扩展**：`trace_image()` 新增 `ai_simplify`、`ai_ocr`、`simplify_type`、`preview_mode` 参数，在预处理和后处理阶段自动调用对应模块。
+
+### Fixed
+
+- 实时预览缓存正确处理参数哈希冲突，避免不同图片相同参数返回错误缓存结果。
+- 局部重描摹合并 SVG 时保留原始命名空间和 viewBox，防止坐标偏移。
+- AI 简化在 NumPy 不可用时自动降级为纯 Pillow 实现，保证核心功能可用。
+- OCR 模块在未安装 `pytesseract` 和 `easyocr` 时优雅降级，仅输出空文本区域而不崩溃。
+- 预设市场在网络故障时返回空列表并记录警告，避免阻断主流程。
 
 ## [0.4.0] - 2026-06-08
 

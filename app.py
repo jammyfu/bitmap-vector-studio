@@ -103,6 +103,42 @@ try:
 except Exception:
     _HAS_API_CLIENT = False
 
+# v0.5 modules — import with graceful degradation
+try:
+    from vector_studio.live_preview import LivePreviewEngine
+
+    _HAS_LIVE_PREVIEW = True
+except Exception:
+    _HAS_LIVE_PREVIEW = False
+
+try:
+    from vector_studio.region_trace import RegionSelector, region_trace
+
+    _HAS_REGION_TRACE = True
+except Exception:
+    _HAS_REGION_TRACE = False
+
+try:
+    from vector_studio.ai_simplify import adaptive_simplify
+
+    _HAS_AI_SIMPLIFY = True
+except Exception:
+    _HAS_AI_SIMPLIFY = False
+
+try:
+    from vector_studio.ai_ocr import detect_text_regions, recognize_text
+
+    _HAS_AI_OCR = True
+except Exception:
+    _HAS_AI_OCR = False
+
+try:
+    from vector_studio.market import PresetMarket
+
+    _HAS_MARKET = True
+except Exception:
+    _HAS_MARKET = False
+
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
 st.caption("VTracer 驱动的 Illustrator-like 位图转 SVG 工具")
@@ -267,6 +303,61 @@ def _get_config() -> "Config | None":
     return st.session_state.app_config
 
 
+def _get_live_preview_engine() -> "LivePreviewEngine | None":
+    """获取或初始化 LivePreviewEngine。"""
+    if not _HAS_LIVE_PREVIEW:
+        return None
+    if "live_preview_engine" not in st.session_state or st.session_state.live_preview_engine is None:
+        engine = LivePreviewEngine(max_size=400, cache_size=10)
+        st.session_state.live_preview_engine = engine
+    return st.session_state.live_preview_engine
+
+
+def _get_preset_market() -> "PresetMarket | None":
+    """获取或初始化 PresetMarket。"""
+    if not _HAS_MARKET:
+        return None
+    if "preset_market" not in st.session_state or st.session_state.preset_market is None:
+        market = PresetMarket()
+        st.session_state.preset_market = market
+    return st.session_state.preset_market
+
+
+def _hash_options(options: TraceOptions) -> str:
+    """为防抖生成参数哈希。"""
+    import hashlib
+    data = f"{options.vtracer_kwargs()}:{options.max_input_side}:{options.denoise}:{options.posterize}"
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
+
+
+def _run_live_preview(input_path: Path, options: TraceOptions) -> bytes | None:
+    """生成实时预览字节，带简单速率限制。"""
+    engine = _get_live_preview_engine()
+    if engine is None:
+        return None
+    try:
+        return engine.generate_preview_bytes(input_path, options)
+    except Exception as e:
+        st.session_state["ui_message"] = ("warning", f"实时预览失败: {e}")
+        return None
+
+
+def _render_region_overlay(image_bytes: bytes, x: int, y: int, w: int, h: int, mime: str = "image/png") -> str:
+    """用 CSS 在原图上叠加选区框的 HTML。"""
+    b64 = base64.b64encode(image_bytes).decode()
+    return f"""
+    <div style="position:relative;display:inline-block;max-width:100%;">
+      <img src="data:{mime};base64,{b64}" style="max-width:100%;display:block;">
+      <div style="position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;
+                  border:2px dashed #ff4444;box-sizing:border-box;pointer-events:none;
+                  background:rgba(255,68,68,0.15);">
+        <span style="position:absolute;top:-18px;left:0;background:#ff4444;color:white;
+                     font-size:11px;padding:1px 4px;border-radius:2px;">选区</span>
+      </div>
+    </div>
+    """
+
+
 def _save_config(cfg: "Config") -> None:
     """保存配置并更新 session_state。"""
     try:
@@ -330,6 +421,26 @@ if "initialized" not in st.session_state:
     st.session_state.app_config = None
     st.session_state.api_process = None
     st.session_state.api_health = None
+    # v0.5 live preview
+    st.session_state.live_preview_enabled = False
+    st.session_state.live_preview_engine = None
+    st.session_state._preview_hash = ""
+    st.session_state._preview_last_time = 0.0
+    st.session_state._preview_bytes = None
+    # v0.5 AI assist
+    st.session_state.ai_simplify_enabled = False
+    st.session_state.ai_simplify_type = "auto"
+    st.session_state.ai_ocr_enabled = False
+    st.session_state.ai_ocr_regions = None
+    # v0.5 region trace
+    st.session_state.region_x = 0
+    st.session_state.region_y = 0
+    st.session_state.region_w = 100
+    st.session_state.region_h = 100
+    st.session_state.region_result_svg = None
+    # v0.5 market
+    st.session_state.preset_market = None
+    st.session_state.market_presets = None
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -422,6 +533,16 @@ with st.sidebar:
         st.checkbox("🧠 智能背景透明", key="smart_remove_bg")
         st.checkbox("✨ 图像增强", key="enhance_enabled")
         st.selectbox("增强类型", ["auto", "scan", "photo", "logo"], key="enhance_type")
+        # v0.5 AI assist
+        if _HAS_AI_SIMPLIFY:
+            st.checkbox("🤖 AI语义简化", key="ai_simplify_enabled")
+            st.selectbox("简化类型", ["auto", "photo", "complex", "sketch"], key="ai_simplify_type")
+        else:
+            st.caption("🤖 AI语义简化不可用（vector_studio.ai_simplify 导入失败）")
+        if _HAS_AI_OCR:
+            st.checkbox("🔤 OCR文字识别", key="ai_ocr_enabled")
+        else:
+            st.caption("🔤 OCR文字识别不可用（vector_studio.ai_ocr 导入失败）")
         st.checkbox("限制输入最大边长", key="max_input_side_enabled")
         st.number_input(
             "最大边长 px",
@@ -809,9 +930,81 @@ if uploaded is not None:
     preview_mode = st.radio("预览模式", ["并排对比", "叠加对比"], horizontal=True, key="preview_mode")
 
     # -----------------------------------------------------------------------
-    # 转换流程（集成插件钩子）
+    # v0.5: 实时预览面板
     # -----------------------------------------------------------------------
-    if st.button("开始转换", type="primary"):
+    col_convert, col_preview_toggle = st.columns([1, 1])
+    with col_convert:
+        convert_clicked = st.button("开始转换", type="primary")
+    with col_preview_toggle:
+        st.checkbox("👁️ 实时预览", key="live_preview_enabled")
+
+    if st.session_state.get("live_preview_enabled"):
+        if not _HAS_LIVE_PREVIEW:
+            st.warning("实时预览引擎不可用（vector_studio.live_preview 导入失败）")
+        else:
+            with st.container(border=True):
+                st.caption("预览模式（低分辨率）")
+                preview_cols = st.columns([3, 1])
+                with preview_cols[0]:
+                    if st.button("🔄 刷新预览", key="refresh_preview"):
+                        st.session_state._preview_hash = ""
+                with preview_cols[1]:
+                    engine = _get_live_preview_engine()
+                    if engine:
+                        stats = engine.get_cache_stats()
+                        st.caption(f"缓存: {stats['size']}/{stats['max_size']} | 命中率: {stats['hit_rate']*100:.0f}%")
+
+                # 防抖：参数变化后至少间隔 0.5s 才重新生成
+                current_hash = _hash_options(options)
+                last_hash = st.session_state.get("_preview_hash", "")
+                last_time = st.session_state.get("_preview_last_time", 0.0)
+                now = time.time()
+
+                preview_bytes = st.session_state.get("_preview_bytes")
+                needs_refresh = False
+                if current_hash != last_hash:
+                    if now - last_time >= 0.5:
+                        needs_refresh = True
+                    else:
+                        st.caption("⏳ 参数变化中，预览将在稳定后自动更新…")
+
+                if needs_refresh or (preview_bytes is None and current_hash == last_hash):
+                    with st.spinner("生成实时预览…"):
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-preview-ui-") as tmp:
+                                tmp_dir = Path(tmp)
+                                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                preview_bytes = _run_live_preview(input_path, options)
+                                if preview_bytes is not None:
+                                    st.session_state._preview_bytes = preview_bytes
+                                    st.session_state._preview_hash = current_hash
+                                    st.session_state._preview_last_time = time.time()
+                        except Exception as e:
+                            st.warning(f"预览生成失败: {e}")
+
+                preview_bytes = st.session_state.get("_preview_bytes")
+                if preview_bytes:
+                    svg_text = preview_bytes.decode("utf-8", errors="replace")
+                    components.html(
+                        f"""
+                        <div style="width:100%;height:320px;overflow:auto;border:1px solid #ddd;background:white;display:flex;align-items:center;justify-content:center;">
+                            {svg_text}
+                        </div>
+                        """,
+                        height=340,
+                        scrolling=True,
+                    )
+                else:
+                    st.info("上传图片并调整参数后，实时预览将在此显示")
+
+    # -----------------------------------------------------------------------
+    # 转换流程（集成插件钩子 + AI 辅助）
+    # -----------------------------------------------------------------------
+    ai_simplify_enabled = st.session_state.get("ai_simplify_enabled", False) and _HAS_AI_SIMPLIFY
+    ai_ocr_enabled = st.session_state.get("ai_ocr_enabled", False) and _HAS_AI_OCR
+    simplify_type = st.session_state.get("ai_simplify_type", "auto") if ai_simplify_enabled else "auto"
+
+    if convert_clicked:
         with st.spinner("正在转换 SVG…"):
             with tempfile.TemporaryDirectory(prefix="vector-studio-ui-") as tmp:
                 tmp_dir = Path(tmp)
@@ -840,6 +1033,9 @@ if uploaded is not None:
                         smart_remove_bg=smart_remove_bg,
                         enhance=enhance_type,
                         plugins=plugin_instances,
+                        ai_simplify=ai_simplify_enabled,
+                        ai_ocr=ai_ocr_enabled,
+                        simplify_type=simplify_type,
                     )
                     st.session_state["svg_text"] = result.svg_path.read_text(encoding="utf-8")
                     st.session_state["svg_bytes"] = result.svg_path.read_bytes()
@@ -851,6 +1047,17 @@ if uploaded is not None:
                     st.session_state["last_preset_used"] = st.session_state.preset_selector
                     st.session_state["plugins_applied"] = len(plugin_instances) > 0
                     st.session_state["plugins_count"] = len(plugin_instances)
+                    st.session_state["ai_ocr_regions"] = None
+
+                    # AI OCR 结果收集
+                    if ai_ocr_enabled and _HAS_AI_OCR:
+                        try:
+                            from PIL import Image
+                            with Image.open(input_path) as img:
+                                regions = recognize_text(img)
+                                st.session_state["ai_ocr_regions"] = regions
+                        except Exception:
+                            pass
 
                     # SVG 质量评分
                     if _HAS_SVG_OPTIMIZER:
@@ -968,6 +1175,23 @@ if uploaded is not None:
                 q2.metric("路径效率", svg_quality.get("path_efficiency", 0))
                 q3.metric("复杂度", svg_quality.get("complexity_score", 0))
                 q4.metric("颜色效率", svg_quality.get("color_efficiency", 0))
+
+        # AI OCR 结果展示
+        ocr_regions = st.session_state.get("ai_ocr_regions")
+        if ocr_regions:
+            with st.expander("🔤 OCR 文字识别结果"):
+                if not ocr_regions:
+                    st.caption("未检测到文字区域")
+                else:
+                    st.markdown(f"检测到 **{len(ocr_regions)}** 个文字区域：")
+                    for i, region in enumerate(ocr_regions[:20], 1):
+                        text = region.get("text", "")
+                        bbox = region.get("bbox", [0, 0, 0, 0])
+                        conf = region.get("confidence", 0)
+                        st.markdown(
+                            f"{i}. `{html.escape(text or '(未识别)')}` "
+                            f"— 位置: {bbox} | 置信度: {conf*100:.0f}%"
+                        )
 
         # SVG 结构
         with st.expander("📐 SVG 结构"):
@@ -1319,6 +1543,174 @@ if uploaded is not None:
                             st.success("批量转换已完成")
                 else:
                     st.caption("队列为空")
+
+    # -----------------------------------------------------------------------
+    # 6. 局部重描摹面板 (v0.5)
+    # -----------------------------------------------------------------------
+    with st.expander("✂️ 局部重描摹"):
+        if not _HAS_REGION_TRACE:
+            st.warning("局部重描摹模块不可用（vector_studio.region_trace 导入失败）")
+        else:
+            st.markdown("**选区设置**")
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            with rc1:
+                rx = st.number_input("X", min_value=0, value=st.session_state.region_x, key="region_x")
+            with rc2:
+                ry = st.number_input("Y", min_value=0, value=st.session_state.region_y, key="region_y")
+            with rc3:
+                rw = st.number_input("Width", min_value=1, value=st.session_state.region_w, key="region_w")
+            with rc4:
+                rh = st.number_input("Height", min_value=1, value=st.session_state.region_h, key="region_h")
+
+            # 显示带选区框的原图
+            try:
+                from PIL import Image
+                with tempfile.TemporaryDirectory(prefix="vector-studio-region-ui-") as tmp:
+                    tmp_dir = Path(tmp)
+                    input_path = _save_uploaded_file(uploaded, tmp_dir)
+                    with Image.open(input_path) as img:
+                        img_w, img_h = img.size
+                        # Clamp region to image bounds for display
+                        disp_x = min(rx, img_w)
+                        disp_y = min(ry, img_h)
+                        disp_w = min(rw, img_w - disp_x)
+                        disp_h = min(rh, img_h - disp_y)
+                    img_bytes = input_path.read_bytes()
+                    mime = uploaded.type or "image/png"
+                    st.components.v1.html(
+                        _render_region_overlay(img_bytes, disp_x, disp_y, disp_w, disp_h, mime),
+                        height=min(img_h, 400) + 20,
+                    )
+            except Exception as e:
+                st.warning(f"无法渲染选区覆盖图: {e}")
+
+            has_original_svg = "svg_text" in st.session_state
+            merge_original = False
+            if has_original_svg:
+                merge_original = st.checkbox("合并到原图（使用当前 SVG 结果）", value=False, key="region_merge")
+
+            if st.button("转换选区", key="region_trace_button"):
+                with st.spinner("正在局部重描摹…"):
+                    try:
+                        with tempfile.TemporaryDirectory(prefix="vector-studio-region-run-") as tmp:
+                            tmp_dir = Path(tmp)
+                            input_path = _save_uploaded_file(uploaded, tmp_dir)
+                            out_svg = tmp_dir / "region_result.svg"
+                            region = RegionSelector(x=int(rx), y=int(ry), width=int(rw), height=int(rh), shape="rect")
+                            original_svg_path = None
+                            if merge_original and has_original_svg:
+                                original_svg_path = tmp_dir / "original.svg"
+                                original_svg_path.write_text(st.session_state["svg_text"], encoding="utf-8")
+                            result = region_trace(
+                                input_path,
+                                region,
+                                out_svg,
+                                options,
+                                original_svg=original_svg_path,
+                            )
+                            st.session_state["region_result_svg"] = result.svg_path.read_text(encoding="utf-8")
+                            st.session_state["region_result_bytes"] = result.svg_path.read_bytes()
+                            st.success("局部重描摹完成！")
+                    except Exception as e:
+                        st.error(f"局部重描摹失败: {e}")
+
+            if st.session_state.get("region_result_svg"):
+                st.subheader("局部结果预览")
+                components.html(
+                    f"""
+                    <div style="width:100%;height:320px;overflow:auto;border:1px solid #ddd;background:white;display:flex;align-items:center;justify-content:center;">
+                        {st.session_state['region_result_svg']}
+                    </div>
+                    """,
+                    height=340,
+                    scrolling=True,
+                )
+                st.download_button(
+                    "下载局部 SVG",
+                    data=st.session_state["region_result_bytes"],
+                    file_name="region_vectorized.svg",
+                    mime="image/svg+xml",
+                    key="download_region_svg",
+                )
+
+    # -----------------------------------------------------------------------
+    # 7. 预设市场浏览器 (v0.5)
+    # -----------------------------------------------------------------------
+    with st.expander("🏪 预设市场"):
+        if not _HAS_MARKET:
+            st.warning("预设市场模块不可用（vector_studio.market 导入失败）")
+        else:
+            market = _get_preset_market()
+            if market is None:
+                st.error("市场初始化失败")
+            else:
+                search_query = st.text_input("搜索预设", placeholder="输入关键词…", key="market_search_query")
+                mc1, mc2 = st.columns([1, 1])
+                with mc1:
+                    if st.button("🔍 搜索", key="market_search_btn"):
+                        with st.spinner("正在搜索…"):
+                            try:
+                                st.session_state["market_presets"] = market.search(search_query)
+                            except Exception as e:
+                                st.error(f"搜索失败: {e}")
+                with mc2:
+                    if st.button("🔄 刷新列表", key="market_refresh_btn"):
+                        with st.spinner("正在获取市场列表…"):
+                            try:
+                                st.session_state["market_presets"] = market.discover_presets()
+                            except Exception as e:
+                                st.error(f"获取列表失败: {e}")
+
+                # 热门预设快捷入口
+                try:
+                    popular = market.get_popular(limit=5)
+                except Exception:
+                    popular = []
+                if popular:
+                    st.markdown("**🔥 热门预设**")
+                    pop_cols = st.columns(min(len(popular), 5))
+                    for i, p in enumerate(popular):
+                        with pop_cols[i]:
+                            pid = p.get("id", "")
+                            pname = p.get("display_name") or p.get("name", pid)
+                            if st.button(f"{pname}", key=f"popular_{pid}"):
+                                try:
+                                    local_name = market.install(pid)
+                                    st.session_state["ui_message"] = ("success", f"已安装热门预设 '{local_name}'")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"安装失败: {e}")
+
+                presets = st.session_state.get("market_presets")
+                if presets is not None:
+                    if not presets:
+                        st.caption("未找到预设（市场离线或搜索无结果）")
+                    else:
+                        st.markdown(f"**结果: {len(presets)} 个预设**")
+                        for p in presets:
+                            pid = p.get("id", "")
+                            pname = p.get("display_name") or p.get("name", pid)
+                            author = p.get("author", "-")
+                            tags = ", ".join(p.get("tags", [])) or "-"
+                            rating = p.get("rating", 0.0)
+                            downloads = p.get("downloads", 0)
+
+                            with st.container(border=True):
+                                pc1, pc2 = st.columns([4, 1])
+                                with pc1:
+                                    st.markdown(
+                                        f"**{html.escape(pname)}** `by {html.escape(author)}`\n"
+                                        f"<small>标签: {html.escape(tags)} | ⭐ {rating} | ⬇️ {downloads}</small>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with pc2:
+                                    if st.button("安装", key=f"install_{pid}"):
+                                        try:
+                                            local_name = market.install(pid)
+                                            st.session_state["ui_message"] = ("success", f"已安装预设 '{local_name}'")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"安装失败: {e}")
 
 else:
     st.info("上传图片后，可以先用 `poster` 或 `logo` 预设；照片素材再切到 `photo` 。")
