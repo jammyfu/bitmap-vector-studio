@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import base64
 import html
+import json
+import subprocess
+import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
@@ -77,6 +80,28 @@ try:
     _HAS_TASK_QUEUE = True
 except Exception:
     _HAS_TASK_QUEUE = False
+
+# v0.4 modules — import with graceful degradation
+try:
+    from vector_studio.plugins import PluginManager
+
+    _HAS_PLUGINS = True
+except Exception:
+    _HAS_PLUGINS = False
+
+try:
+    from vector_studio.config import Config
+
+    _HAS_CONFIG = True
+except Exception:
+    _HAS_CONFIG = False
+
+try:
+    from vector_studio.api_client import VectorStudioClient
+
+    _HAS_API_CLIENT = True
+except Exception:
+    _HAS_API_CLIENT = False
 
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
@@ -221,6 +246,75 @@ def _color_for_score(score: float) -> str:
         return "🔴"
 
 
+def _get_plugin_manager() -> "PluginManager | None":
+    """获取或初始化 PluginManager。"""
+    if not _HAS_PLUGINS:
+        return None
+    if "plugin_manager" not in st.session_state or st.session_state.plugin_manager is None:
+        pm = PluginManager()
+        pm.discover_plugins()
+        st.session_state.plugin_manager = pm
+    return st.session_state.plugin_manager
+
+
+def _get_config() -> "Config | None":
+    """获取或初始化 Config。"""
+    if not _HAS_CONFIG:
+        return None
+    if "app_config" not in st.session_state or st.session_state.app_config is None:
+        cfg = Config.load()
+        st.session_state.app_config = cfg
+    return st.session_state.app_config
+
+
+def _save_config(cfg: "Config") -> None:
+    """保存配置并更新 session_state。"""
+    try:
+        cfg.save()
+        st.session_state.app_config = cfg
+    except Exception as e:
+        st.session_state["ui_message"] = ("error", f"配置保存失败: {e}")
+
+
+def _check_api_health() -> dict | None:
+    """检查 API 服务健康状态。"""
+    if not _HAS_API_CLIENT:
+        return None
+    try:
+        client = VectorStudioClient("http://localhost:8000")
+        return client.health()
+    except Exception:
+        return None
+
+
+def _start_api_service() -> subprocess.Popen | None:
+    """启动 API 服务子进程。"""
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "vector_studio.api:app", "--host", "127.0.0.1", "--port", "8000"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return proc
+    except Exception:
+        return None
+
+
+def _stop_api_service(proc: subprocess.Popen | None) -> None:
+    """停止 API 服务子进程。"""
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Session state 初始化
 # ---------------------------------------------------------------------------
@@ -232,6 +326,10 @@ if "initialized" not in st.session_state:
     st.session_state.enhance_type = "auto"
     st.session_state.optimize_level = "basic"
     st.session_state.batch_running = False
+    st.session_state.plugin_manager = None
+    st.session_state.app_config = None
+    st.session_state.api_process = None
+    st.session_state.api_health = None
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -347,6 +445,204 @@ with st.sidebar:
         st.caption("basic = 清理空白 | comprehensive = 合并路径+颜色 | aggressive = 最大压缩")
         st.checkbox("同时导出 PDF", value=False, key="export_pdf")
         st.checkbox("同时导出 PNG 预览", value=False, key="export_png")
+
+    st.divider()
+
+    # -----------------------------------------------------------------------
+    # v0.4: 插件管理面板
+    # -----------------------------------------------------------------------
+    with st.expander("🔌 插件管理"):
+        if not _HAS_PLUGINS:
+            st.warning("插件系统不可用（vector_studio.plugins 导入失败）")
+        else:
+            pm = _get_plugin_manager()
+            if pm is None:
+                st.error("插件管理器初始化失败")
+            else:
+                plugins = pm.list_plugins()
+                if not plugins:
+                    st.caption("未发现插件")
+                else:
+                    enabled_count = sum(1 for p in plugins if p.get("enabled"))
+                    st.markdown(f"**已启用插件数:** `{enabled_count}` / `{len(plugins)}`")
+
+                    for p in plugins:
+                        name = p.get("name", "unknown")
+                        version = p.get("version", "-")
+                        description = p.get("description", "")
+                        author = p.get("author", "")
+                        enabled = p.get("enabled", False)
+                        hooks = p.get("hooks", [])
+
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            hook_badges = " ".join([f"`{h}`" for h in hooks]) if hooks else ""
+                            st.markdown(
+                                f"**{name}** `v{version}` {hook_badges}\n"
+                                f"<small>{html.escape(description)} {html.escape(author)}</small>",
+                                unsafe_allow_html=True,
+                            )
+                        with col2:
+                            toggle_key = f"plugin_toggle_{name}"
+                            # 使用 checkbox 作为切换按钮
+                            was_enabled = enabled
+                            is_now_enabled = st.checkbox(
+                                "启用",
+                                value=enabled,
+                                key=toggle_key,
+                                label_visibility="collapsed",
+                            )
+                            if is_now_enabled != was_enabled:
+                                try:
+                                    if is_now_enabled:
+                                        pm.enable_plugin(name)
+                                    else:
+                                        pm.disable_plugin(name)
+                                    st.session_state["ui_message"] = (
+                                        "success",
+                                        f"插件 '{name}' 已{'启用' if is_now_enabled else '禁用'}",
+                                    )
+                                    st.rerun()
+                                except Exception as e:
+                                    st.session_state["ui_message"] = ("error", f"插件切换失败: {e}")
+                                    st.rerun()
+                        st.divider()
+
+                if st.button("🔄 重新扫描插件", key="rescan_plugins"):
+                    with st.spinner("正在扫描插件…"):
+                        try:
+                            pm.discover_plugins()
+                            st.session_state["ui_message"] = ("success", "插件扫描完成")
+                            st.rerun()
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"扫描失败: {e}")
+                            st.rerun()
+
+    # -----------------------------------------------------------------------
+    # v0.4: 配置管理面板
+    # -----------------------------------------------------------------------
+    with st.expander("⚙️ 配置管理"):
+        if not _HAS_CONFIG:
+            st.warning("配置管理模块不可用（vector_studio.config 导入失败）")
+        else:
+            cfg = _get_config()
+            if cfg is None:
+                st.error("配置加载失败")
+            else:
+                st.markdown("**当前配置摘要**")
+                out_dir = str(cfg.default_output_dir) if cfg.default_output_dir else "默认"
+                st.markdown(
+                    f"- 默认预设: `{cfg.default_preset}`\n"
+                    f"- 优化级别: `{cfg.default_optimize_level}`\n"
+                    f"- 输出目录: `{out_dir}`\n"
+                    f"- 启用插件: `{', '.join(cfg.enabled_plugins) or '无'}`"
+                )
+
+                # 导出配置
+                export_col1, export_col2 = st.columns(2)
+                with export_col1:
+                    cfg_json = json.dumps(cfg.to_dict(), indent=2, ensure_ascii=False)
+                    st.download_button(
+                        "导出 JSON",
+                        data=cfg_json,
+                        file_name="vector_studio_config.json",
+                        mime="application/json",
+                        key="export_config_json",
+                    )
+                with export_col2:
+                    try:
+                        import yaml
+
+                        cfg_yaml = yaml.safe_dump(cfg.to_dict(), default_flow_style=False, allow_unicode=True, sort_keys=True)
+                        st.download_button(
+                            "导出 YAML",
+                            data=cfg_yaml,
+                            file_name="vector_studio_config.yaml",
+                            mime="text/yaml",
+                            key="export_config_yaml",
+                        )
+                    except Exception:
+                        st.caption("YAML 导出不可用")
+
+                # 导入配置
+                st.markdown("---")
+                uploaded_config = st.file_uploader(
+                    "导入配置文件 (JSON/YAML)",
+                    type=["json", "yaml", "yml"],
+                    key="import_config_file",
+                )
+                if uploaded_config is not None:
+                    if st.button("应用导入配置", key="apply_imported_config"):
+                        try:
+                            content = uploaded_config.read().decode("utf-8")
+                            if uploaded_config.name.endswith((".yaml", ".yml")):
+                                import yaml
+
+                                data = yaml.safe_load(content)
+                            else:
+                                data = json.loads(content)
+                            if not isinstance(data, dict):
+                                raise ValueError("配置文件内容必须是字典")
+                            new_cfg = Config.from_dict(data)
+                            _save_config(new_cfg)
+                            st.session_state["ui_message"] = ("success", "配置已导入并应用")
+                            st.rerun()
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"导入配置失败: {e}")
+                            st.rerun()
+
+                # 重置配置
+                st.markdown("---")
+                if st.button("🔄 重置为默认配置", key="reset_config"):
+                    try:
+                        default_cfg = Config()
+                        _save_config(default_cfg)
+                        st.session_state["ui_message"] = ("success", "已重置为默认配置")
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state["ui_message"] = ("error", f"重置失败: {e}")
+                        st.rerun()
+
+    # -----------------------------------------------------------------------
+    # v0.4: API 服务面板
+    # -----------------------------------------------------------------------
+    with st.expander("🌐 API 服务"):
+        if not _HAS_API_CLIENT:
+            st.warning("API 客户端不可用（vector_studio.api_client 导入失败）")
+        else:
+            # 检查现有进程状态
+            api_proc = st.session_state.get("api_process")
+            health = _check_api_health()
+            is_running = health is not None
+
+            if is_running:
+                st.success("API 服务运行中")
+                st.markdown(f"- 端点: `http://localhost:8000`")
+                st.markdown(f"- 状态: `{health.get('status', '-')}`")
+                st.markdown(f"- 版本: `{health.get('version', '-')}`")
+                st.markdown("- [API 文档](http://localhost:8000/docs)")
+            else:
+                st.info("API 服务未启动")
+
+            ctrl1, ctrl2 = st.columns(2)
+            with ctrl1:
+                if st.button("▶️ 启动API服务", key="start_api"):
+                    if is_running:
+                        st.session_state["ui_message"] = ("warning", "API 服务已在运行")
+                    else:
+                        proc = _start_api_service()
+                        if proc is None:
+                            st.session_state["ui_message"] = ("error", "启动 API 服务失败")
+                        else:
+                            st.session_state.api_process = proc
+                            st.session_state["ui_message"] = ("success", "API 服务已启动（端口 8000）")
+                    st.rerun()
+            with ctrl2:
+                if st.button("⏹️ 停止API服务", key="stop_api"):
+                    _stop_api_service(api_proc)
+                    st.session_state.api_process = None
+                    st.session_state["ui_message"] = ("success", "API 服务已停止")
+                    st.rerun()
 
     st.divider()
 
@@ -512,12 +808,25 @@ if uploaded is not None:
 
     preview_mode = st.radio("预览模式", ["并排对比", "叠加对比"], horizontal=True, key="preview_mode")
 
+    # -----------------------------------------------------------------------
+    # 转换流程（集成插件钩子）
+    # -----------------------------------------------------------------------
     if st.button("开始转换", type="primary"):
         with st.spinner("正在转换 SVG…"):
             with tempfile.TemporaryDirectory(prefix="vector-studio-ui-") as tmp:
                 tmp_dir = Path(tmp)
                 input_path = _save_uploaded_file(uploaded, tmp_dir)
                 svg_path = tmp_dir / "result.svg"
+
+                # 准备插件实例
+                plugin_instances = []
+                if _HAS_PLUGINS:
+                    try:
+                        pm = _get_plugin_manager()
+                        if pm is not None:
+                            plugin_instances = pm.get_plugins()
+                    except Exception as e:
+                        st.warning(f"插件加载失败，将跳过插件处理: {e}")
 
                 try:
                     result = trace_image(
@@ -530,6 +839,7 @@ if uploaded is not None:
                         export_png=export_png,
                         smart_remove_bg=smart_remove_bg,
                         enhance=enhance_type,
+                        plugins=plugin_instances,
                     )
                     st.session_state["svg_text"] = result.svg_path.read_text(encoding="utf-8")
                     st.session_state["svg_bytes"] = result.svg_path.read_bytes()
@@ -539,6 +849,8 @@ if uploaded is not None:
                     st.session_state["pdf_bytes"] = result.pdf_path.read_bytes() if result.pdf_path else None
                     st.session_state["png_bytes"] = result.png_path.read_bytes() if result.png_path else None
                     st.session_state["last_preset_used"] = st.session_state.preset_selector
+                    st.session_state["plugins_applied"] = len(plugin_instances) > 0
+                    st.session_state["plugins_count"] = len(plugin_instances)
 
                     # SVG 质量评分
                     if _HAS_SVG_OPTIMIZER:
@@ -637,6 +949,11 @@ if uploaded is not None:
         c2.metric("Time", f"{st.session_state.get('elapsed', 0):.2f}s")
         c3.metric("Paths", st.session_state.get("stats", {}).get("paths", 0))
         c4.metric("File size", f"{st.session_state.get('stats', {}).get('file_bytes', 0) / 1024:.1f} KB")
+
+        # 插件处理提示
+        if st.session_state.get("plugins_applied"):
+            plugins_count = st.session_state.get("plugins_count", 0)
+            st.info(f"🔌 插件已处理（{plugins_count} 个插件参与了转换流程）")
 
         # SVG 质量评分
         svg_quality = st.session_state.get("svg_quality")

@@ -68,6 +68,11 @@ from .task_queue import (
     TaskQueue,
 )
 
+from .plugin_interface import Plugin
+from .plugins import PluginManager
+from .config import Config
+from .api_client import VectorStudioClient
+
 __all__ = [
     # Core
     "TraceOptions",
@@ -127,6 +132,13 @@ __all__ = [
     # Task queue (v0.3)
     "ConversionTask",
     "TaskQueue",
+    # Plugin system (v0.4)
+    "Plugin",
+    "PluginManager",
+    # Config (v0.4)
+    "Config",
+    # API client (v0.4)
+    "VectorStudioClient",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

@@ -9,10 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- 插件系统与自定义后处理
-- 预设市场与在线分享
-- Docker 镜像与包管理器发布
 - AI 辅助重绘与 OCR
+- 实时预览与局部重描摹
+- 预设市场与在线分享
+- Tauri 桌面端
+
+## [0.4.0] - 2026-06-08
+
+### Added
+
+- **插件系统**：基于 Hook 架构的插件系统，支持预处理、后处理和完成回调。
+  - `plugin_interface.py`：定义 `Plugin` 基类，提供 `preprocess`、`postprocess`、`on_convert_complete` 三个 Hook。
+  - `plugins.py`：`PluginManager` 负责插件的发现、注册、启用/禁用和执行。自动扫描内置插件目录、用户目录（`~/.bitmap_vector_studio/plugins/`）和项目目录（`./plugins/`）。
+  - 内置插件：`watermark`（SVG 文字水印）和 `resize`（SVG viewBox 缩放）。
+  - CLI 插件命令：`vector-studio plugin list/enable/disable/install`。
+- **配置管理**：YAML/JSON 配置文件支持，CLI 与配置文件无缝合并。
+  - `config.py`：`Config` 数据类，支持 `default_preset`、`default_optimize_level`、`max_workers`、`enabled_plugins` 等配置项。
+  - 自动加载 `~/.bitmap_vector_studio/config.yaml` 或 `config.json`。
+  - CLI `config` 命令组：`get`、`set`、`list`、`reset`。
+  - `merge_with_options()` 方法确保 CLI 参数优先级高于配置文件。
+- **Web API**：FastAPI RESTful API，提供 8 个端点。
+  - `api.py`：同步转换（`/convert`）、异步转换（`/convert/async`）、任务状态查询（`/status/{task_id}`）、结果下载（`/download/{task_id}/{format}`）、预设列表（`/presets`）、智能推荐（`/recommend`）、批量转换（`/batch`）、健康检查（`/health`）。
+  - `api_client.py`：`VectorStudioClient` 标准库客户端 SDK，零外部依赖，支持所有 API 操作。
+  - CLI `api` 子命令：`vector-studio api --host --port --workers` 启动服务。
+  - 支持 CORS 跨域，内置临时文件清理和全局任务队列。
+- **Docker 容器化**：多阶段 Dockerfile 和 docker-compose.yml。
+  - `builder` 阶段编译 wheel，`runtime` 阶段运行 API 服务，`cli` 阶段运行交互式 CLI。
+  - 内置健康检查（`HEALTHCHECK`），暴露 8000 端口。
+  - `docker-compose.yml` 提供 `vector-studio`（API）和 `vector-studio-cli`（CLI）两个服务。
+- **发布自动化**：`scripts/release.py` 支持版本号自动更新、Git 标签创建、PyPI 上传。
+- **包管理器模板**：`packaging/` 目录包含 Homebrew Formula、Chocolatey 包配置、APT deb 构建模板。
+- **一键安装脚本**：`scripts/install.sh` 跨平台安装脚本，支持 macOS、Linux 和 Windows (Git Bash)。
+- **CLI 增强**：
+  - `trace` 和 `batch` 命令新增 `--config` 选项，指定自定义配置文件。
+  - `trace` 和 `batch` 命令新增 `--plugin` 选项（可多次使用），临时启用指定插件。
+- **测试覆盖**：新增 `test_plugins.py`、`test_config.py`、`test_api.py`、`test_api_client.py`。
+
+### Changed
+
+- **CLI 结构扩展**：新增 `config`、`plugin`、`api` 三个顶级子命令组。
+- **依赖调整**：`pyproject.toml` 新增 `[api]` 可选依赖组（`fastapi>=0.110`、`uvicorn[standard]>=0.29`、`python-multipart>=0.0.9`）。
+- **公开 API 扩展**：`__init__.py` 的 `__all__` 新增 `Plugin`、`PluginManager`、`Config`、`VectorStudioClient` 等 v0.4 公开 API。
+
+### Fixed
+
+- 插件加载时语法错误或导入失败的文件会被记录并跳过，不会导致系统崩溃。
+- 配置文件加载失败时自动回退到默认值，避免启动失败。
+- API 异步任务在异常时正确清理临时目录。
 
 ## [0.3.0] - 2025-06-08
 

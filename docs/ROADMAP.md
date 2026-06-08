@@ -35,14 +35,16 @@
 - [x] 智能预设推荐（根据图片内容自动选择最佳预设）
 - [x] 批量任务队列与进度可视化（异步并发、失败重试）
 
-## v0.4：生态与集成
+## v0.4：生态与集成 ✅
 
-- [ ] 插件系统（允许用户编写自定义后处理插件）
-- [ ] 预设市场 / 在线预设分享
-- [ ] 命令行配置文件支持（YAML/JSON 批量参数模板）
-- [ ] Docker 镜像发布
-- [ ] Homebrew / Chocolatey / APT 包发布
-- [ ] Web API 模式（FastAPI 封装，支持远程调用）
+- [x] 插件系统（Plugin 基类、PluginManager、内置插件、用户自定义插件目录）
+- [x] 配置管理（YAML/JSON 配置文件、CLI config 命令组、配置与 CLI 参数合并）
+- [x] Web API（FastAPI RESTful API，8 个端点，Python 客户端 SDK，异步任务支持）
+- [x] Docker 容器化（多阶段 Dockerfile、docker-compose.yml、健康检查）
+- [x] 发布自动化（release.py 脚本、GitHub Actions 自动发布到 PyPI）
+- [x] 包管理器模板（Homebrew Formula、Chocolatey、APT deb）
+- [x] 一键安装脚本（install.sh 跨平台安装）
+- [x] CLI 增强（config/plugin/api 子命令、--config 和 --plugin 选项）
 
 ## v0.5：AI 辅助方向
 
@@ -50,6 +52,7 @@
 - [ ] 文字/Logo OCR：对含文字的图片保留文字结构，而不是全部变 path
 - [ ] 局部重描摹：用户圈选区域，仅重新生成某一块 SVG
 - [ ] 实时预览：调整参数时实时显示矢量化效果（无需点击转换）
+- [ ] 预设市场：在线预设分享与下载平台
 
 ## v1.0：桌面产品
 
@@ -59,3 +62,4 @@
 - [ ] 内置预设市场 / 导入导出
 - [ ] Windows / macOS / Linux 打包
 - [ ] 自动更新机制
+- [ ] 插件市场（图形化浏览、安装、管理插件）
