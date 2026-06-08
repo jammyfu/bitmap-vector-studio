@@ -32,6 +32,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   // v1.2 cloud sync defaults
   cloudSyncEnabled: false,
   cloudApiKey: null,
+  // v2.0 AI defaults
+  aiTask: '无',
+  aiStyle: '素描',
+  aiScale: 2,
+  // v2.0 sync defaults
+  syncServerUrl: 'http://localhost:8000',
+  syncEnabled: false,
 }
 
 function App() {
@@ -84,6 +91,20 @@ function App() {
   // v1.2 cloud share
   const [shareUrl, setShareUrl] = useState<string | undefined>(undefined)
   const [shareQrCode, setShareQrCode] = useState<string | undefined>(undefined)
+  // v2.0 AI
+  const [aiTask, setAiTask] = useState<string>('无')
+  const [aiStyle, setAiStyle] = useState<string>('素描')
+  const [aiScale, setAiScale] = useState<number>(2)
+  // v2.0 animation
+  const [animationPreset, setAnimationPreset] = useState<string>('绘制')
+  const [animationFormat, setAnimationFormat] = useState<string>('SMIL')
+  const [animationResultPath, setAnimationResultPath] = useState<string | undefined>(undefined)
+  // v2.0 workflow
+  const [workflowTemplates] = useState<string[]>(['auto_enhance', 'logo_pipeline', 'photo_restore', 'batch_optimize'])
+  // v2.0 collaboration
+  const [collabRoomId, setCollabRoomId] = useState<string | null>(null)
+  const [collabUsers, setCollabUsers] = useState<string[]>([])
+  const [collabWs, setCollabWs] = useState<WebSocket | null>(null)
 
   const { activePreset, selectPreset, getPresetOptions } = usePresets()
   const queue = useQueue()
@@ -421,6 +442,138 @@ function App() {
     }
   }, [selectedTask, showToast, setShareUrl, setShareQrCode])
 
+  // v2.0: AI task handler
+  const handleRunAiTask = useCallback(async () => {
+    if (!selectedTask?.inputPath) {
+      showToast('Please select an image first', 'error')
+      return
+    }
+    try {
+      const result = await tauri.runAiTask(selectedTask.inputPath, aiTask, aiStyle, aiScale)
+      if (result) {
+        showToast(`AI ${aiTask} complete`, 'success')
+      } else {
+        showToast('AI task returned no result', 'warning')
+      }
+    } catch (error) {
+      showToast(`AI task failed: ${error}`, 'error')
+    }
+  }, [selectedTask, aiTask, aiStyle, aiScale, tauri, showToast])
+
+  // v2.0: Engine orchestration handler
+  const handleOrchestrate = useCallback(async () => {
+    if (!selectedTask?.inputPath) {
+      showToast('Please select an image first', 'error')
+      return
+    }
+    try {
+      const result = await tauri.recommendPipeline(selectedTask.inputPath)
+      if (result) {
+        showToast('Pipeline recommendation ready', 'success')
+      }
+    } catch (error) {
+      showToast(`Orchestration failed: ${error}`, 'error')
+    }
+  }, [selectedTask, tauri, showToast])
+
+  // v2.0: Animation handler
+  const handleGenerateAnimation = useCallback(async () => {
+    if (!selectedTask?.outputPath) {
+      showToast('No SVG result to animate', 'error')
+      return
+    }
+    try {
+      const outPath = selectedTask.outputPath.replace('.svg', `.${animationFormat.toLowerCase()}`)
+      const result = await tauri.generateAnimation(selectedTask.outputPath, animationPreset, animationFormat, outPath)
+      if (result) {
+        setAnimationResultPath(outPath)
+        showToast('Animation generated', 'success')
+      }
+    } catch (error) {
+      showToast(`Animation failed: ${error}`, 'error')
+    }
+  }, [selectedTask, animationPreset, animationFormat, tauri, showToast])
+
+  // v2.0: Workflow handler
+  const handleRunWorkflow = useCallback(async (template: string) => {
+    if (!selectedTask?.inputPath) {
+      showToast('Please select an image first', 'error')
+      return
+    }
+    try {
+      const result = await tauri.runWorkflow(template, selectedTask.inputPath)
+      if (result) {
+        showToast(`Workflow ${template} complete`, 'success')
+      }
+    } catch (error) {
+      showToast(`Workflow failed: ${error}`, 'error')
+    }
+  }, [selectedTask, tauri, showToast])
+
+  // v2.0: Collaboration room handlers
+  const handleCreateCollabRoom = useCallback(async () => {
+    try {
+      const result = await tauri.createCollabRoom()
+      if (result) {
+        const parsed = JSON.parse(result) as { room_id?: string }
+        if (parsed.room_id) {
+          setCollabRoomId(parsed.room_id)
+          showToast(`Room created: ${parsed.room_id}`, 'success')
+        }
+      }
+    } catch (error) {
+      showToast(`Create room failed: ${error}`, 'error')
+    }
+  }, [tauri, showToast])
+
+  const handleJoinCollabRoom = useCallback(async (roomId: string) => {
+    try {
+      const result = await tauri.joinCollabRoom(roomId)
+      if (result) {
+        setCollabRoomId(roomId)
+        showToast(`Joined room: ${roomId}`, 'success')
+      }
+    } catch (error) {
+      showToast(`Join room failed: ${error}`, 'error')
+    }
+  }, [tauri, showToast])
+
+  // v2.0: Collaboration WebSocket connection
+  useEffect(() => {
+    if (!collabRoomId) {
+      if (collabWs) {
+        collabWs.close()
+        setCollabWs(null)
+      }
+      return
+    }
+    const wsUrl = `ws://${settings.apiHost}:${settings.apiPort}/ws/collab/${collabRoomId}`
+    const ws = new WebSocket(wsUrl)
+    ws.onopen = () => {
+      showToast('Collaboration connected', 'success')
+    }
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as { users?: string[]; type?: string }
+        if (data.users) {
+          setCollabUsers(data.users)
+        }
+      } catch {
+        // ignore non-JSON messages
+      }
+    }
+    ws.onerror = () => {
+      showToast('Collaboration connection error', 'warning')
+    }
+    ws.onclose = () => {
+      // silently close
+    }
+    setCollabWs(ws)
+    return () => {
+      ws.close()
+    }
+  }, [collabRoomId, settings.apiHost, settings.apiPort, showToast])
+
   return (
     <div className="app">
       <Layout
@@ -442,6 +595,12 @@ function App() {
             hasCrashRecovery={hasCrashRecovery}
             checkpoints={checkpoints}
             onResumeCheckpoint={handleResumeCheckpoint}
+            onRunWorkflow={handleRunWorkflow}
+            workflowTemplates={workflowTemplates}
+            collabRoomId={collabRoomId}
+            onCreateCollabRoom={handleCreateCollabRoom}
+            onJoinCollabRoom={handleJoinCollabRoom}
+            collabUsers={collabUsers}
           />
         }
         main={
@@ -468,6 +627,14 @@ function App() {
             engine={engine}
             onChangeEngine={setEngine}
             onEngineBenchmark={handleEngineBenchmark}
+            aiTask={aiTask}
+            onChangeAiTask={setAiTask}
+            aiStyle={aiStyle}
+            onChangeAiStyle={setAiStyle}
+            aiScale={aiScale}
+            onChangeAiScale={setAiScale}
+            onRunAiTask={handleRunAiTask}
+            onOrchestrate={handleOrchestrate}
           />
         }
         preview={
@@ -483,6 +650,14 @@ function App() {
             onCloudShare={handleCloudShare}
             shareUrl={shareUrl}
             shareQrCode={shareQrCode}
+            onGenerateAnimation={handleGenerateAnimation}
+            animationPreset={animationPreset}
+            onChangeAnimationPreset={setAnimationPreset}
+            animationFormat={animationFormat}
+            onChangeAnimationFormat={setAnimationFormat}
+            animationResultPath={animationResultPath}
+            collabRoomId={collabRoomId}
+            collabUsers={collabUsers}
           />
         }
         statusBar={

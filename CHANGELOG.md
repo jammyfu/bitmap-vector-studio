@@ -9,7 +9,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- v2.0 AI 原生与实时协作
+- v3.0 智能设计平台
+
+## [2.0.0] - 2026-06-08
+
+### Added
+
+- **本地 AI 模型推理**：
+  - `ai_onnx.py`：`ONNXRuntimeEngine` 基于 ONNX Runtime 的本地 AI 模型推理引擎，支持实时分割、风格迁移、超分辨率。
+  - `onnx_segment.py`：`ONNXSegmenter` 图像语义分割，自动识别主体与背景，精准分离前景对象。
+  - `onnx_style.py`：`ONNXStyleTransfer` 风格迁移，将艺术风格应用到矢量化前的图像预处理。
+  - `onnx_superres.py`：`ONNXSuperResolution` 超分辨率重建，低分辨率素材先放大再矢量化，提升细节保留。
+  - CLI `ai` 子命令增强：`segment`（分割）、`style`（风格迁移）、`superres`（超分辨率）。
+- **多引擎智能编排**：
+  - `engine_orchestrator.py`：`EngineOrchestrator` 智能编排器，根据素材类型、质量要求、输出格式自动选择最优引擎流水线组合。
+  - `pipeline_builder.py`：`PipelineBuilder` 可视化流水线构建器，支持拖拽式编排预处理 → 引擎选择 → 后处理 → 导出全流程。
+  - `auto_pipeline.py`：`AutoPipeline` 一键智能流水线，上传素材后自动分析并执行最佳处理链。
+- **实时协作编辑**：
+  - `collab_server.py`：`CollabServer` WebSocket 协作服务器，支持多人同步编辑同一矢量项目。
+  - `collab_client.py`：`CollabClient` 协作客户端，处理实时操作同步、冲突解决、离线缓存。
+  - `operation_sync.py`：`OperationSync` 操作同步协议，基于 OT 算法实现无冲突的并发编辑。
+  - `presence_manager.py`：`PresenceManager` 在线状态管理，显示协作者光标、选区和操作历史。
+  - 桌面端和网页端均支持实时协作，通过 `vector-studio collab` 子命令创建/加入协作会话。
+- **矢量动画导出**：
+  - `animation_exporter.py`：`AnimationExporter` 统一动画导出器，支持 SVG SMIL、Lottie JSON、GIF、CSS 动画四种格式。
+  - `svg_smil.py`：`SVGSMIBuilder` SVG SMIL 动画构建器，支持路径变形、颜色过渡、位移动画。
+  - `lottie_export.py`：`LottieExporterV2` 增强版 Lottie 导出器，支持更复杂的图层动画和缓动曲线。
+  - `gif_export.py`：`GIFExporter` GIF 动画导出，支持帧率控制、调色板优化、循环设置。
+  - `css_animation.py`：`CSSAnimationBuilder` CSS 关键帧动画生成器，输出可直接用于网页的 CSS 代码。
+  - CLI `animate` 子命令：`export`（导出动画）、`preview`（预览动画）、`list-presets`（列出动画预设）。
+- **智能批处理工作流**：
+  - `workflow_editor.py`：`WorkflowEditor` 可视化节点编辑器，拖拽式构建批处理工作流。
+  - `workflow_nodes.py`：内置节点库（输入、预处理、矢量化、后处理、导出、条件分支、循环）。
+  - `workflow_engine.py`：`WorkflowEngine` 工作流执行引擎，支持并行节点执行、错误回滚、进度追踪。
+  - `workflow_templates.py`：预设工作流模板（Logo 批量处理、照片转插画、扫描件归档等）。
+  - CLI `workflow` 子命令：`create`（创建工作流）、`run`（执行工作流）、`list`（列出模板）、`export`（导出工作流 JSON）。
+- **跨设备同步**：
+  - `device_sync.py`：`DeviceSync` 跨设备同步引擎，桌面端 ↔ 网页端 ↔ API 服务端状态实时同步。
+  - `sync_bridge.py`：`SyncBridge` 同步桥接器，处理不同平台间的数据格式转换和冲突合并。
+  - `offline_queue.py`：`OfflineQueue` 离线操作队列，网络恢复后自动同步离线期间的操作。
+  - 支持项目文件、预设、插件、工作区状态的跨设备无缝同步。
+- **云端账号与付费市场**：
+  - `cloud_auth.py`：`CloudAuth` 用户账号系统，支持邮箱/第三方登录、JWT 令牌管理。
+  - `credit_system.py`：`CreditSystem` 积分系统，按 API 调用、高级功能、云存储使用量计费。
+  - `paid_market.py`：`PaidMarket` 付费插件/预设市场，支持购买、订阅、试用、退款。
+  - `subscription.py`：`SubscriptionManager` 订阅管理，免费版 / Pro 版 / 团队版分级功能控制。
+  - CLI `account` 子命令：`login`（登录）、`status`（查看账号状态）、`credits`（查看积分）、`upgrade`（升级订阅）。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `2.0.0`。
+- **引擎选择升级**：从单一引擎选择升级为智能编排流水线，`EngineOrchestrator` 可组合多个引擎分阶段处理。
+- **桌面端界面重构**：新增「协作」面板、「动画」面板、「工作流」面板，三栏布局扩展为可自定义的多面板布局。
+- **API 端点扩展**：新增 `/ai/segment`、`/ai/style`、`/ai/superres`、`/collab/session`、`/animate/export`、`/workflow/run`、`/sync/push`、`/sync/pull` 等端点。
+- **依赖扩展**：`pyproject.toml` 新增 `[onnx]` 可选依赖组（`onnxruntime>=1.17`、`onnx>=1.15`），用于本地 AI 模型推理。
+
+### Fixed
+
+- 实时协作在高频并发操作时偶发的状态不一致，现已通过 OT 算法和版本向量解决。
+- 跨设备同步在网络抖动时的重复提交问题，现已通过幂等令牌机制去重。
+- 大文件流式处理与 ONNX 推理的内存竞争，现已通过统一的 `MemoryScheduler` 调度。
+- 动画导出在复杂 SVG 上的性能瓶颈，现已通过分层渲染和增量编码优化。
+
+---
+
+> **🎉 2.0.0 是 Bitmap Vector Studio 的 AI 原生与实时协作版本。** 在 1.2.0 稳定性与生态扩展的基础上，v2.0 聚焦于本地 AI 模型推理（ONNX Runtime）、多引擎智能编排、实时协作编辑、矢量动画导出、智能批处理工作流、跨设备同步和云端账号与付费市场，标志着 Bitmap Vector Studio 从单机工具向智能设计协作平台的跨越。
 
 ## [1.2.0] - 2026-06-08
 

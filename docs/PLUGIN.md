@@ -1,6 +1,6 @@
 # 插件开发指南
 
-Bitmap Vector Studio v1.2 的插件系统基于 Hook 架构，允许用户在矢量化流程的关键节点注入自定义逻辑。
+Bitmap Vector Studio v2.0 的插件系统基于 Hook 架构，允许用户在矢量化流程的关键节点注入自定义逻辑。
 
 > **v1.1 新增**：桌面应用提供图形化插件管理器，支持在界面中浏览、启用/禁用插件，无需命令行操作。详见 [docs/DESKTOP.md](DESKTOP.md)。
 
@@ -27,7 +27,7 @@ from vector_studio.plugin_interface import Plugin
 
 class MyPlugin(Plugin):
     name = "my_plugin"          # 必填，唯一标识
-    version = "1.2.0"         # 可选
+    version = "2.0.0"         # 可选
     description = "..."         # 可选
     author = "Your Name"      # 可选
 ```
@@ -83,7 +83,7 @@ class HelloPlugin(Plugin):
     """A minimal hello-world plugin that logs after conversion."""
 
     name = "hello"
-    version = "1.2.0"
+    version = "2.0.0"
     description = "Prints a message when conversion completes."
     author = "Your Name"
 
@@ -135,7 +135,7 @@ from vector_studio.plugin_interface import Plugin
 
 class AutoCropPlugin(Plugin):
     name = "auto_crop"
-    version = "1.2.0"
+    version = "2.0.0"
     description = "Automatically crop transparent borders before tracing."
 
     def preprocess(self, image: Image.Image, options: dict) -> Image.Image:
@@ -170,7 +170,7 @@ from vector_studio.plugin_interface import Plugin
 
 class MetadataPlugin(Plugin):
     name = "metadata"
-    version = "1.2.0"
+    version = "2.0.0"
     description = "Add custom metadata to generated SVGs."
 
     def postprocess(self, svg_path: Path, options: dict) -> Path:
@@ -207,7 +207,7 @@ from vector_studio.plugin_interface import Plugin
 
 class WebhookPlugin(Plugin):
     name = "webhook"
-    version = "1.2.0"
+    version = "2.0.0"
     description = "Send a webhook notification when conversion completes."
 
     def on_convert_complete(self, result, options: dict) -> None:
@@ -349,7 +349,7 @@ for info in pm.list_plugins():
 # 手动注册插件类
 class MyPlugin(Plugin):
     name = "my_plugin"
-    version = "1.2.0"
+    version = "2.0.0"
 
 pm.register_plugin(MyPlugin)
 

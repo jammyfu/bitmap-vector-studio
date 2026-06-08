@@ -27,6 +27,16 @@ interface ParamPanelProps {
   engine?: string;
   onChangeEngine?: (engine: string) => void;
   onEngineBenchmark?: () => void;
+  // v2.0 AI
+  aiTask?: string;
+  onChangeAiTask?: (task: string) => void;
+  aiStyle?: string;
+  onChangeAiStyle?: (style: string) => void;
+  aiScale?: number;
+  onChangeAiScale?: (scale: number) => void;
+  onRunAiTask?: () => void;
+  // v2.0 orchestration
+  onOrchestrate?: () => void;
 }
 
 export const ParamPanel: React.FC<ParamPanelProps> = ({
@@ -52,6 +62,14 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
   engine = '自动选择',
   onChangeEngine,
   onEngineBenchmark,
+  aiTask = '无',
+  onChangeAiTask,
+  aiStyle = '素描',
+  onChangeAiStyle,
+  aiScale = 2,
+  onChangeAiScale,
+  onRunAiTask,
+  onOrchestrate,
 }) => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [activePreset, setActivePreset] = useState<string>('default');
@@ -254,6 +272,64 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
         >
           Benchmark
         </button>
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={onOrchestrate}
+          disabled={!inputPath}
+          style={{ marginTop: 8, marginLeft: 8 }}
+        >
+          🎼 Orchestrate
+        </button>
+      </div>
+
+      {/* v2.0 AI Task */}
+      <div className="param-section">
+        <label className="param-label">AI Task</label>
+        <select
+          className="param-select"
+          value={aiTask}
+          onChange={(e) => onChangeAiTask?.(e.target.value)}
+        >
+          <option value="无">None</option>
+          <option value="分割">Segment</option>
+          <option value="风格迁移">Style Transfer</option>
+          <option value="超分辨率">Upscale</option>
+          <option value="自动增强">Auto Enhance</option>
+        </select>
+        {aiTask === '风格迁移' && (
+          <select
+            className="param-select"
+            value={aiStyle}
+            onChange={(e) => onChangeAiStyle?.(e.target.value)}
+            style={{ marginTop: 8 }}
+          >
+            <option value="素描">Sketch</option>
+            <option value="油画">Oil</option>
+            <option value="水彩">Watercolor</option>
+            <option value="卡通">Cartoon</option>
+          </select>
+        )}
+        {aiTask === '超分辨率' && (
+          <select
+            className="param-select"
+            value={aiScale}
+            onChange={(e) => onChangeAiScale?.(parseInt(e.target.value, 10))}
+            style={{ marginTop: 8 }}
+          >
+            <option value={2}>2x</option>
+            <option value={4}>4x</option>
+          </select>
+        )}
+        {aiTask !== '无' && (
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={onRunAiTask}
+            disabled={!inputPath}
+            style={{ marginTop: 8 }}
+          >
+            Run AI
+          </button>
+        )}
       </div>
 
       <div className="param-section">

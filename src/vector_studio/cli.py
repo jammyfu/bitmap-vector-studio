@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import urllib.parse
 from pathlib import Path
@@ -11,6 +12,12 @@ from rich.table import Table
 
 from .checkpoint import CheckpointManager
 from .cloud_sync import CloudSyncManager, GitHubGistBackend, LocalServerBackend
+from .cloud_market import (
+    CloudMarket,
+    CreditSystem,
+    load_auth,
+    save_auth,
+)
 from .config import Config
 from .external_editors import open_with_default_editor, open_with_editor
 from .ocr_languages import (
@@ -54,6 +61,10 @@ app = typer.Typer(
     help="Bitmap Vector Studio: Illustrator-like bitmap to SVG conversion powered by VTracer.",
     no_args_is_help=True,
 )
+
+# Sub-typer for account commands
+account_app = typer.Typer(help="Cloud account management.")
+app.add_typer(account_app, name="account")
 
 # Sub-typer for queue commands
 queue_app = typer.Typer(help="Task queue management.")
@@ -1175,6 +1186,190 @@ def market_info(
             value = ", ".join(str(v) for v in value)
         table.add_row(key, str(value))
     console.print(table)
+
+
+# ------------------------------------------------------------------
+# Cloud market sub-commands (extends market)
+# ------------------------------------------------------------------
+
+@market_app.command("purchase")
+def market_purchase(
+    item_id: str = typer.Argument(..., help="Item ID to purchase."),
+) -> None:
+    """Purchase an item from the cloud market."""
+    auth = load_auth()
+    if not auth.get("token"):
+        console.print("[red]Not logged in.[/red] Use 'vector-studio account login <token>'")
+        raise typer.Exit(code=1)
+
+    user_id = auth.get("user_id")
+    if not user_id:
+        console.print("[red]User ID not available.[/red] Run 'vector-studio account info' first.")
+        raise typer.Exit(code=1)
+
+    market = CloudMarket(auth.get("backend_url", "https://api.bitmap-vector-studio.example"))
+    market.set_token(auth["token"])
+    try:
+        result = market.purchase_item(user_id, item_id)
+        if result.get("success"):
+            console.print(f"[green]Purchased[/green] {item_id}")
+            remaining = result.get("remaining_credits")
+            if remaining is not None:
+                console.print(f"Remaining credits: {remaining}")
+        else:
+            console.print(f"[red]Purchase failed:[/red] {result.get('error', 'Unknown error')}")
+            raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Purchase failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@market_app.command("library")
+def market_library() -> None:
+    """Show the user's purchased cloud market library."""
+    auth = load_auth()
+    if not auth.get("token"):
+        console.print("[red]Not logged in.[/red] Use 'vector-studio account login <token>'")
+        raise typer.Exit(code=1)
+
+    user_id = auth.get("user_id")
+    if not user_id:
+        console.print("[red]User ID not available.[/red] Run 'vector-studio account info' first.")
+        raise typer.Exit(code=1)
+
+    market = CloudMarket(auth.get("backend_url", "https://api.bitmap-vector-studio.example"))
+    market.set_token(auth["token"])
+    try:
+        items = market.get_user_library(user_id)
+    except Exception as exc:
+        console.print(f"[red]Failed to fetch library:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    if not items:
+        console.print("[yellow]Your library is empty.[/yellow]")
+        return
+
+    table = Table(title="Your Library")
+    table.add_column("Item ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Type")
+    table.add_column("Purchased At")
+    for item in items:
+        table.add_row(
+            item.get("item_id", "-"),
+            item.get("name", "-"),
+            item.get("item_type", "-"),
+            item.get("purchased_at", "-"),
+        )
+    console.print(table)
+
+
+@market_app.command("publish-item")
+def market_publish_item(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Item JSON file to publish."),
+    item_type: str = typer.Option("plugin", "--type", "-t", help="Item type: plugin, preset, etc."),
+    name: str = typer.Option(..., "--name", "-n", help="Display name for the item."),
+) -> None:
+    """Publish an item file to the cloud market."""
+    auth = load_auth()
+    if not auth.get("token"):
+        console.print("[red]Not logged in.[/red] Use 'vector-studio account login <token>'")
+        raise typer.Exit(code=1)
+
+    user_id = auth.get("user_id")
+    if not user_id:
+        console.print("[red]User ID not available.[/red] Run 'vector-studio account info' first.")
+        raise typer.Exit(code=1)
+
+    try:
+        item_data = json.loads(file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON file:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    item_data["name"] = name
+    item_data["file_name"] = file.name
+
+    market = CloudMarket(auth.get("backend_url", "https://api.bitmap-vector-studio.example"))
+    market.set_token(auth["token"])
+    try:
+        item_id = market.publish_item(user_id, item_type, item_data)
+        if item_id:
+            console.print(f"[green]Published[/green] {item_id}")
+        else:
+            console.print("[red]Publish failed.[/red]")
+            raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Publish failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Account sub-commands
+# ------------------------------------------------------------------
+
+@account_app.command("login")
+def account_login(
+    token: str = typer.Argument(..., help="Authentication token."),
+    backend_url: str = typer.Option("https://api.bitmap-vector-studio.example", "--backend-url", help="Cloud backend URL."),
+) -> None:
+    """Log in to the cloud account using a token."""
+    save_auth(token, backend_url)
+    console.print("[green]Logged in successfully.[/green]")
+
+
+@account_app.command("info")
+def account_info() -> None:
+    """Display current cloud account information."""
+    auth = load_auth()
+    if not auth.get("token"):
+        console.print("[red]Not logged in.[/red] Use 'vector-studio account login <token>'")
+        raise typer.Exit(code=1)
+
+    market = CloudMarket(auth.get("backend_url", "https://api.bitmap-vector-studio.example"))
+    market.set_token(auth["token"])
+    try:
+        user = market.get_current_user()
+        if user.get("user_id") and not auth.get("user_id"):
+            auth["user_id"] = user["user_id"]
+            save_auth(auth["token"], auth["backend_url"], auth["user_id"])
+    except Exception as exc:
+        console.print(f"[red]Failed to fetch account info:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Account Information")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    table.add_row("User ID", user.get("user_id", "-"))
+    table.add_row("Username", user.get("username", "-"))
+    table.add_row("Email", user.get("email", "-"))
+    table.add_row("Tier", user.get("tier", "-"))
+    table.add_row("Credits", str(user.get("credits", 0)))
+    console.print(table)
+
+
+@account_app.command("credits")
+def account_credits() -> None:
+    """Display current credit balance."""
+    auth = load_auth()
+    if not auth.get("token"):
+        console.print("[red]Not logged in.[/red] Use 'vector-studio account login <token>'")
+        raise typer.Exit(code=1)
+
+    user_id = auth.get("user_id")
+    if not user_id:
+        console.print("[red]User ID not available.[/red] Run 'vector-studio account info' first.")
+        raise typer.Exit(code=1)
+
+    cs = CreditSystem(auth.get("backend_url", "https://api.bitmap-vector-studio.example"))
+    cs.set_token(auth["token"])
+    try:
+        balance = cs.get_balance(user_id)
+    except Exception as exc:
+        console.print(f"[red]Failed to fetch credits:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Credit balance: [green]{balance}[/green]")
 
 
 # ------------------------------------------------------------------

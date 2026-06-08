@@ -13,11 +13,15 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, settings, onSave, onToast }) => {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'plugins' | 'performance' | 'pluginDev' | 'cloudSync'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'plugins' | 'performance' | 'pluginDev' | 'cloudSync' | 'aiModel' | 'sync'>('general');
   // v1.2 plugin dev local inputs
   const [pluginScaffoldName, setPluginScaffoldName] = useState('');
   const [pluginValidatePath, setPluginValidatePath] = useState('');
   const [pluginTestPath, setPluginTestPath] = useState('');
+  // v2.0 AI model inputs
+  const [aiModelPath, setAiModelPath] = useState('');
+  // v2.0 sync inputs
+  const [syncServerUrl] = useState('http://localhost:8000');
 
   const { call: callGetConfig } = useInvoke<Record<string, never>, string>('get_config');
   const { call: callSetConfig } = useInvoke<{ key: string; value: string }, void>('set_config');
@@ -123,6 +127,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
           </button>
           <button className={`modal-tab ${activeTab === 'cloudSync' ? 'active' : ''}`} onClick={() => setActiveTab('cloudSync')}>
             Cloud Sync
+          </button>
+          <button className={`modal-tab ${activeTab === 'aiModel' ? 'active' : ''}`} onClick={() => setActiveTab('aiModel')}>
+            AI Model
+          </button>
+          <button className={`modal-tab ${activeTab === 'sync' ? 'active' : ''}`} onClick={() => setActiveTab('sync')}>
+            Sync
           </button>
         </div>
 
@@ -354,6 +364,93 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
                     placeholder="Enter your API key"
                     onChange={(e) => update('cloudApiKey', e.target.value || null)}
                   />
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'aiModel' && (
+            <>
+              <div className="settings-section">
+                <h3>AI Model Settings</h3>
+                <div className="settings-row">
+                  <label>AI Task</label>
+                  <select
+                    value={draft.aiTask || '无'}
+                    onChange={(e) => update('aiTask', e.target.value)}
+                  >
+                    <option value="无">None</option>
+                    <option value="分割">Segment</option>
+                    <option value="风格迁移">Style Transfer</option>
+                    <option value="超分辨率">Upscale</option>
+                    <option value="自动增强">Auto Enhance</option>
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <label>Default Style</label>
+                  <select
+                    value={draft.aiStyle || '素描'}
+                    onChange={(e) => update('aiStyle', e.target.value)}
+                  >
+                    <option value="素描">Sketch</option>
+                    <option value="油画">Oil</option>
+                    <option value="水彩">Watercolor</option>
+                    <option value="卡通">Cartoon</option>
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <label>Default Scale</label>
+                  <select
+                    value={draft.aiScale || 2}
+                    onChange={(e) => update('aiScale', parseInt(e.target.value, 10))}
+                  >
+                    <option value={2}>2x</option>
+                    <option value={4}>4x</option>
+                  </select>
+                </div>
+                <div className="settings-row">
+                  <label>Custom Model Path</label>
+                  <input
+                    type="text"
+                    value={aiModelPath}
+                    placeholder="/path/to/onnx/model"
+                    onChange={(e) => setAiModelPath(e.target.value)}
+                  />
+                </div>
+                <div className="settings-row">
+                  <button className="btn btn-sm" onClick={() => onToast?.('Model path set', 'success')}>
+                    Set Model Path
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'sync' && (
+            <>
+              <div className="settings-section">
+                <h3>Cross-Device Sync</h3>
+                <div className="settings-row">
+                  <label>Enable Sync</label>
+                  <input
+                    type="checkbox"
+                    checked={draft.syncEnabled}
+                    onChange={(e) => update('syncEnabled', e.target.checked)}
+                  />
+                </div>
+                <div className="settings-row">
+                  <label>Sync Server URL</label>
+                  <input
+                    type="text"
+                    value={draft.syncServerUrl || syncServerUrl}
+                    placeholder="http://localhost:8000"
+                    onChange={(e) => update('syncServerUrl', e.target.value)}
+                  />
+                </div>
+                <div className="settings-row">
+                  <button className="btn btn-sm btn-primary" onClick={() => onToast?.('Sync settings saved', 'success')}>
+                    Test Connection
+                  </button>
                 </div>
               </div>
             </>

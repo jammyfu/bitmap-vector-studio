@@ -62,4 +62,11 @@ export interface AppSettings {
   // v1.2 cloud sync
   cloudSyncEnabled: boolean;
   cloudApiKey: string | null;
+  // v2.0 AI
+  aiTask: string;
+  aiStyle: string;
+  aiScale: number;
+  // v2.0 sync
+  syncServerUrl: string;
+  syncEnabled: boolean;
 }

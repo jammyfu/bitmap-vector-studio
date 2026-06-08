@@ -211,6 +211,49 @@ try:
 except Exception:
     _HAS_CLOUD_SYNC = False
 
+# v2.0 modules — import with graceful degradation
+try:
+    from vector_studio.ai_onnx import AIProcessor, ONNXModelManager
+
+    _HAS_AI_ONNX = True
+except Exception:
+    _HAS_AI_ONNX = False
+
+try:
+    from vector_studio.engine_orchestrator import EngineOrchestrator
+
+    _HAS_ENGINE_ORCHESTRATOR = True
+except Exception:
+    _HAS_ENGINE_ORCHESTRATOR = False
+
+try:
+    from vector_studio.collaboration import CollabManager
+
+    _HAS_COLLAB = True
+except Exception:
+    _HAS_COLLAB = False
+
+try:
+    from vector_studio.animation import AnimationBuilder
+
+    _HAS_ANIMATION = True
+except Exception:
+    _HAS_ANIMATION = False
+
+try:
+    from vector_studio.workflow import Workflow, WorkflowEngine
+
+    _HAS_WORKFLOW = True
+except Exception:
+    _HAS_WORKFLOW = False
+
+try:
+    from vector_studio.sync_service import SyncClient
+
+    _HAS_SYNC = True
+except Exception:
+    _HAS_SYNC = False
+
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
 st.caption("VTracer 驱动的 Illustrator-like 位图转 SVG 工具")
@@ -728,6 +771,95 @@ def _auto_save_workspace() -> None:
 
 
 # ---------------------------------------------------------------------------
+# v2.0 Helpers
+# ---------------------------------------------------------------------------
+
+def _get_ai_processor() -> "AIProcessor | None":
+    """获取或初始化 AIProcessor。"""
+    if not _HAS_AI_ONNX:
+        return None
+    if "ai_processor" not in st.session_state or st.session_state.ai_processor is None:
+        try:
+            st.session_state.ai_processor = AIProcessor()
+        except Exception:
+            return None
+    return st.session_state.ai_processor
+
+
+def _get_engine_orchestrator() -> "EngineOrchestrator | None":
+    """获取或初始化 EngineOrchestrator。"""
+    if not _HAS_ENGINE_ORCHESTRATOR:
+        return None
+    if "engine_orchestrator" not in st.session_state or st.session_state.engine_orchestrator is None:
+        try:
+            st.session_state.engine_orchestrator = EngineOrchestrator()
+        except Exception:
+            return None
+    return st.session_state.engine_orchestrator
+
+
+def _get_collab_manager() -> "CollabManager | None":
+    """获取或初始化 CollabManager。"""
+    if not _HAS_COLLAB:
+        return None
+    if "collab_manager" not in st.session_state or st.session_state.collab_manager is None:
+        try:
+            st.session_state.collab_manager = CollabManager()
+        except Exception:
+            return None
+    return st.session_state.collab_manager
+
+
+def _get_animation_builder() -> "AnimationBuilder | None":
+    """获取或初始化 AnimationBuilder。"""
+    if not _HAS_ANIMATION:
+        return None
+    if "animation_builder" not in st.session_state or st.session_state.animation_builder is None:
+        try:
+            st.session_state.animation_builder = AnimationBuilder()
+        except Exception:
+            return None
+    return st.session_state.animation_builder
+
+
+def _get_sync_client() -> "SyncClient | None":
+    """获取或初始化 SyncClient。"""
+    if not _HAS_SYNC:
+        return None
+    if "sync_client" not in st.session_state or st.session_state.sync_client is None:
+        try:
+            st.session_state.sync_client = SyncClient()
+        except Exception:
+            return None
+    return st.session_state.sync_client
+
+
+def _list_workflow_templates() -> list[str]:
+    """列出内置工作流模板。"""
+    if not _HAS_WORKFLOW:
+        return ["auto_enhance", "logo_pipeline", "photo_restore", "batch_optimize"]
+    try:
+        return Workflow.list_templates()
+    except Exception:
+        return ["auto_enhance", "logo_pipeline", "photo_restore", "batch_optimize"]
+
+
+def _run_ai_task(image_path: Path, task: str, **kwargs) -> "Image.Image | None":
+    """运行 AI 处理任务。"""
+    processor = _get_ai_processor()
+    if processor is None:
+        return None
+    try:
+        from PIL import Image
+
+        with Image.open(image_path) as img:
+            return processor.process(img, task=task, **kwargs)
+    except Exception as e:
+        st.session_state["ui_message"] = ("error", f"AI 处理失败: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Session state 初始化
 # ---------------------------------------------------------------------------
 if "initialized" not in st.session_state:
@@ -783,6 +915,34 @@ if "initialized" not in st.session_state:
     # v1.2 cloud sync
     st.session_state.cloud_share_result = None
     st.session_state.cloud_sync_manager = None
+    # v2.0 AI ONNX
+    st.session_state.ai_processor = None
+    st.session_state.ai_task = "无"
+    st.session_state.ai_style = "素描"
+    st.session_state.ai_scale = 2
+    st.session_state.ai_model_status = "未知"
+    st.session_state.ai_result_image = None
+    st.session_state.use_ai_result_for_trace = False
+    # v2.0 engine orchestrator
+    st.session_state.engine_orchestrator = None
+    st.session_state.orchestrator_recommendation = None
+    # v2.0 collaboration
+    st.session_state.collab_manager = None
+    st.session_state.collab_room_id = None
+    st.session_state.collab_room_users = []
+    # v2.0 animation
+    st.session_state.animation_builder = None
+    st.session_state.animation_preset = "绘制"
+    st.session_state.animation_format = "SMIL"
+    st.session_state.animation_result_path = None
+    st.session_state.animation_result_bytes = None
+    # v2.0 workflow
+    st.session_state.workflow_engine = None
+    st.session_state.workflow_template = "auto_enhance"
+    st.session_state.workflow_result = None
+    # v2.0 sync
+    st.session_state.sync_client = None
+    st.session_state.sync_server_url = "http://localhost:8000"
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -908,7 +1068,122 @@ with st.sidebar:
         st.warning("引擎管理模块不可用（vector_studio.engines 导入失败）")
         st.selectbox("选择引擎", engine_options, key="engine_selector", disabled=True)
 
+    # -----------------------------------------------------------------------
+    # v2.0: 智能编排
+    # -----------------------------------------------------------------------
+    if _HAS_ENGINE_ORCHESTRATOR:
+        if st.button("🎼 智能编排", key="engine_orchestrate"):
+            if "uploaded_file_name" not in st.session_state:
+                st.session_state["ui_message"] = ("warning", "请先上传图片再进行智能编排")
+            else:
+                with st.spinner("正在分析图片并推荐最佳流水线…"):
+                    try:
+                        orchestrator = _get_engine_orchestrator()
+                        if orchestrator is None:
+                            st.session_state["ui_message"] = ("error", "编排器初始化失败")
+                        else:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-orchestrate-") as tmp:
+                                tmp_dir = Path(tmp)
+                                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                recs = orchestrator.recommend_pipeline(str(input_path))
+                                st.session_state["orchestrator_recommendation"] = recs
+                                st.session_state["ui_message"] = ("success", f"智能编排完成，推荐 {len(recs)} 个引擎")
+                    except Exception as e:
+                        st.session_state["ui_message"] = ("error", f"智能编排失败: {e}")
+                st.rerun()
+
+        if st.session_state.get("orchestrator_recommendation"):
+            recs = st.session_state["orchestrator_recommendation"]
+            with st.expander("推荐结果"):
+                for r in recs:
+                    engine_name = r.get("engine", "-") if isinstance(r, dict) else str(r)
+                    reason = r.get("reason", "") if isinstance(r, dict) else ""
+                    score = r.get("score", 0) if isinstance(r, dict) else 0
+                    st.markdown(f"**{engine_name}**: {reason} (评分: {score})")
+                if st.button("执行推荐流水线", key="run_recommended_pipeline"):
+                    try:
+                        with tempfile.TemporaryDirectory(prefix="vector-studio-pipeline-") as tmp:
+                            tmp_dir = Path(tmp)
+                            input_path = _save_uploaded_file(uploaded, tmp_dir)
+                            out_path = tmp_dir / "pipeline_result.svg"
+                            orchestrator = _get_engine_orchestrator()
+                            if orchestrator:
+                                result = orchestrator.run_pipeline(str(input_path), recs, str(out_path))
+                                if result and hasattr(result, "svg_path") and result.svg_path:
+                                    st.session_state["svg_text"] = result.svg_path.read_text(encoding="utf-8")
+                                    st.session_state["svg_bytes"] = result.svg_path.read_bytes()
+                                    st.session_state["stats"] = getattr(result, "stats", {})
+                                    st.session_state["engine"] = getattr(result, "engine", "pipeline")
+                                    st.session_state["elapsed"] = getattr(result, "elapsed_seconds", 0)
+                                    st.session_state["ui_message"] = ("success", "推荐流水线执行完成")
+                    except Exception as e:
+                        st.session_state["ui_message"] = ("error", f"执行推荐流水线失败: {e}")
+                    st.rerun()
+    else:
+        st.caption("🎼 智能编排不可用（vector_studio.engine_orchestrator 导入失败）")
+
     st.divider()
+
+    # -----------------------------------------------------------------------
+    # v2.0: AI 处理面板
+    # -----------------------------------------------------------------------
+    with st.expander("🤖 AI处理"):
+        if not _HAS_AI_ONNX:
+            st.warning("AI ONNX 模块不可用（vector_studio.ai_onnx 导入失败）")
+        else:
+            ai_task = st.selectbox(
+                "AI任务",
+                ["无", "分割", "风格迁移", "超分辨率", "自动增强"],
+                key="ai_task",
+            )
+
+            # 显示模型下载状态
+            try:
+                manager = ONNXModelManager()
+                models_ready = manager.list_ready_models()
+                if models_ready:
+                    st.caption(f"✅ 就绪模型: {', '.join(models_ready)}")
+                else:
+                    st.caption("⏳ 模型加载中…")
+            except Exception:
+                st.caption("模型状态检测不可用")
+
+            if ai_task == "风格迁移":
+                st.selectbox("风格", ["素描", "油画", "水彩", "卡通"], key="ai_style")
+            elif ai_task == "超分辨率":
+                st.selectbox("倍数", [2, 4], key="ai_scale", format_func=lambda x: f"{x}x")
+
+            if ai_task != "无":
+                if "uploaded_file_name" not in st.session_state:
+                    st.caption("请先上传图片")
+                elif st.button("运行 AI 处理", key="run_ai_task"):
+                    with st.spinner(f"正在执行 {ai_task}…"):
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-ai-") as tmp:
+                                tmp_dir = Path(tmp)
+                                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                kwargs = {}
+                                if ai_task == "风格迁移":
+                                    style_map = {"素描": "sketch", "油画": "oil", "水彩": "watercolor", "卡通": "cartoon"}
+                                    kwargs["style"] = style_map.get(st.session_state.ai_style, "sketch")
+                                elif ai_task == "超分辨率":
+                                    kwargs["scale"] = st.session_state.ai_scale
+                                result_img = _run_ai_task(input_path, ai_task, **kwargs)
+                                if result_img is not None:
+                                    out_path = tmp_dir / "ai_result.png"
+                                    result_img.save(out_path)
+                                    st.session_state["ai_result_image"] = out_path.read_bytes()
+                                    st.session_state["ui_message"] = ("success", f"AI {ai_task} 完成")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"AI 处理失败: {e}")
+                    st.rerun()
+
+                if st.session_state.get("ai_result_image"):
+                    st.image(st.session_state["ai_result_image"], caption="AI 处理结果", use_container_width=True)
+                    if st.button("使用此结果进行矢量化", key="use_ai_result"):
+                        st.session_state["use_ai_result_for_trace"] = True
+                        st.session_state["ui_message"] = ("success", "已应用 AI 结果，请点击开始转换")
+                        st.rerun()
 
     st.header("转换预设")
 
@@ -962,6 +1237,39 @@ with st.sidebar:
             except Exception as e:
                 st.session_state["ui_message"] = ("error", f"删除失败: {e}")
                 st.rerun()
+
+    st.divider()
+
+    # -----------------------------------------------------------------------
+    # v2.0: 工作流面板
+    # -----------------------------------------------------------------------
+    with st.expander("🔀 工作流"):
+        if not _HAS_WORKFLOW:
+            st.warning("工作流模块不可用（vector_studio.workflow 导入失败）")
+        else:
+            templates = _list_workflow_templates()
+            st.selectbox("内置工作流模板", templates, key="workflow_template")
+            if st.button("运行工作流", key="run_workflow"):
+                if "uploaded_file_name" not in st.session_state:
+                    st.session_state["ui_message"] = ("warning", "请先上传图片再运行工作流")
+                else:
+                    with st.spinner(f"正在运行工作流 '{st.session_state.workflow_template}'…"):
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-workflow-") as tmp:
+                                tmp_dir = Path(tmp)
+                                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                wf = Workflow.load(st.session_state.workflow_template)
+                                engine = WorkflowEngine()
+                                result = engine.run_workflow(wf, {"image_path": str(input_path)})
+                                st.session_state["workflow_result"] = result
+                                st.session_state["ui_message"] = ("success", f"工作流 '{st.session_state.workflow_template}' 运行完成")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"工作流运行失败: {e}")
+                    st.rerun()
+
+            if st.session_state.get("workflow_result"):
+                with st.expander("工作流结果"):
+                    st.json(st.session_state["workflow_result"])
 
     st.divider()
 
@@ -1239,6 +1547,28 @@ with st.sidebar:
                         st.session_state["ui_message"] = ("error", f"重置失败: {e}")
                         st.rerun()
 
+                # -----------------------------------------------------------------------
+                # v2.0: 跨设备同步
+                # -----------------------------------------------------------------------
+                st.markdown("---")
+                st.markdown("**🔄 同步**")
+                st.text_input("同步服务器 URL", key="sync_server_url", value=st.session_state.get("sync_server_url", "http://localhost:8000"))
+                if st.button("同步工作区", key="sync_workspaces"):
+                    if not _HAS_SYNC:
+                        st.session_state["ui_message"] = ("error", "同步模块不可用")
+                    else:
+                        with st.spinner("正在同步…"):
+                            try:
+                                client = _get_sync_client()
+                                if client:
+                                    client.sync_workspaces()
+                                    st.session_state["ui_message"] = ("success", "同步完成")
+                                else:
+                                    st.session_state["ui_message"] = ("error", "同步客户端初始化失败")
+                            except Exception as e:
+                                st.session_state["ui_message"] = ("error", f"同步失败: {e}")
+                    st.rerun()
+
     # -----------------------------------------------------------------------
     # v0.4: API 服务面板
     # -----------------------------------------------------------------------
@@ -1408,6 +1738,60 @@ smart_remove_bg = st.session_state.get("smart_remove_bg", False)
 enhance_enabled = st.session_state.get("enhance_enabled", False)
 enhance_type = st.session_state.get("enhance_type", "auto") if enhance_enabled else None
 
+# -----------------------------------------------------------------------
+# v2.0: 协作功能
+# -----------------------------------------------------------------------
+collab_col1, collab_col2, collab_col3 = st.columns([1, 1, 2])
+with collab_col1:
+    if st.button("👥 创建房间", key="create_collab_room"):
+        if not _HAS_COLLAB:
+            st.session_state["ui_message"] = ("error", "协作模块不可用")
+        else:
+            try:
+                manager = _get_collab_manager()
+                if manager:
+                    room_id = manager.create_room("current_user")
+                    st.session_state["collab_room_id"] = room_id
+                    st.session_state["ui_message"] = ("success", f"协作房间已创建: {room_id}")
+                else:
+                    st.session_state["ui_message"] = ("error", "协作管理器初始化失败")
+            except Exception as e:
+                st.session_state["ui_message"] = ("error", f"创建房间失败: {e}")
+        st.rerun()
+with collab_col2:
+    join_room_id = st.text_input("加入房间 ID", key="join_collab_room", placeholder="输入房间ID")
+    if st.button("加入房间", key="join_collab_room_btn"):
+        if not _HAS_COLLAB:
+            st.session_state["ui_message"] = ("error", "协作模块不可用")
+        else:
+            try:
+                manager = _get_collab_manager()
+                if manager:
+                    room = manager.get_room(join_room_id)
+                    if room:
+                        st.session_state["collab_room_id"] = join_room_id
+                        st.session_state["ui_message"] = ("success", f"已加入房间: {join_room_id}")
+                    else:
+                        st.session_state["ui_message"] = ("warning", "房间不存在")
+                else:
+                    st.session_state["ui_message"] = ("error", "协作管理器初始化失败")
+            except Exception as e:
+                st.session_state["ui_message"] = ("error", f"加入房间失败: {e}")
+        st.rerun()
+with collab_col3:
+    if st.session_state.get("collab_room_id"):
+        st.markdown(f"**当前房间:** `{st.session_state['collab_room_id']}`")
+        try:
+            manager = _get_collab_manager()
+            if manager:
+                room = manager.get_room(st.session_state["collab_room_id"])
+                users = room.get("users", []) if isinstance(room, dict) else []
+                st.caption(f"在线用户: {', '.join(users) if users else '仅自己'}")
+        except Exception:
+            st.caption("在线用户: 获取失败")
+    else:
+        st.caption("未加入任何房间")
+
 uploaded = st.file_uploader(
     "上传 PNG / JPG / WEBP / BMP / TIFF",
     type=["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"],
@@ -1418,6 +1802,21 @@ _auto_save_workspace()
 
 if uploaded is not None:
     st.session_state.uploaded_file_name = uploaded.name
+    # 保存上传文件内容到 session_state 以便侧边栏 AI 面板使用
+    st.session_state["uploaded_file_bytes"] = uploaded.getvalue()
+
+    # v2.0: 如果使用 AI 结果进行矢量化，替换 input
+    if st.session_state.get("use_ai_result_for_trace") and st.session_state.get("ai_result_image"):
+        class _AIUploadedFile:
+            name = "ai_result.png"
+            file_id = "ai_result"
+            type = "image/png"
+            @staticmethod
+            def getvalue():
+                return st.session_state["ai_result_image"]
+        uploaded = _AIUploadedFile()
+        st.session_state["use_ai_result_for_trace"] = False
+
     # -----------------------------------------------------------------------
     # 1. 智能分析区域
     # -----------------------------------------------------------------------
@@ -1855,6 +2254,49 @@ if uploaded is not None:
                         surl = sf.get("url", "")
                         created = sf.get("created_at", "-")
                         st.markdown(f"• `{fname}` — {created} — [{surl}]({surl})" if surl else f"• `{fname}` — {created}")
+
+        # -----------------------------------------------------------------------
+        # v2.0: 动画导出
+        # -----------------------------------------------------------------------
+        with st.expander("🎬 动画"):
+            if not _HAS_ANIMATION:
+                st.warning("动画模块不可用（vector_studio.animation 导入失败）")
+            else:
+                anim_col1, anim_col2 = st.columns(2)
+                with anim_col1:
+                    st.selectbox("动画预设", ["绘制", "揭示", "变形", "脉冲", "颜色循环"], key="animation_preset")
+                with anim_col2:
+                    st.selectbox("导出格式", ["SMIL", "Lottie", "GIF", "CSS"], key="animation_format")
+                if st.button("生成动画", key="generate_animation"):
+                    with st.spinner("正在生成动画…"):
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-anim-") as tmp:
+                                tmp_dir = Path(tmp)
+                                svg_path = tmp_dir / "input.svg"
+                                svg_path.write_text(st.session_state["svg_text"], encoding="utf-8")
+                                out_path = tmp_dir / f"animation.{st.session_state.animation_format.lower()}"
+                                builder = _get_animation_builder()
+                                if builder:
+                                    builder.load_svg(str(svg_path)).apply_preset(
+                                        st.session_state.animation_preset
+                                    ).export(st.session_state.animation_format.lower(), str(out_path))
+                                    st.session_state["animation_result_path"] = str(out_path)
+                                    st.session_state["animation_result_bytes"] = out_path.read_bytes()
+                                    st.session_state["ui_message"] = ("success", "动画生成完成")
+                                else:
+                                    st.session_state["ui_message"] = ("error", "动画构建器初始化失败")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"动画生成失败: {e}")
+                    st.rerun()
+
+                if st.session_state.get("animation_result_bytes"):
+                    st.download_button(
+                        f"下载 {st.session_state.animation_format}",
+                        data=st.session_state["animation_result_bytes"],
+                        file_name=f"animation.{st.session_state.animation_format.lower()}",
+                        mime="application/json" if st.session_state.animation_format == "Lottie" else "text/plain",
+                        key="download_animation",
+                    )
 
         # 外部编辑器
         st.divider()

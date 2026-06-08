@@ -1,6 +1,6 @@
 # API 文档
 
-Bitmap Vector Studio v1.2 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
+Bitmap Vector Studio v2.0 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
 
 > **v1.1 新增**：桌面应用通过 Tauri Command 桥接 Python 后端，提供与 Web API 等价的功能。详见 [docs/DESKTOP.md](DESKTOP.md)。
 
@@ -80,7 +80,7 @@ docker-compose up -d vector-studio
 ```json
 {
   "status": "ok",
-  "version": "1.2.0"
+  "version": "2.0.0"
 }
 ```
 
@@ -383,7 +383,7 @@ client = VectorStudioClient("http://localhost:8000")
 
 # 检查服务健康
 health = client.health()
-print(health)  # {'status': 'ok', 'version': '1.2.0'}
+print(health)  # {'status': 'ok', 'version': '2.0.0'}
 ```
 
 ### 同步转换

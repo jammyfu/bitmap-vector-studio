@@ -1,6 +1,6 @@
 # 桌面应用使用指南
 
-Bitmap Vector Studio v1.2 提供基于 Tauri 的跨平台桌面应用，将 Python 后端的强大功能与原生桌面体验相结合。
+Bitmap Vector Studio v2.0 提供基于 Tauri 的跨平台桌面应用，将 Python 后端的强大功能与原生桌面体验相结合。
 
 ---
 
@@ -26,13 +26,13 @@ Bitmap Vector Studio v1.2 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### Windows（MSI / NSIS）
 
 **MSI 安装包（推荐）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.2.0_x64_en-US.msi`
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_2.0.0_x64_en-US.msi`
 2. 双击运行安装向导
 3. 按提示完成安装（支持自定义安装路径）
 4. 安装完成后从开始菜单启动「Bitmap Vector Studio」
 
 **NSIS 安装包**
-1. 下载 `bitmap-vector-studio_1.2.0_x64-setup.exe`
+1. 下载 `bitmap-vector-studio_2.0.0_x64-setup.exe`
 2. 双击运行，支持便携模式安装（无需管理员权限）
 
 > **系统要求**：Windows 10 版本 1809 或更高，64 位系统，Python 3.9+（首次启动时自动检测）
@@ -40,7 +40,7 @@ Bitmap Vector Studio v1.2 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### macOS（DMG / App）
 
 **DMG 镜像（推荐）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.2.0_x64.dmg`（Intel）或 `bitmap-vector-studio_1.2.0_aarch64.dmg`（Apple Silicon）
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_2.0.0_x64.dmg`（Intel）或 `bitmap-vector-studio_2.0.0_aarch64.dmg`（Apple Silicon）
 2. 双击挂载 DMG 镜像
 3. 将「Bitmap Vector Studio」应用拖入「应用程序」文件夹
 4. 首次启动时若提示「无法打开」，前往「系统设置 → 隐私与安全性」点击「仍要打开」
@@ -54,26 +54,26 @@ Bitmap Vector Studio v1.2 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### Linux（AppImage / DEB / RPM）
 
 **AppImage（推荐，通用）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.2.0_amd64.AppImage`
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_2.0.0_amd64.AppImage`
 2. 赋予执行权限：
    ```bash
-   chmod +x bitmap-vector-studio_1.2.0_amd64.AppImage
+   chmod +x bitmap-vector-studio_2.0.0_amd64.AppImage
    ```
 3. 直接运行：
    ```bash
-   ./bitmap-vector-studio_1.2.0_amd64.AppImage
+   ./bitmap-vector-studio_2.0.0_amd64.AppImage
    ```
 4. 可选：使用 [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) 集成到系统菜单
 
 **DEB 包（Debian / Ubuntu）**
 ```bash
-sudo dpkg -i bitmap-vector-studio_1.2.0_amd64.deb
+sudo dpkg -i bitmap-vector-studio_2.0.0_amd64.deb
 sudo apt-get install -f  # 自动解决依赖
 ```
 
 **RPM 包（Fedora / openSUSE）**
 ```bash
-sudo rpm -i bitmap-vector-studio_1.2.0_x86_64.rpm
+sudo rpm -i bitmap-vector-studio_2.0.0_x86_64.rpm
 ```
 
 > **系统要求**：Linux 内核 3.10+，glibc 2.17+，Python 3.9+ 和 libcairo2（首次启动时自动检测）
@@ -125,7 +125,7 @@ sudo rpm -i bitmap-vector-studio_1.2.0_x86_64.rpm
 │          │   缩放: 100%  状态: 就绪      │                   │
 │          │                              │  高级参数          │
 ├──────────┴──────────────────────────────┴───────────────────┤
-│  状态栏: 就绪  |  队列: 0/0  |  版本: 1.2.0                      │
+│  状态栏: 就绪  |  队列: 0/0  |  版本: 2.0.0                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 

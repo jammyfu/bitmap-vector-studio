@@ -1,6 +1,6 @@
 # 多矢量化引擎使用指南
 
-Bitmap Vector Studio v1.2 引入多引擎架构，支持 VTracer、Potrace、AutoTrace 三种矢量化后端，并可根据图像特征自动选择最佳引擎。
+Bitmap Vector Studio v2.0 引入多引擎架构，支持 VTracer、Potrace、AutoTrace 三种矢量化后端，并可根据图像特征自动选择最佳引擎。
 
 ---
 

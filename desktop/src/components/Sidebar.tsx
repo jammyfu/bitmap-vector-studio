@@ -31,6 +31,14 @@ interface SidebarProps {
   // v1.1 checkpoint
   checkpoints?: { name: string; queue_id: string }[];
   onResumeCheckpoint?: (id: string) => void;
+  // v2.0 workflow
+  onRunWorkflow?: (template: string) => void;
+  workflowTemplates?: string[];
+  // v2.0 collaboration
+  collabRoomId?: string | null;
+  onCreateCollabRoom?: () => void;
+  onJoinCollabRoom?: (roomId: string) => void;
+  collabUsers?: string[];
 }
 
 const statusIcon: Record<ConversionTask['status'], string> = {
@@ -66,11 +74,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   hasCrashRecovery = false,
   checkpoints = [],
   onResumeCheckpoint,
+  onRunWorkflow,
+  workflowTemplates = [],
+  collabRoomId,
+  onCreateCollabRoom,
+  onJoinCollabRoom,
+  collabUsers = [],
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; taskId: string } | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [workflowTemplate, setWorkflowTemplate] = useState('auto_enhance');
+  const [joinRoomId, setJoinRoomId] = useState('');
   const dragOverIndex = React.useRef<number | null>(null);
 
   const { call: callGetHistory } = useInvoke<{ limit: number }, string>('get_history');
@@ -170,6 +186,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
         </div>
+      </div>
+
+      {/* v2.0: Workflow Quick Entry */}
+      {workflowTemplates.length > 0 && (
+        <div className="sidebar-workflow" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              className="sidebar-select"
+              value={workflowTemplate}
+              onChange={(e) => setWorkflowTemplate(e.target.value)}
+              style={{ flex: 1, fontSize: 12 }}
+            >
+              {workflowTemplates.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <button className="btn btn-sm" onClick={() => onRunWorkflow?.(workflowTemplate)} title="Run workflow">
+              🔀 Run
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* v2.0: Collaboration Room Management */}
+      <div className="sidebar-collab" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <button className="btn btn-sm" onClick={onCreateCollabRoom} title="Create room">
+            👥 Create
+          </button>
+          <input
+            type="text"
+            placeholder="Room ID"
+            value={joinRoomId}
+            onChange={(e) => setJoinRoomId(e.target.value)}
+            style={{ flex: 1, fontSize: 12, padding: '4px 8px', background: 'var(--bg-primary)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }}
+          />
+          <button className="btn btn-sm" onClick={() => { if (joinRoomId) onJoinCollabRoom?.(joinRoomId); }} title="Join room">
+            Join
+          </button>
+        </div>
+        {collabRoomId && (
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Room: <strong>{collabRoomId}</strong> | Users: {collabUsers.length > 0 ? collabUsers.join(', ') : 'Just you'}
+          </div>
+        )}
       </div>
 
       {/* v1.1 Checkpoint Recovery */}

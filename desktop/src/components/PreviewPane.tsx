@@ -14,6 +14,16 @@ interface PreviewPaneProps {
   onCloudShare?: () => void;
   shareUrl?: string;
   shareQrCode?: string;
+  // v2.0 animation
+  onGenerateAnimation?: () => void;
+  animationPreset?: string;
+  onChangeAnimationPreset?: (preset: string) => void;
+  animationFormat?: string;
+  onChangeAnimationFormat?: (format: string) => void;
+  animationResultPath?: string;
+  // v2.0 collaboration
+  collabRoomId?: string | null;
+  collabUsers?: string[];
 }
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
@@ -28,6 +38,14 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   onCloudShare,
   shareUrl,
   shareQrCode,
+  onGenerateAnimation,
+  animationPreset = '绘制',
+  onChangeAnimationPreset,
+  animationFormat = 'SMIL',
+  onChangeAnimationFormat,
+  animationResultPath,
+  collabRoomId,
+  collabUsers = [],
 }) => {
   const [mode, setMode] = useState<'side-by-side' | 'overlay'>('side-by-side');
   const [overlayPos, setOverlayPos] = useState(50);
@@ -159,6 +177,11 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
               ☁️ Share
             </button>
           )}
+          {displayResult && (
+            <button className="btn btn-sm btn-secondary" onClick={onGenerateAnimation}>
+              🎬 Animate
+            </button>
+          )}
         </div>
       </div>
 
@@ -168,6 +191,45 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
           <a href={shareUrl} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: '#0066cc' }}>{shareUrl}</a>
           {shareQrCode && (
             <img src={shareQrCode} alt="QR" style={{ width: 48, height: 48, marginLeft: 'auto' }} />
+          )}
+        </div>
+      )}
+
+      {/* v2.0: Collaboration status */}
+      {collabRoomId && (
+        <div className="preview-collab-bar" style={{ padding: '6px 12px', background: 'rgba(10,132,255,0.08)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
+          <span>👥 Room: <strong>{collabRoomId}</strong></span>
+          <span>Users: {collabUsers.length > 0 ? collabUsers.join(', ') : 'Just you'}</span>
+        </div>
+      )}
+
+      {/* v2.0: Animation controls */}
+      {displayResult && (
+        <div className="preview-anim-bar" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
+          <span>🎬 Animation:</span>
+          <select
+            value={animationPreset}
+            onChange={(e) => onChangeAnimationPreset?.(e.target.value)}
+            style={{ fontSize: 12, padding: '2px 6px' }}
+          >
+            <option value="绘制">Draw</option>
+            <option value="揭示">Reveal</option>
+            <option value="变形">Morph</option>
+            <option value="脉冲">Pulse</option>
+            <option value="颜色循环">Color Loop</option>
+          </select>
+          <select
+            value={animationFormat}
+            onChange={(e) => onChangeAnimationFormat?.(e.target.value)}
+            style={{ fontSize: 12, padding: '2px 6px' }}
+          >
+            <option value="SMIL">SMIL</option>
+            <option value="Lottie">Lottie</option>
+            <option value="GIF">GIF</option>
+            <option value="CSS">CSS</option>
+          </select>
+          {animationResultPath && (
+            <span style={{ color: 'var(--success)' }}>✓ {animationResultPath}</span>
           )}
         </div>
       )}

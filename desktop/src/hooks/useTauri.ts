@@ -148,6 +148,46 @@ export function useTauri() {
     return invoke('resume_checkpoint', { checkpointId })
   }, [])
 
+  /// v2.0: Run AI task on image.
+  const runAiTask = useCallback(async (inputPath: string, task: string, style?: string, scale?: number): Promise<string> => {
+    return invoke('run_ai_task', { inputPath, task, style, scale })
+  }, [])
+
+  /// v2.0: Get engine orchestrator recommendation.
+  const recommendPipeline = useCallback(async (inputPath: string): Promise<string> => {
+    return invoke('recommend_pipeline', { inputPath })
+  }, [])
+
+  /// v2.0: Run recommended pipeline.
+  const runPipeline = useCallback(async (inputPath: string, pipeline: string, outputPath: string): Promise<string> => {
+    return invoke('run_pipeline', { inputPath, pipeline, outputPath })
+  }, [])
+
+  /// v2.0: Create collaboration room.
+  const createCollabRoom = useCallback(async (): Promise<string> => {
+    return invoke('create_collab_room', {})
+  }, [])
+
+  /// v2.0: Join collaboration room.
+  const joinCollabRoom = useCallback(async (roomId: string): Promise<string> => {
+    return invoke('join_collab_room', { roomId })
+  }, [])
+
+  /// v2.0: Generate animation from SVG.
+  const generateAnimation = useCallback(async (svgPath: string, preset: string, format: string, outputPath: string): Promise<string> => {
+    return invoke('generate_animation', { svgPath, preset, format, outputPath })
+  }, [])
+
+  /// v2.0: Run workflow.
+  const runWorkflow = useCallback(async (template: string, inputPath: string): Promise<string> => {
+    return invoke('run_workflow', { template, inputPath })
+  }, [])
+
+  /// v2.0: Sync workspaces.
+  const syncWorkspaces = useCallback(async (serverUrl: string): Promise<string> => {
+    return invoke('sync_workspaces', { serverUrl })
+  }, [])
+
   /// Enable plugin hotreload.
   const enableHotreload = useCallback(async (): Promise<void> => {
     return invoke('enable_hotreload')
@@ -188,6 +228,15 @@ export function useTauri() {
     listWorkspaces,
     getCheckpoints,
     resumeCheckpoint,
+    // v2.0
+    runAiTask,
+    recommendPipeline,
+    runPipeline,
+    createCollabRoom,
+    joinCollabRoom,
+    generateAnimation,
+    runWorkflow,
+    syncWorkspaces,
     enableHotreload,
     disableHotreload,
   }
