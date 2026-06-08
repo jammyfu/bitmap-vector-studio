@@ -1,735 +1,166 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { Layout } from './components/Layout'
-import { Sidebar } from './components/Sidebar'
-import { ParamPanel } from './components/ParamPanel'
-import { PreviewPane } from './components/PreviewPane'
-import { StatusBar } from './components/StatusBar'
-import { DropZone } from './components/DropZone'
-import { SettingsModal } from './components/SettingsModal'
-import { MarketBrowser } from './components/MarketBrowser'
-import { PluginManager } from './components/PluginManager'
-import { HistoryPanel } from './components/HistoryPanel'
-import { useQueue } from './hooks/useQueue'
-import { usePresets } from './hooks/usePresets'
+import { useAppStore, useQueueStore, useConvertStore, useSettingsStore } from './stores'
+import TopBar from './components/TopBar'
+import MainCanvas from './components/MainCanvas'
+import CoreParams from './components/CoreParams'
+import SmartRecommend from './components/SmartRecommend'
+import AdvancedDrawer from './components/AdvancedDrawer'
+import ControlBar from './components/ControlBar'
+import QueueBar from './components/QueueBar'
+import CommandPalette from './components/CommandPalette'
 import { useTauri } from './hooks/useTauri'
-import type { TraceOptions, AppSettings } from './types'
+import { usePresets } from './hooks/usePresets'
+import type { TraceOptions, ConversionTask } from './types'
+import './App.css'
 
-const DEFAULT_SETTINGS: AppSettings = {
-  language: 'en',
-  theme: 'system',
-  defaultOutputDir: null,
-  defaultFormat: 'svg',
-  optimizeLevel: 1,
-  externalEditor: null,
-  apiHost: '127.0.0.1',
-  apiPort: 8000,
-  // v1.1 performance defaults
-  gpuEnabled: false,
-  streamingEnabled: false,
-  memoryLimit: null,
-  autoSaveInterval: 60,
-  // v1.2 cloud sync defaults
-  cloudSyncEnabled: false,
-  cloudApiKey: null,
-  // v2.0 AI defaults
-  aiTask: '无',
-  aiStyle: '素描',
-  aiScale: 2,
-  // v2.0 sync defaults
-  syncServerUrl: 'http://localhost:8000',
-  syncEnabled: false,
+function toQueueTasks(items: ReturnType<typeof useQueueStore.getState>['items']): ConversionTask[] {
+  return items.map((item) => ({
+    id: item.id,
+    fileName: item.fileName,
+    inputPath: item.filePath,
+    outputPath: item.outputPath || '',
+    status: item.status === 'converting' ? 'running' : item.status === 'done' ? 'completed' : item.status === 'error' ? 'failed' : 'pending',
+    progress: item.progress,
+    preset: 'default',
+    error: item.error,
+  }))
+}
+
+function buildTraceOptions(state: ReturnType<typeof useConvertStore.getState>): TraceOptions {
+  return {
+    colormode: state.colormode,
+    hierarchical: 'stacked',
+    mode: state.mode,
+    filter_speckle: state.filterSpeckle,
+    color_precision: state.colorPrecision,
+    layer_difference: state.layerDifference,
+    corner_threshold: state.cornerThreshold,
+    length_threshold: state.lengthThreshold,
+    max_iterations: state.maxIterations,
+    splice_threshold: state.spliceThreshold,
+    path_precision: state.pathPrecision,
+    denoise: state.denoise,
+    posterize: state.posterize,
+    max_input_side: state.maxInputSide,
+  }
 }
 
 function App() {
-  const [envStatus, setEnvStatus] = useState<string>('Checking...')
-  const [isReady, setIsReady] = useState(false)
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [marketVisible, setMarketVisible] = useState(false)
-  const [pluginVisible, setPluginVisible] = useState(false)
-  const [historyVisible, setHistoryVisible] = useState(false)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
-  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const [options, setOptions] = useState<TraceOptions>({
-    colormode: 'color',
-    hierarchical: 'stacked',
-    mode: 'spline',
-    filter_speckle: 4,
-    color_precision: 6,
-    layer_difference: 16,
-    corner_threshold: 60,
-    length_threshold: 4,
-    max_iterations: 10,
-    splice_threshold: 45,
-    path_precision: 8,
-    denoise: false,
-    posterize: null,
-    max_input_side: null,
-  })
-  const [livePreview, setLivePreview] = useState(false)
-  const [outputFormat, setOutputFormat] = useState<'svg' | 'pdf' | 'png'>('svg')
-  const [optimizeLevel, setOptimizeLevel] = useState(1)
-  const [previewResult, setPreviewResult] = useState<string | undefined>(undefined)
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-  const [ocrLang, setOcrLang] = useState('eng')
-  const [ocrVertical, setOcrVertical] = useState(false)
-  // v1.1 performance
-  const [gpuEnabled, setGpuEnabled] = useState(false)
-  const [streamingEnabled, setStreamingEnabled] = useState(false)
-  const [memoryStatus, setMemoryStatus] = useState<{ percent?: number; used_mb?: number; total_mb?: number; available?: boolean; message?: string } | null>(null)
-  const [gpuStatus, setGpuStatus] = useState<string>('未检测到')
-  const [performanceSuggestions, setPerformanceSuggestions] = useState<string[]>([])
-  // v1.1 workspace
-  const [workspaces, setWorkspaces] = useState<{ name: string }[]>([])
-  const [hasCrashRecovery, setHasCrashRecovery] = useState(false)
-  // v1.1 checkpoint
-  const [checkpoints, setCheckpoints] = useState<{ name: string; queue_id: string }[]>([])
-  // v1.2 engines
-  const [engine, setEngine] = useState<string>('自动选择')
-  // v1.2 cloud share
-  const [shareUrl, setShareUrl] = useState<string | undefined>(undefined)
-  const [shareQrCode, setShareQrCode] = useState<string | undefined>(undefined)
-  // v2.0 AI
-  const [aiTask, setAiTask] = useState<string>('无')
-  const [aiStyle, setAiStyle] = useState<string>('素描')
-  const [aiScale, setAiScale] = useState<number>(2)
-  // v2.0 animation
-  const [animationPreset, setAnimationPreset] = useState<string>('绘制')
-  const [animationFormat, setAnimationFormat] = useState<string>('SMIL')
-  const [animationResultPath, setAnimationResultPath] = useState<string | undefined>(undefined)
-  // v2.0 workflow
-  const [workflowTemplates] = useState<string[]>(['auto_enhance', 'logo_pipeline', 'photo_restore', 'batch_optimize'])
-  // v2.0 collaboration
-  const [collabRoomId, setCollabRoomId] = useState<string | null>(null)
-  const [collabUsers, setCollabUsers] = useState<string[]>([])
-  const [collabWs, setCollabWs] = useState<WebSocket | null>(null)
-
-  const { activePreset, selectPreset, getPresetOptions } = usePresets()
-  const queue = useQueue()
+  const { showToast, openCommandPalette, closeCommandPalette, commandPaletteOpen, effectiveTheme, toggleTheme } = useAppStore()
+  const { items, addFiles, selectedId, isExpanded, toggleExpanded, removeItem, clearCompleted } = useQueueStore()
+  const convert = useConvertStore()
+  const { loadSettings } = useSettingsStore()
   const tauri = useTauri()
+  const { presets, getPresetOptions, selectPreset } = usePresets()
 
-  // Toast helper
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
-    setToast({ message, type })
-    if (toastTimeout.current) clearTimeout(toastTimeout.current)
-    toastTimeout.current = setTimeout(() => setToast(null), 3000)
-  }, [])
+  const selectedItem = items.find((i) => i.id === selectedId)
+  const originalImage = selectedItem?.filePath || null
+  const queueTasks = toQueueTasks(items)
+  const traceOptions = buildTraceOptions(convert)
 
-  // v1.1: Check crash recovery on mount
-  useEffect(() => {
-    async function checkCrashRecovery() {
-      try {
-        const result = await tauri.listWorkspaces()
-        if (result) {
-          const parsed = JSON.parse(result) as { workspaces?: { name: string }[]; crash_recovery?: boolean }
-          if (parsed.workspaces) {
-            setWorkspaces(parsed.workspaces)
-          }
-          if (parsed.crash_recovery) {
-            setHasCrashRecovery(true)
-            showToast('检测到崩溃恢复数据，可从侧边栏恢复上次会话', 'warning')
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    checkCrashRecovery()
-  }, [tauri, showToast])
-
-  // v1.1: Auto-save workspace interval
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const openFiles = queue.tasks.map((t) => t.inputPath)
-        await tauri.saveWorkspace('auto_save', openFiles, activePreset)
-      } catch {
-        // ignore auto-save errors
-      }
-    }, (settings.autoSaveInterval || 60) * 1000)
-    return () => clearInterval(interval)
-  }, [queue.tasks, activePreset, settings.autoSaveInterval, tauri])
-
-  // v1.1: Poll performance stats
-  useEffect(() => {
-    async function pollPerformance() {
-      try {
-        const selectedTask = queue.tasks.find((t) => t.id === selectedTaskId)
-        if (selectedTask?.inputPath) {
-          const result = await tauri.getPerformanceStats(selectedTask.inputPath)
-          if (result) {
-            const parsed = JSON.parse(result) as {
-              memory?: { percent?: number; used_mb?: number; total_mb?: number; available?: boolean; message?: string }
-              gpu?: string
-              suggestions?: string[]
-            }
-            if (parsed.memory) setMemoryStatus(parsed.memory)
-            if (parsed.gpu) setGpuStatus(parsed.gpu)
-            if (parsed.suggestions) setPerformanceSuggestions(parsed.suggestions)
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    pollPerformance()
-    const interval = setInterval(pollPerformance, 5000)
-    return () => clearInterval(interval)
-  }, [selectedTaskId, queue.tasks, tauri])
-
-  // v1.1: Load checkpoints
-  useEffect(() => {
-    async function loadCheckpoints() {
-      try {
-        const result = await tauri.getCheckpoints()
-        if (result) {
-          const parsed = JSON.parse(result) as { checkpoints?: { name: string; queue_id: string }[] }
-          if (parsed.checkpoints) {
-            setCheckpoints(parsed.checkpoints)
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    loadCheckpoints()
-  }, [tauri])
-
-  // Check environment on mount
   useEffect(() => {
     checkEnvironment()
     loadSettings()
-
-    // Listen for menu events
-    const unlistenOpen = listen('menu-open', () => {
-      handleOpenFileDialog()
-    })
-    const unlistenAbout = listen('menu-about', () => {
-      showToast('Bitmap Vector Studio v1.1.0', 'success')
-    })
-
-    return () => {
-      unlistenOpen.then((f) => f())
-      unlistenAbout.then((f) => f())
-    }
+    const unlistenOpen = listen('menu-open', () => handleOpenFileDialog())
+    const unlistenAbout = listen('menu-about', () => showToast('Bitmap Vector Studio v3.0.0', 'success'))
+    return () => { unlistenOpen.then((f) => f()); unlistenAbout.then((f) => f()) }
   }, [])
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key.toLowerCase()) {
-          case 'o':
-            e.preventDefault()
-            handleOpenFileDialog()
-            break
-          case 's':
-            e.preventDefault()
-            // Save preset shortcut handled in ParamPanel
-            break
-          case ',':
-            e.preventDefault()
-            setSettingsOpen(true)
-            break
-          case 'm':
-            e.preventDefault()
-            setMarketVisible((v) => !v)
-            break
-          case 'p':
-            e.preventDefault()
-            setPluginVisible((v) => !v)
-            break
-          case 'h':
-            e.preventDefault()
-            setHistoryVisible((v) => !v)
-            break
-        }
-      }
-      if (e.key === 'Escape') {
-        setMarketVisible(false)
-        setPluginVisible(false)
-        setHistoryVisible(false)
-        setSettingsOpen(false)
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCommandPalette() }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); handleOpenFileDialog() }
+      if (e.key === 'Escape') closeCommandPalette()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  const handleDropFiles = useCallback((files: string[]) => {
+    const fileList = files.map((f) => ({ name: f.split(/[/\\]/).pop() || f, path: f }))
+    addFiles(fileList)
+    showToast(`已添加 ${fileList.length} 个文件`, 'success')
+    if (fileList.length > 0) analyzeAndRecommend(fileList[0].path)
+  }, [addFiles, showToast])
+
+  async function analyzeAndRecommend(filePath: string) {
+    try {
+      const result = await tauri.recommendPreset(filePath)
+      if (result) {
+        const parsed = JSON.parse(result)
+        convert.setRecommendation(parsed.preset, parsed.confidence || 0.8)
+      }
+    } catch { /* ignore */ }
+  }
+
   async function checkEnvironment() {
     try {
       const result = await tauri.checkEnv()
-      setEnvStatus(result)
-      setIsReady(result.includes('ready') || result.includes('OK'))
-    } catch (error) {
-      setEnvStatus(`Error: ${error}`)
-      setIsReady(false)
-    }
-  }
-
-  async function loadSettings() {
-    try {
-      const result = await tauri.getConfig()
-      const parsed = JSON.parse(result) as Partial<AppSettings>
-      setSettings((prev) => ({ ...prev, ...parsed }))
-    } catch {
-      // ignore
-    }
+      if (!result.includes('ready') && !result.includes('OK')) showToast(`环境检测: ${result}`, 'warning')
+    } catch (error) { showToast(`环境错误: ${error}`, 'error') }
   }
 
   async function handleOpenFileDialog() {
     try {
       const files = await tauri.openFileDialog()
       if (files.length > 0) {
-        handleAddFiles(files)
+        const fileList = files.map((f) => ({ name: f.split(/[/\\]/).pop() || f, path: f }))
+        addFiles(fileList)
+        showToast(`已添加 ${files.length} 个文件`, 'success')
+        if (fileList.length > 0) analyzeAndRecommend(fileList[0].path)
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handleConvert() {
+    if (!selectedItem) { showToast('请先选择或上传图片', 'warning'); return }
+    convert.startConvert()
+    try {
+      const options = getPresetOptions(convert.preset)
+      const result = await tauri.convertImage(selectedItem.filePath, JSON.stringify({ ...options, colormode: convert.colormode, mode: convert.mode }))
+      if (result) {
+        const parsed = JSON.parse(result)
+        convert.setPreviewResult(parsed.svgPath)
+        convert.finishConvert(parsed.svgPath)
+        showToast('转换完成！', 'success')
       }
     } catch (error) {
-      showToast(`Failed to open file dialog: ${error}`, 'error')
+      showToast(`转换失败: ${error}`, 'error')
+      convert.finishConvert('')
     }
   }
 
-  const handleAddFiles = useCallback((files: string[]) => {
-    queue.addTasks(files, activePreset)
-    showToast(`Added ${files.length} file(s) to queue`, 'success')
-  }, [queue, activePreset, showToast])
+  const handleDownload = useCallback((format: 'svg' | 'pdf' | 'png') => {
+    if (!convert.previewResult) return
+    showToast(`下载 ${format.toUpperCase()} 已开始`, 'success')
+  }, [convert.previewResult, showToast])
 
-  const handleStartQueue = useCallback(() => {
-    queue.startQueue()
-  }, [queue])
+  const handleSelectPreset = useCallback((name: string) => { convert.setPreset(name); selectPreset(name) }, [convert.setPreset, selectPreset])
 
-  const handlePauseQueue = useCallback(() => {
-    queue.pauseQueue()
-  }, [queue])
-
-  const handleCancelAll = useCallback(() => {
-    queue.tasks.forEach((t) => {
-      if (t.status === 'pending' || t.status === 'running') {
-        queue.cancelTask(t.id)
-      }
+  const handleChangeAdvancedOptions = useCallback((opts: TraceOptions) => {
+    useConvertStore.setState({
+      filterSpeckle: opts.filter_speckle, colorPrecision: opts.color_precision, layerDifference: opts.layer_difference,
+      cornerThreshold: opts.corner_threshold, lengthThreshold: opts.length_threshold, maxIterations: opts.max_iterations,
+      spliceThreshold: opts.splice_threshold, pathPrecision: opts.path_precision, denoise: opts.denoise,
+      posterize: opts.posterize, maxInputSide: opts.max_input_side,
     })
-  }, [queue])
-
-  const handleClearCompleted = useCallback(() => {
-    queue.clearCompleted()
-  }, [queue])
-
-  const handleSelectTask = useCallback((id: string) => {
-    setSelectedTaskId(id)
-    const task = queue.tasks.find((t) => t.id === id)
-    if (task) {
-      // Load task parameters if available
-      const presetOpts = getPresetOptions(task.preset)
-      setOptions(presetOpts)
-      selectPreset(task.preset)
-    }
-  }, [queue.tasks, getPresetOptions, selectPreset])
-
-  const handleLoadHistoryParams = useCallback((params: unknown) => {
-    const p = params as { inputPath?: string; preset?: string }
-    if (p.preset) {
-      selectPreset(p.preset)
-      setOptions(getPresetOptions(p.preset))
-    }
-  }, [selectPreset, getPresetOptions])
-
-  const handleSaveSettings = useCallback((newSettings: AppSettings) => {
-    setSettings(newSettings)
-    showToast('Settings saved', 'success')
-  }, [showToast])
-
-  // v1.1 workspace handlers
-  const handleSaveWorkspace = useCallback(async () => {
-    try {
-      const openFiles = queue.tasks.map((t) => t.inputPath)
-      await tauri.saveWorkspace(null, openFiles, activePreset)
-      showToast('Workspace saved', 'success')
-      // Refresh list
-      const result = await tauri.listWorkspaces()
-      if (result) {
-        const parsed = JSON.parse(result) as { workspaces?: { name: string }[] }
-        if (parsed.workspaces) setWorkspaces(parsed.workspaces)
-      }
-    } catch (error) {
-      showToast(`Failed to save workspace: ${error}`, 'error')
-    }
-  }, [queue.tasks, activePreset, tauri, showToast])
-
-  const handleLoadWorkspace = useCallback(async (name: string) => {
-    try {
-      const result = await tauri.loadWorkspace(name)
-      if (result) {
-        const parsed = JSON.parse(result) as { preset?: string; options?: TraceOptions }
-        if (parsed.preset) {
-          selectPreset(parsed.preset)
-          setOptions(getPresetOptions(parsed.preset))
-        }
-        if (parsed.options) {
-          setOptions(parsed.options)
-        }
-        showToast(`Loaded workspace: ${name}`, 'success')
-      }
-    } catch (error) {
-      showToast(`Failed to load workspace: ${error}`, 'error')
-    }
-  }, [tauri, selectPreset, getPresetOptions, showToast])
-
-  const handleRestoreLast = useCallback(async () => {
-    try {
-      const result = await tauri.loadWorkspace('crash_recovery')
-      if (result) {
-        const parsed = JSON.parse(result) as { preset?: string; options?: TraceOptions }
-        if (parsed.preset) {
-          selectPreset(parsed.preset)
-          setOptions(getPresetOptions(parsed.preset))
-        }
-        if (parsed.options) {
-          setOptions(parsed.options)
-        }
-        showToast('Restored last session', 'success')
-        setHasCrashRecovery(false)
-      }
-    } catch (error) {
-      showToast(`Failed to restore: ${error}`, 'error')
-    }
-  }, [tauri, selectPreset, getPresetOptions, showToast])
-
-  // v1.1 checkpoint handler
-  const handleResumeCheckpoint = useCallback(async (id: string) => {
-    try {
-      await tauri.resumeCheckpoint(id)
-      showToast(`Resumed checkpoint: ${id}`, 'success')
-    } catch (error) {
-      showToast(`Failed to resume checkpoint: ${error}`, 'error')
-    }
-  }, [tauri, showToast])
-
-  const selectedTask = queue.tasks.find((t) => t.id === selectedTaskId)
-
-  // v1.2 engine benchmark handler
-  const handleEngineBenchmark = useCallback(async () => {
-    if (!selectedTask?.inputPath) {
-      showToast('Please select an image first', 'error')
-      return
-    }
-    showToast('Engine benchmark started...', 'success')
-    try {
-      // await tauri.engineBenchmark(selectedTask.inputPath)
-      showToast('Engine benchmark complete', 'success')
-    } catch (error) {
-      showToast(`Benchmark failed: ${error}`, 'error')
-    }
-  }, [selectedTask, showToast])
-
-  // v1.2 cloud share handler
-  const handleCloudShare = useCallback(async () => {
-    if (!selectedTask?.outputPath) {
-      showToast('No result to share', 'error')
-      return
-    }
-    try {
-      // In a real implementation, this would call a Tauri command
-      // const result = await tauri.cloudShare(selectedTask.outputPath)
-      // const parsed = JSON.parse(result)
-      // setShareUrl(parsed.url)
-      // setShareQrCode(parsed.qr_code)
-      setShareUrl('https://example.com/share/demo')
-      setShareQrCode('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzAwMCIvPjwvc3ZnPg==')
-      showToast('Cloud share link generated', 'success')
-    } catch (error) {
-      showToast(`Cloud share failed: ${error}`, 'error')
-    }
-  }, [selectedTask, showToast, setShareUrl, setShareQrCode])
-
-  // v2.0: AI task handler
-  const handleRunAiTask = useCallback(async () => {
-    if (!selectedTask?.inputPath) {
-      showToast('Please select an image first', 'error')
-      return
-    }
-    try {
-      const result = await tauri.runAiTask(selectedTask.inputPath, aiTask, aiStyle, aiScale)
-      if (result) {
-        showToast(`AI ${aiTask} complete`, 'success')
-      } else {
-        showToast('AI task returned no result', 'warning')
-      }
-    } catch (error) {
-      showToast(`AI task failed: ${error}`, 'error')
-    }
-  }, [selectedTask, aiTask, aiStyle, aiScale, tauri, showToast])
-
-  // v2.0: Engine orchestration handler
-  const handleOrchestrate = useCallback(async () => {
-    if (!selectedTask?.inputPath) {
-      showToast('Please select an image first', 'error')
-      return
-    }
-    try {
-      const result = await tauri.recommendPipeline(selectedTask.inputPath)
-      if (result) {
-        showToast('Pipeline recommendation ready', 'success')
-      }
-    } catch (error) {
-      showToast(`Orchestration failed: ${error}`, 'error')
-    }
-  }, [selectedTask, tauri, showToast])
-
-  // v2.0: Animation handler
-  const handleGenerateAnimation = useCallback(async () => {
-    if (!selectedTask?.outputPath) {
-      showToast('No SVG result to animate', 'error')
-      return
-    }
-    try {
-      const outPath = selectedTask.outputPath.replace('.svg', `.${animationFormat.toLowerCase()}`)
-      const result = await tauri.generateAnimation(selectedTask.outputPath, animationPreset, animationFormat, outPath)
-      if (result) {
-        setAnimationResultPath(outPath)
-        showToast('Animation generated', 'success')
-      }
-    } catch (error) {
-      showToast(`Animation failed: ${error}`, 'error')
-    }
-  }, [selectedTask, animationPreset, animationFormat, tauri, showToast])
-
-  // v2.0: Workflow handler
-  const handleRunWorkflow = useCallback(async (template: string) => {
-    if (!selectedTask?.inputPath) {
-      showToast('Please select an image first', 'error')
-      return
-    }
-    try {
-      const result = await tauri.runWorkflow(template, selectedTask.inputPath)
-      if (result) {
-        showToast(`Workflow ${template} complete`, 'success')
-      }
-    } catch (error) {
-      showToast(`Workflow failed: ${error}`, 'error')
-    }
-  }, [selectedTask, tauri, showToast])
-
-  // v2.0: Collaboration room handlers
-  const handleCreateCollabRoom = useCallback(async () => {
-    try {
-      const result = await tauri.createCollabRoom()
-      if (result) {
-        const parsed = JSON.parse(result) as { room_id?: string }
-        if (parsed.room_id) {
-          setCollabRoomId(parsed.room_id)
-          showToast(`Room created: ${parsed.room_id}`, 'success')
-        }
-      }
-    } catch (error) {
-      showToast(`Create room failed: ${error}`, 'error')
-    }
-  }, [tauri, showToast])
-
-  const handleJoinCollabRoom = useCallback(async (roomId: string) => {
-    try {
-      const result = await tauri.joinCollabRoom(roomId)
-      if (result) {
-        setCollabRoomId(roomId)
-        showToast(`Joined room: ${roomId}`, 'success')
-      }
-    } catch (error) {
-      showToast(`Join room failed: ${error}`, 'error')
-    }
-  }, [tauri, showToast])
-
-  // v2.0: Collaboration WebSocket connection
-  useEffect(() => {
-    if (!collabRoomId) {
-      if (collabWs) {
-        collabWs.close()
-        setCollabWs(null)
-      }
-      return
-    }
-    const wsUrl = `ws://${settings.apiHost}:${settings.apiPort}/ws/collab/${collabRoomId}`
-    const ws = new WebSocket(wsUrl)
-    ws.onopen = () => {
-      showToast('Collaboration connected', 'success')
-    }
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as { users?: string[]; type?: string }
-        if (data.users) {
-          setCollabUsers(data.users)
-        }
-      } catch {
-        // ignore non-JSON messages
-      }
-    }
-    ws.onerror = () => {
-      showToast('Collaboration connection error', 'warning')
-    }
-    ws.onclose = () => {
-      // silently close
-    }
-    setCollabWs(ws)
-    return () => {
-      ws.close()
-    }
-  }, [collabRoomId, settings.apiHost, settings.apiPort, showToast])
+  }, [])
 
   return (
-    <div className="app">
-      <Layout
-        sidebar={
-          <Sidebar
-            tasks={queue.tasks}
-            onRemoveTask={queue.removeTask}
-            onCancelTask={queue.cancelTask}
-            onReorder={queue.reorderTasks}
-            onSelectTask={handleSelectTask}
-            selectedTaskId={selectedTaskId}
-            onAddFiles={handleAddFiles}
-            onLoadHistoryParams={handleLoadHistoryParams}
-            onToast={showToast}
-            onSaveWorkspace={handleSaveWorkspace}
-            onLoadWorkspace={handleLoadWorkspace}
-            onRestoreLast={handleRestoreLast}
-            workspaces={workspaces}
-            hasCrashRecovery={hasCrashRecovery}
-            checkpoints={checkpoints}
-            onResumeCheckpoint={handleResumeCheckpoint}
-            onRunWorkflow={handleRunWorkflow}
-            workflowTemplates={workflowTemplates}
-            collabRoomId={collabRoomId}
-            onCreateCollabRoom={handleCreateCollabRoom}
-            onJoinCollabRoom={handleJoinCollabRoom}
-            collabUsers={collabUsers}
-          />
-        }
-        main={
-          <ParamPanel
-            inputPath={selectedTask?.inputPath}
-            options={options}
-            onChangeOptions={setOptions}
-            livePreview={livePreview}
-            onToggleLivePreview={() => setLivePreview((v) => !v)}
-            outputFormat={outputFormat}
-            onChangeOutputFormat={setOutputFormat}
-            optimizeLevel={optimizeLevel}
-            onChangeOptimizeLevel={setOptimizeLevel}
-            onPreviewResult={setPreviewResult}
-            onToast={showToast}
-            ocrLang={ocrLang}
-            onChangeOcrLang={setOcrLang}
-            ocrVertical={ocrVertical}
-            onToggleOcrVertical={() => setOcrVertical((v) => !v)}
-            gpuEnabled={gpuEnabled}
-            onToggleGpu={() => setGpuEnabled((v) => !v)}
-            streamingEnabled={streamingEnabled}
-            onToggleStreaming={() => setStreamingEnabled((v) => !v)}
-            engine={engine}
-            onChangeEngine={setEngine}
-            onEngineBenchmark={handleEngineBenchmark}
-            aiTask={aiTask}
-            onChangeAiTask={setAiTask}
-            aiStyle={aiStyle}
-            onChangeAiStyle={setAiStyle}
-            aiScale={aiScale}
-            onChangeAiScale={setAiScale}
-            onRunAiTask={handleRunAiTask}
-            onOrchestrate={handleOrchestrate}
-          />
-        }
-        preview={
-          <PreviewPane
-            originalSrc={selectedTask?.inputPath}
-            resultSrc={previewResult || selectedTask?.outputPath}
-            fileName={selectedTask?.fileName}
-            inputPath={selectedTask?.inputPath}
-            options={JSON.stringify(options)}
-            outputFormat={outputFormat}
-            onDownload={() => showToast('Download started', 'success')}
-            onToast={showToast}
-            onCloudShare={handleCloudShare}
-            shareUrl={shareUrl}
-            shareQrCode={shareQrCode}
-            onGenerateAnimation={handleGenerateAnimation}
-            animationPreset={animationPreset}
-            onChangeAnimationPreset={setAnimationPreset}
-            animationFormat={animationFormat}
-            onChangeAnimationFormat={setAnimationFormat}
-            animationResultPath={animationResultPath}
-            collabRoomId={collabRoomId}
-            collabUsers={collabUsers}
-          />
-        }
-        statusBar={
-          <StatusBar
-            tasks={queue.tasks}
-            isRunning={queue.isRunning}
-            onStart={handleStartQueue}
-            onPause={handlePauseQueue}
-            onCancelAll={handleCancelAll}
-            onClearCompleted={handleClearCompleted}
-            onToast={showToast}
-            memoryStatus={memoryStatus}
-            gpuStatus={gpuStatus}
-            performanceSuggestions={performanceSuggestions}
-          />
-        }
-        dropZone={<DropZone onDropFiles={handleAddFiles} />}
-      />
-
-      <div className="app-toolbar">
-        <button className="btn btn-sm" onClick={() => setSettingsOpen(true)} title="Settings (Ctrl+,)">
-          ⚙ Settings
-        </button>
-        <button className="btn btn-sm" onClick={() => setMarketVisible(true)} title="Market (Ctrl+M)">
-          🛒 Market
-        </button>
-        <button className="btn btn-sm" onClick={() => setPluginVisible(true)} title="Plugins (Ctrl+P)">
-          🔌 Plugins
-        </button>
-        <button className="btn btn-sm" onClick={() => setHistoryVisible(true)} title="History (Ctrl+H)">
-          🕘 History
-        </button>
-        <div className={`env-badge ${isReady ? 'ready' : 'not-ready'}`} title={envStatus}>
-          {isReady ? '● Ready' : '● Not Ready'}
+    <div className="app-container">
+      <TopBar onOpenCommandPalette={openCommandPalette} onOpenSettings={() => showToast('设置面板即将上线', 'warning')} theme={effectiveTheme} onToggleTheme={toggleTheme} />
+      <div className="app-body">
+        <MainCanvas originalImage={originalImage} resultSvg={convert.previewResult} onDropFiles={handleDropFiles} onClickUpload={handleOpenFileDialog} fileName={selectedItem?.fileName} />
+        <div className="app-controls">
+          <CoreParams preset={convert.preset} onChangePreset={handleSelectPreset} presets={presets} colorMode={convert.colormode} onChangeColorMode={(m) => convert.setCoreParam('colormode', m)} curveMode={convert.mode} onChangeCurveMode={(m) => convert.setCoreParam('mode', m)} optimizeLevel={convert.optimizeLevel} onChangeOptimizeLevel={(l) => convert.setCoreParam('optimizeLevel', l)} />
+          <SmartRecommend recommendedPreset={convert.recommendedPreset || undefined} confidence={convert.recommendationConfidence} onApply={convert.applyRecommendation} onDismiss={() => convert.setRecommendation('', 0)} />
+          <AdvancedDrawer options={traceOptions} onChangeOptions={handleChangeAdvancedOptions} defaultOptions={getPresetOptions('default')} />
         </div>
+        <ControlBar onConvert={handleConvert} onDownload={handleDownload} isConverting={convert.isConverting} canDownload={!!convert.previewResult} />
       </div>
-
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        onSave={handleSaveSettings}
-        onToast={showToast}
-      />
-
-      <MarketBrowser
-        visible={marketVisible}
-        onClose={() => setMarketVisible(false)}
-        onToast={showToast}
-      />
-
-      <PluginManager
-        visible={pluginVisible}
-        onClose={() => setPluginVisible(false)}
-        onToast={showToast}
-      />
-
-      <HistoryPanel
-        visible={historyVisible}
-        onClose={() => setHistoryVisible(false)}
-        onLoadTask={(entry) => {
-          handleLoadHistoryParams({ preset: entry.preset, inputPath: entry.inputPath })
-          showToast(`Loaded history task: ${entry.fileName}`, 'success')
-        }}
-        onToast={showToast}
-      />
-
-      {toast && (
-        <div className={`toast toast-${toast.type}`}>
-          {toast.message}
-        </div>
-      )}
+      <QueueBar tasks={queueTasks} isExpanded={isExpanded} onToggleExpand={toggleExpanded} onRemoveTask={removeItem} onClearCompleted={clearCompleted} />
+      <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} presets={presets} onSelectPreset={handleSelectPreset} onOpenCommand={(cmd) => { if (cmd === 'cmd-open') handleOpenFileDialog(); if (cmd === 'cmd-convert') handleConvert() }} />
     </div>
   )
 }
