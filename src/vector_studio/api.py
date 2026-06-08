@@ -33,6 +33,7 @@ from .collaboration import (
 from .models import TraceOptions, TraceResult
 from .presets import PRESETS, options_from_preset
 from .smart_recommend import recommend_for_image
+from .render_farm import RenderFarm, RenderTask, WorkerNode
 from .svg_tools import export_svg_to_pdf, export_svg_to_png
 from .task_queue import TaskQueue
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
@@ -49,6 +50,20 @@ _queue_lock = threading.Lock()
 
 _share_manager: CloudSyncManager | None = None
 _share_lock = threading.Lock()
+
+_render_farm: RenderFarm | None = None
+_farm_lock = threading.Lock()
+
+
+def _get_render_farm() -> RenderFarm:
+    """Return the global RenderFarm singleton (created on first call)."""
+    global _render_farm
+    if _render_farm is None:
+        with _farm_lock:
+            if _render_farm is None:
+                _render_farm = RenderFarm()
+                _render_farm.start_heartbeat_monitor()
+    return _render_farm
 
 
 def _get_share_manager() -> CloudSyncManager:
@@ -212,6 +227,51 @@ class HistoryResponse(BaseModel):
 
 class RoomListResponse(BaseModel):
     rooms: list[dict[str, Any]]
+
+
+# ---------------------------------------------------------------------------
+# Render farm Pydantic models
+# ---------------------------------------------------------------------------
+
+class FarmTaskSubmitResponse(BaseModel):
+    task_id: str
+    status: str
+
+
+class FarmTaskStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    input_path: str | None = None
+    output_path: str | None = None
+    assigned_worker: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class FarmWorkerRegisterRequest(BaseModel):
+    worker_id: str
+    host: str
+    port: int
+    capacity: int = 4
+
+
+class FarmWorkerRegisterResponse(BaseModel):
+    success: bool
+    worker_id: str
+
+
+class FarmWorkersListResponse(BaseModel):
+    workers: list[dict[str, Any]]
+
+
+class FarmStatusResponse(BaseModel):
+    workers: list[dict[str, Any]]
+    tasks: list[dict[str, Any]]
+    summary: dict[str, Any]
+
+
+class FarmHeartbeatResponse(BaseModel):
+    ok: bool
 
 
 # ---------------------------------------------------------------------------
@@ -797,3 +857,99 @@ async def list_rooms():
     manager = await get_collab_manager()
     rooms = manager.list_rooms()
     return RoomListResponse(rooms=rooms)
+
+
+# ---------------------------------------------------------------------------
+# Render farm endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/farm/submit", response_model=FarmTaskSubmitResponse)
+async def submit_farm_task(
+    file: UploadFile,
+    preset: str = Form("poster"),
+    options: str = Form("{}"),
+    priority: int = Form(0),
+):
+    """Submit a single image conversion to the distributed render farm."""
+    overrides = _parse_options(options)
+    try:
+        opts = options_from_preset(preset, overrides)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    api_dir = _get_api_temp_dir()
+    upload_dir = api_dir / "farm_uploads" / str(uuid.uuid4())
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    input_path = _save_upload(file, upload_dir)
+    _validate_extension(input_path)
+    output_path = upload_dir / f"{input_path.stem}.svg"
+
+    task = RenderTask(
+        task_id=str(uuid.uuid4()),
+        input_path=input_path,
+        output_path=output_path,
+        options=opts,
+        priority=priority,
+    )
+    farm = _get_render_farm()
+    task_id = farm.submit_task(task)
+    return FarmTaskSubmitResponse(task_id=task_id, status=task.status)
+
+
+@app.get("/farm/status/{task_id}", response_model=FarmTaskStatusResponse)
+async def get_farm_task_status(task_id: str):
+    """Query the status of a farm-render task."""
+    farm = _get_render_farm()
+    status = farm.get_task_status(task_id)
+    if status["status"] == "unknown":
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    return FarmTaskStatusResponse(
+        task_id=status["task_id"],
+        status=status["status"],
+        input_path=status.get("input_path"),
+        output_path=status.get("output_path"),
+        assigned_worker=status.get("assigned_worker"),
+        started_at=status.get("started_at"),
+        completed_at=status.get("completed_at"),
+    )
+
+
+@app.get("/farm/workers", response_model=FarmWorkersListResponse)
+async def list_workers():
+    """List all registered render-farm workers."""
+    farm = _get_render_farm()
+    status = farm.get_farm_status()
+    return FarmWorkersListResponse(workers=status["workers"])
+
+
+@app.post("/farm/workers/register", response_model=FarmWorkerRegisterResponse)
+async def register_worker(request: FarmWorkerRegisterRequest):
+    """Register a new worker node with the farm coordinator."""
+    farm = _get_render_farm()
+    worker = WorkerNode(
+        worker_id=request.worker_id,
+        host=request.host,
+        port=request.port,
+        capacity=request.capacity,
+    )
+    success = farm.register_worker(worker)
+    return FarmWorkerRegisterResponse(success=success, worker_id=request.worker_id)
+
+
+@app.post("/farm/workers/{worker_id}/heartbeat", response_model=FarmHeartbeatResponse)
+async def worker_heartbeat(worker_id: str):
+    """Receive a heartbeat from a worker node."""
+    farm = _get_render_farm()
+    with farm._lock:
+        worker = farm._workers.get(worker_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail=f"Worker not found: {worker_id}")
+    worker.update_heartbeat()
+    return FarmHeartbeatResponse(ok=True)
+
+
+@app.get("/farm/status", response_model=FarmStatusResponse)
+async def get_farm_status():
+    """Return the overall status of the render farm."""
+    farm = _get_render_farm()
+    return FarmStatusResponse(**farm.get_farm_status())

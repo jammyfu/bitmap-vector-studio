@@ -555,3 +555,77 @@ class TestApiConvertMore:
                     data={"preset": "poster", "options": "{}"},
                 )
         assert response.status_code == 200
+
+
+class TestFarmEndpoints:
+    def test_farm_status_empty(self):
+        response = client.get("/farm/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["summary"]["total_workers"] == 0
+        assert data["summary"]["total_tasks"] == 0
+
+    def test_farm_register_worker(self):
+        response = client.post(
+            "/farm/workers/register",
+            json={"worker_id": "w1", "host": "127.0.0.1", "port": 9000, "capacity": 4},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["worker_id"] == "w1"
+
+    def test_farm_list_workers(self):
+        client.post(
+            "/farm/workers/register",
+            json={"worker_id": "w2", "host": "127.0.0.1", "port": 9001, "capacity": 2},
+        )
+        response = client.get("/farm/workers")
+        assert response.status_code == 200
+        data = response.json()
+        assert any(w["worker_id"] == "w2" for w in data["workers"])
+
+    def test_farm_heartbeat(self):
+        client.post(
+            "/farm/workers/register",
+            json={"worker_id": "w3", "host": "127.0.0.1", "port": 9002, "capacity": 2},
+        )
+        response = client.post("/farm/workers/w3/heartbeat")
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+
+    def test_farm_heartbeat_unknown_worker(self):
+        response = client.post("/farm/workers/unknown/heartbeat")
+        assert response.status_code == 404
+
+    def test_farm_submit_task(self, tmp_path: Path):
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+        with img.open("rb") as f:
+            response = client.post(
+                "/farm/submit",
+                files={"file": ("test.png", f, "image/png")},
+                data={"preset": "poster", "options": "{}", "priority": "5"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
+        assert data["status"] == "pending"
+
+    def test_farm_task_status(self, tmp_path: Path):
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+        with img.open("rb") as f:
+            resp = client.post(
+                "/farm/submit",
+                files={"file": ("test.png", f, "image/png")},
+                data={"preset": "poster"},
+            )
+        task_id = resp.json()["task_id"]
+        response = client.get(f"/farm/status/{task_id}")
+        assert response.status_code == 200
+        assert response.json()["task_id"] == task_id
+
+    def test_farm_task_status_unknown(self):
+        response = client.get("/farm/status/does-not-exist")
+        assert response.status_code == 404

@@ -81,6 +81,49 @@ from .animation import (
     list_presets,
 )
 
+# v3.0: AI Generative Vector Creation
+from .ai_generation import (
+    VectorGenerator,
+    StyleEncoder,
+    VectorDiffusion,
+    AIGenerationProcessor,
+)
+
+# v3.0: Cloud Render Farm
+from .render_farm import (
+    RenderTask,
+    WorkerNode,
+    RenderFarm,
+    DistributedBatch,
+)
+
+# v3.0: Design System Integration
+from .design_integration import (
+    FigmaPlugin,
+    SketchPlugin,
+    DesignTokenSync,
+)
+
+# v3.0: 3D Vector & AR Preview
+from .svg_3d import (
+    SVG3D,
+    ARPreview,
+)
+
+# v3.0: Enterprise Permissions
+from .enterprise import (
+    TeamWorkspace,
+    RolePermissions,
+    SSOIntegration,
+)
+
+# v3.0: Smart Template Market
+from .template_market import (
+    Template,
+    TemplateMarket,
+    TemplateEditor,
+)
+
 __all__ = [
     # Core
     "TraceOptions",
@@ -189,6 +232,31 @@ __all__ = [
     "AnimationPreset",
     "AnimationBuilder",
     "list_presets",
+    # AI Generative Vector Creation (v3.0)
+    "VectorGenerator",
+    "StyleEncoder",
+    "VectorDiffusion",
+    "AIGenerationProcessor",
+    # Cloud Render Farm (v3.0)
+    "RenderTask",
+    "WorkerNode",
+    "RenderFarm",
+    "DistributedBatch",
+    # Design System Integration (v3.0)
+    "FigmaPlugin",
+    "SketchPlugin",
+    "DesignTokenSync",
+    # 3D Vector & AR Preview (v3.0)
+    "SVG3D",
+    "ARPreview",
+    # Enterprise Permissions (v3.0)
+    "TeamWorkspace",
+    "RolePermissions",
+    "SSOIntegration",
+    # Smart Template Market (v3.0)
+    "Template",
+    "TemplateMarket",
+    "TemplateEditor",
 ]
 
 from .ai_simplify import (
@@ -233,4 +301,4 @@ from .market import (
     MultiBackend,
 )
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"

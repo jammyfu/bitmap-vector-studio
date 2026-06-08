@@ -11,7 +11,6 @@ from rich.console import Console
 from rich.table import Table
 
 from .checkpoint import CheckpointManager
-from .cloud_sync import CloudSyncManager, GitHubGistBackend, LocalServerBackend
 from .cloud_market import (
     CloudMarket,
     CreditSystem,
@@ -19,6 +18,11 @@ from .cloud_market import (
     save_auth,
 )
 from .config import Config
+from .enterprise import (
+    RolePermissions,
+    SSOIntegration,
+    TeamWorkspace,
+)
 from .external_editors import open_with_default_editor, open_with_editor
 from .ocr_languages import (
     OCR_LANGUAGE_CONFIG,
@@ -43,8 +47,11 @@ from .plugins import PluginManager
 from .presets import PRESETS, options_from_preset
 from .svg_optimizer import svg_quality_score
 from .svg_tools import svg_stats
+from .design_integration import FigmaPlugin, SketchPlugin, DesignTokenSync
+from .svg_3d import ARPreview, SVG3D
 from .sync_service import SyncClient
 from .task_queue import TaskQueue
+from .template_market import Template, TemplateEditor, TemplateMarket
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
 from .workflow import Workflow, WorkflowTemplate
 from .workspace import Workspace, WorkspaceManager
@@ -94,6 +101,10 @@ app.add_typer(ocr_app, name="ocr")
 ai_app = typer.Typer(help="Local ONNX AI processing.")
 app.add_typer(ai_app, name="ai")
 
+# Sub-typer for generate commands
+generate_app = typer.Typer(help="AI generative vector creation.")
+app.add_typer(generate_app, name="generate")
+
 # Sub-typer for engine commands
 engine_app = typer.Typer(help="Vectorization engine management.")
 app.add_typer(engine_app, name="engine")
@@ -114,6 +125,14 @@ app.add_typer(cloud_app, name="cloud")
 animate_app = typer.Typer(help="Vector animation export.")
 app.add_typer(animate_app, name="animate")
 
+# Sub-typer for design commands
+design_app = typer.Typer(help="Design system integration.")
+app.add_typer(design_app, name="design")
+
+# Sub-typer for 3d commands
+three_d_app = typer.Typer(help="3D vector effects and AR preview.")
+app.add_typer(three_d_app, name="3d")
+
 # Sub-typer for collaboration commands
 collab_app = typer.Typer(help="Real-time collaboration rooms.")
 app.add_typer(collab_app, name="collab")
@@ -125,6 +144,18 @@ app.add_typer(workflow_app, name="workflow")
 # Sub-typer for sync commands
 sync_app = typer.Typer(help="Cross-device sync.")
 app.add_typer(sync_app, name="sync")
+
+# Sub-typer for render-farm commands
+farm_app = typer.Typer(help="Distributed render farm.")
+app.add_typer(farm_app, name="render-farm")
+
+# Sub-typer for enterprise commands
+enterprise_app = typer.Typer(help="Enterprise team and SSO management.")
+app.add_typer(enterprise_app, name="enterprise")
+
+# Sub-typer for template market commands
+template_app = typer.Typer(help="Smart template marketplace.")
+app.add_typer(template_app, name="template")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -1571,6 +1602,104 @@ def ai_download(
 
 
 # ------------------------------------------------------------------
+# Generate sub-commands
+# ------------------------------------------------------------------
+
+@generate_app.command("text")
+def generate_text(
+    prompt: str = typer.Argument(..., help="Text prompt for the image."),
+    style: str = typer.Option("flat", "--style", "-s", help="Style: flat, line, gradient, 3d, sketch."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+    width: int = typer.Option(512, "--width", min=64, max=2048, help="Output width."),
+    height: int = typer.Option(512, "--height", min=64, max=2048, help="Output height."),
+) -> None:
+    """Generate a vector-style image from a text prompt."""
+    from vector_studio.ai_generation import VectorGenerator
+
+    generator = VectorGenerator()
+    img = generator.generate_from_text(prompt, style=style, size=(width, height))
+    out = output or Path(f"generated_{style}.png")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    img.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Generated[/green] {out} ({img.size[0]}x{img.size[1]})")
+
+
+@generate_app.command("image")
+def generate_image(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Reference image."),
+    prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Optional text prompt."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+) -> None:
+    """Generate a new vector-style image based on a reference image."""
+    from PIL import Image
+    from vector_studio.ai_generation import VectorGenerator
+
+    generator = VectorGenerator()
+    with Image.open(input_path) as img:
+        result = generator.generate_from_image(img, prompt=prompt)
+    out = output or input_path.with_stem(input_path.stem + "_generated")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    result.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Generated[/green] {out} ({result.size[0]}x{result.size[1]})")
+
+
+@generate_app.command("icon")
+def generate_icon(
+    prompt: str = typer.Argument(..., help="Text prompt for the icon."),
+    style: str = typer.Option("flat", "--style", "-s", help="Style: flat, minimal, line, gradient."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+) -> None:
+    """Generate a square icon from a text prompt."""
+    from vector_studio.ai_generation import VectorGenerator
+
+    generator = VectorGenerator()
+    img = generator.generate_icon(prompt, style=style)
+    out = output or Path(f"icon_{style}.png")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    img.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Generated icon[/green] {out} ({img.size[0]}x{img.size[1]})")
+
+
+@generate_app.command("logo")
+def generate_logo(
+    prompt: str = typer.Argument(..., help="Text prompt for the logo."),
+    style: str = typer.Option("minimal", "--style", "-s", help="Style: minimal, modern, flat."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+) -> None:
+    """Generate a logo from a text prompt."""
+    from vector_studio.ai_generation import VectorGenerator
+
+    generator = VectorGenerator()
+    img = generator.generate_logo(prompt, style=style)
+    out = output or Path(f"logo_{style}.png")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    img.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Generated logo[/green] {out} ({img.size[0]}x{img.size[1]})")
+
+
+@generate_app.command("illustration")
+def generate_illustration(
+    prompt: str = typer.Argument(..., help="Text prompt for the illustration."),
+    style: str = typer.Option("cartoon", "--style", "-s", help="Style: cartoon, watercolor, sketch."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+) -> None:
+    """Generate an illustration from a text prompt."""
+    from vector_studio.ai_generation import VectorGenerator
+
+    generator = VectorGenerator()
+    img = generator.generate_illustration(prompt, style=style)
+    out = output or Path(f"illustration_{style}.png")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    img.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Generated illustration[/green] {out} ({img.size[0]}x{img.size[1]})")
+
+
+# ------------------------------------------------------------------
 # Resume command
 # ------------------------------------------------------------------
 
@@ -2339,6 +2468,602 @@ def animate_presets() -> None:
     for name in names:
         table.add_row(name, descriptions.get(name, "-"))
     console.print(table)
+
+
+# ------------------------------------------------------------------
+# Design sub-commands
+# ------------------------------------------------------------------
+
+@design_app.command("figma-export")
+def design_figma_export(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to export."),
+    file_key: str = typer.Option(..., "--file-key", help="Figma file key."),
+    node_id: str = typer.Option("", "--node-id", help="Target node id."),
+) -> None:
+    """Export an SVG to a Figma file."""
+    plugin = FigmaPlugin()
+    success = plugin.export_to_figma(svg, file_key, node_id)
+    if success:
+        console.print(f"[green]Exported[/green] {svg.name} to Figma {file_key}")
+    else:
+        console.print(f"[red]Export failed.[/red] Check FIGMA_TOKEN and file permissions.")
+        raise typer.Exit(code=1)
+
+
+@design_app.command("figma-import")
+def design_figma_import(
+    file_key: str = typer.Option(..., "--file-key", help="Figma file key."),
+    node_id: str = typer.Option(..., "--node-id", help="Node id to import."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output SVG path."),
+) -> None:
+    """Import a Figma node as an SVG."""
+    plugin = FigmaPlugin()
+    try:
+        path = plugin.import_from_figma(file_key, node_id)
+        if output:
+            import shutil
+            shutil.move(str(path), str(output))
+            path = output
+        console.print(f"[green]Imported[/green] {path}")
+    except Exception as exc:
+        console.print(f"[red]Import failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@design_app.command("sketch-export")
+def design_sketch_export(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to export."),
+    document: Path = typer.Option(..., "--document", help="Sketch .sketch document path."),
+) -> None:
+    """Export an SVG into a Sketch document."""
+    plugin = SketchPlugin()
+    success = plugin.export_to_sketch(svg, document)
+    if success:
+        console.print(f"[green]Exported[/green] {svg.name} to {document}")
+    else:
+        console.print(f"[red]Export failed.[/red]")
+        raise typer.Exit(code=1)
+
+
+@design_app.command("tokens-extract")
+def design_tokens_extract(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to analyse."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output JSON path."),
+) -> None:
+    """Extract design tokens from an SVG."""
+    sync = DesignTokenSync()
+    tokens = sync.extract_tokens(svg)
+    if output:
+        sync.export_tokens_json(tokens, output)
+        console.print(f"[green]Tokens saved[/green] {output}")
+    else:
+        table = Table(title=f"Design Tokens: {svg.name}")
+        table.add_column("Category", style="bold")
+        table.add_column("Count")
+        table.add_column("Values")
+        table.add_row("Colors", str(len(tokens["colors"])), ", ".join(tokens["colors"][:5]) or "-")
+        table.add_row("Fonts", str(len(tokens["fonts"])), ", ".join(tokens["fonts"][:5]) or "-")
+        table.add_row("Spacing", str(len(tokens["spacing"])), ", ".join(tokens["spacing"][:5]) or "-")
+        console.print(table)
+
+
+# ------------------------------------------------------------------
+# 3D sub-commands
+# ------------------------------------------------------------------
+
+@three_d_app.command("extrude")
+def three_d_extrude(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to extrude."),
+    depth: float = typer.Option(10.0, "--depth", help="Extrusion depth."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output SVG path."),
+) -> None:
+    """Apply a 3-D extrusion effect to an SVG."""
+    engine = SVG3D()
+    result = engine.extrude(svg, depth=depth)
+    out = output or svg.with_stem(svg.stem + "_extruded")
+    if out.suffix.lower() != ".svg":
+        out = out.with_suffix(".svg")
+    out.write_text(result, encoding="utf-8")
+    console.print(f"[green]Extruded SVG[/green] {out}")
+
+
+@three_d_app.command("rotate")
+def three_d_rotate(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to rotate."),
+    axis: str = typer.Option("z", "--axis", help="Rotation axis: x, y, z."),
+    angle: float = typer.Option(45.0, "--angle", help="Rotation angle in degrees."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output SVG path."),
+) -> None:
+    """Apply a 3-D rotation to an SVG."""
+    engine = SVG3D()
+    result = engine.rotate(svg, axis=axis, angle=angle)
+    out = output or svg.with_stem(svg.stem + f"_rotate_{axis}_{angle}")
+    if out.suffix.lower() != ".svg":
+        out = out.with_suffix(".svg")
+    out.write_text(result, encoding="utf-8")
+    console.print(f"[green]Rotated SVG[/green] {out}")
+
+
+@three_d_app.command("ar-preview")
+def three_d_ar_preview(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file for AR preview."),
+    width: float = typer.Option(100.0, "--width", help="Physical width in mm."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output USDZ path."),
+) -> None:
+    """Generate an AR preview package from an SVG."""
+    ar = ARPreview()
+    usdz_path = output or svg.with_suffix(".usdz")
+    try:
+        ar.export_usdz(svg, usdz_path)
+        console.print(f"[green]AR preview[/green] {usdz_path}")
+    except Exception as exc:
+        console.print(f"[red]AR export failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Enterprise sub-commands
+# ------------------------------------------------------------------
+
+@enterprise_app.command("team")
+def enterprise_team(
+    action: str = typer.Argument(..., help="Action: create, add-member, remove-member, list."),
+    name: str = typer.Argument("", help="Workspace name or user ID."),
+    role: str = typer.Option("editor", "--role", "-r", help="Role: admin, editor, viewer, guest."),
+) -> None:
+    """Manage enterprise team workspaces."""
+    if action == "create":
+        if not name:
+            console.print("[red]Workspace name is required.[/red]")
+            raise typer.Exit(code=1)
+        ws = TeamWorkspace(name=name, owner="cli_user")
+        ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+        ws_file = ws_dir / f"{ws.workspace_id}.json"
+        ws_file.write_text(json.dumps(ws.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]Created workspace[/green] {ws.workspace_id} ({name})")
+        return
+
+    if action == "add-member":
+        if not name:
+            console.print("[red]User ID is required.[/red]")
+            raise typer.Exit(code=1)
+        ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
+        ws_files = sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws_dir.exists() else []
+        if not ws_files:
+            console.print("[red]No workspace found. Create one first with 'enterprise team create <name>'.[/red]")
+            raise typer.Exit(code=1)
+        ws_data = json.loads(ws_files[0].read_text(encoding="utf-8"))
+        ws = TeamWorkspace.from_dict(ws_data)
+        if ws.add_member(name, role):
+            ws_files[0].write_text(json.dumps(ws.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+            console.print(f"[green]Added member[/green] {name} as {role}")
+        else:
+            console.print(f"[yellow]Failed to add member[/yellow] {name}")
+        return
+
+    if action == "list":
+        ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
+        if not ws_dir.exists():
+            console.print("[yellow]No workspaces found.[/yellow]")
+            return
+        table = Table(title="Team Workspaces")
+        table.add_column("ID", style="bold")
+        table.add_column("Name")
+        table.add_column("Owner")
+        table.add_column("Members")
+        for ws_file in ws_dir.glob("*.json"):
+            try:
+                data = json.loads(ws_file.read_text(encoding="utf-8"))
+                table.add_row(
+                    data.get("workspace_id", "-"),
+                    data.get("name", "-"),
+                    data.get("owner", "-"),
+                    str(len(data.get("members", {}))),
+                )
+            except Exception:
+                continue
+        console.print(table)
+        return
+
+    console.print(f"[red]Unknown action:[/red] {action}")
+    raise typer.Exit(code=1)
+
+
+@enterprise_app.command("audit-log")
+def enterprise_audit_log(
+    workspace_id: str = typer.Argument("", help="Workspace ID to inspect."),
+) -> None:
+    """Show the audit log for a workspace."""
+    ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
+    target: Path | None = None
+    if workspace_id:
+        target = ws_dir / f"{workspace_id}.json"
+    else:
+        files = sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws_dir.exists() else []
+        if files:
+            target = files[0]
+    if target is None or not target.exists():
+        console.print("[yellow]No workspace found.[/yellow]")
+        return
+    data = json.loads(target.read_text(encoding="utf-8"))
+    ws = TeamWorkspace.from_dict(data)
+    log = ws.get_audit_log()
+    if not log:
+        console.print("[yellow]No audit log entries.[/yellow]")
+        return
+    table = Table(title="Audit Log")
+    table.add_column("Time", style="bold")
+    table.add_column("User")
+    table.add_column("Action")
+    table.add_column("Resource")
+    for entry in log:
+        table.add_row(
+            entry.get("timestamp", "-"),
+            entry.get("user_id", "-"),
+            entry.get("action", "-"),
+            entry.get("resource", "-"),
+        )
+    console.print(table)
+
+
+@enterprise_app.command("sso-configure")
+def enterprise_sso_configure(
+    provider: str = typer.Option(..., "--provider", "-p", help="SSO provider: google, github, saml, ldap."),
+    client_id: str = typer.Option("", "--client-id", help="Client / application ID."),
+    redirect_url: str = typer.Option("http://localhost:8000/callback", "--redirect-url", help="Redirect URL."),
+) -> None:
+    """Configure an SSO provider."""
+    sso = SSOIntegration()
+    config: dict[str, str] = {"redirect_url": redirect_url}
+    if client_id:
+        config["client_id"] = client_id
+    if sso.configure_sso(provider, config):
+        sso_dir = Path.home() / ".bitmap_vector_studio" / "sso"
+        sso_dir.mkdir(parents=True, exist_ok=True)
+        sso_file = sso_dir / f"{provider}.json"
+        sso_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]Configured SSO[/green] {provider}")
+    else:
+        console.print(f"[red]Failed to configure SSO[/red] {provider}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Template market sub-commands
+# ------------------------------------------------------------------
+
+@template_app.command("list")
+def template_list(
+    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
+    query: str | None = typer.Option(None, "--query", "-q", help="Search query."),
+) -> None:
+    """List available templates from the marketplace."""
+    market = TemplateMarket()
+    templates = market.discover_templates(query=query, category=category)
+    if not templates:
+        console.print("[yellow]No templates found.[/yellow]")
+        return
+    table = Table(title="Templates")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Category")
+    table.add_column("Author")
+    table.add_column("Rating")
+    table.add_column("Downloads")
+    for t in templates:
+        table.add_row(
+            t.template_id,
+            t.name,
+            t.category,
+            t.author or "-",
+            f"{t.rating:.1f}",
+            str(t.downloads),
+        )
+    console.print(table)
+
+
+@template_app.command("recommend")
+def template_recommend(
+    user_id: str = typer.Option("cli_user", "--user", "-u", help="User identifier."),
+    image_type: str = typer.Option("logo", "--image-type", help="Context image type."),
+) -> None:
+    """Get AI-powered template recommendations."""
+    market = TemplateMarket()
+    recs = market.get_recommendations(user_id, {"image_type": image_type})
+    if not recs:
+        console.print("[yellow]No recommendations available.[/yellow]")
+        return
+    table = Table(title=f"Recommendations for {user_id}")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Category")
+    table.add_column("Rating")
+    for t in recs:
+        table.add_row(t.template_id, t.name, t.category, f"{t.rating:.1f}")
+    console.print(table)
+
+
+@template_app.command("apply")
+def template_apply(
+    template_id: str = typer.Argument(..., help="Template ID to apply."),
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output SVG path."),
+) -> None:
+    """Apply a template to an input image."""
+    market = TemplateMarket()
+    try:
+        result_path = market.apply_template(template_id, input_path, output)
+        console.print(f"[green]Applied template[/green] {template_id} → {result_path}")
+    except Exception as exc:
+        console.print(f"[red]Failed to apply template:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@template_app.command("publish")
+def template_publish(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Template JSON file to publish."),
+    user_id: str = typer.Option("cli_user", "--user", "-u", help="Publisher user identifier."),
+) -> None:
+    """Publish a template JSON file to the marketplace."""
+    editor = TemplateEditor()
+    try:
+        data = editor.load_template(file)
+    except Exception as exc:
+        console.print(f"[red]Invalid template file:[/red] {exc}")
+        raise typer.Exit(code=1)
+    template = Template.from_dict(data)
+    market = TemplateMarket()
+    tid = market.publish_template(template, user_id)
+    console.print(f"[green]Published template[/green] {tid}")
+
+
+# ------------------------------------------------------------------
+# Render farm sub-commands
+# ------------------------------------------------------------------
+
+@farm_app.command("status")
+def farm_status(
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+) -> None:
+    """Show the current status of the render farm."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{api_url}/farm/status"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Failed to fetch farm status:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    summary = data.get("summary", {})
+    table = Table(title="Render Farm Status")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    table.add_row("Total workers", str(summary.get("total_workers", 0)))
+    table.add_row("Alive workers", str(summary.get("alive_workers", 0)))
+    table.add_row("Total tasks", str(summary.get("total_tasks", 0)))
+    table.add_row("Pending", str(summary.get("pending", 0)))
+    table.add_row("Running", str(summary.get("running", 0)))
+    table.add_row("Completed", str(summary.get("completed", 0)))
+    table.add_row("Failed", str(summary.get("failed", 0)))
+    console.print(table)
+
+    workers = data.get("workers", [])
+    if workers:
+        wtable = Table(title="Workers")
+        wtable.add_column("ID", style="bold")
+        wtable.add_column("Host")
+        wtable.add_column("Port")
+        wtable.add_column("Load")
+        wtable.add_column("Capacity")
+        wtable.add_column("Alive")
+        for w in workers:
+            wtable.add_row(
+                w.get("worker_id", "-"),
+                w.get("host", "-"),
+                str(w.get("port", "-")),
+                str(w.get("current_load", "-")),
+                str(w.get("capacity", "-")),
+                "yes" if w.get("alive") else "no",
+            )
+        console.print(wtable)
+
+
+@farm_app.command("submit")
+def farm_submit(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
+    priority: int = typer.Option(0, "--priority", min=0, max=100, help="Task priority."),
+) -> None:
+    """Submit a single image to the render farm."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+    import mimetypes
+
+    url = f"{api_url}/farm/submit"
+    content_type, _ = mimetypes.guess_type(str(file))
+    content_type = content_type or "application/octet-stream"
+    boundary = f"----vs-farm-{uuid.uuid4().hex}"
+
+    def _encode_multipart() -> bytes:
+        lines: list[bytes] = []
+        lines.append(f"--{boundary}".encode("utf-8"))
+        lines.append(f'Content-Disposition: form-data; name="file"; filename="{file.name}"'.encode("utf-8"))
+        lines.append(f"Content-Type: {content_type}".encode("utf-8"))
+        lines.append(b"")
+        lines.append(file.read_bytes())
+        lines.append(f"--{boundary}".encode("utf-8"))
+        lines.append(b'Content-Disposition: form-data; name="preset"')
+        lines.append(b"")
+        lines.append(preset.encode("utf-8"))
+        lines.append(f"--{boundary}".encode("utf-8"))
+        lines.append(b'Content-Disposition: form-data; name="priority"')
+        lines.append(b"")
+        lines.append(str(priority).encode("utf-8"))
+        lines.append(f"--{boundary}--".encode("utf-8"))
+        return b"\r\n".join(lines)
+
+    body = _encode_multipart()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Submit failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Submitted[/green] task {data['task_id']} (status: {data['status']})")
+
+
+@farm_app.command("batch")
+def farm_batch(
+    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input folder."),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
+    chunk_size: int = typer.Option(4, "--chunk-size", "-c", min=1, max=64, help="Files per chunk."),
+) -> None:
+    """Batch-submit a folder of images to the render farm."""
+    from .render_farm import DistributedBatch
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    chunks = DistributedBatch.split_batch(input_dir, chunk_size)
+    if not chunks:
+        console.print("[yellow]No supported images found.[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"Split {sum(len(c) for c in chunks)} image(s) into {len(chunks)} chunk(s)")
+
+    # Register local workers via API (for this CLI we just submit directly to farm API).
+    import urllib.request
+    import urllib.error
+    import json as _json
+    import mimetypes
+
+    task_ids: list[str] = []
+    for chunk in chunks:
+        for image_path in chunk:
+            url = f"{api_url}/farm/submit"
+            content_type, _ = mimetypes.guess_type(str(image_path))
+            content_type = content_type or "application/octet-stream"
+            boundary = f"----vs-farm-{uuid.uuid4().hex}"
+
+            def _encode_multipart(path: Path, bnd: str) -> bytes:
+                lines: list[bytes] = []
+                lines.append(f"--{bnd}".encode("utf-8"))
+                lines.append(f'Content-Disposition: form-data; name="file"; filename="{path.name}"'.encode("utf-8"))
+                lines.append(f"Content-Type: {content_type}".encode("utf-8"))
+                lines.append(b"")
+                lines.append(path.read_bytes())
+                lines.append(f"--{bnd}".encode("utf-8"))
+                lines.append(b'Content-Disposition: form-data; name="preset"')
+                lines.append(b"")
+                lines.append(preset.encode("utf-8"))
+                lines.append(f"--{bnd}--".encode("utf-8"))
+                return b"\r\n".join(lines)
+
+            body = _encode_multipart(image_path, boundary)
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = _json.loads(resp.read().decode("utf-8"))
+                    task_ids.append(data["task_id"])
+            except urllib.error.HTTPError as exc:
+                console.print(f"[red]API error for {image_path.name}:[/red] {exc.code} {exc.reason}")
+            except Exception as exc:
+                console.print(f"[red]Submit failed for {image_path.name}:[/red] {exc}")
+
+    console.print(f"[green]Submitted[/green] {len(task_ids)} task(s)")
+
+
+@farm_app.command("worker")
+def farm_worker(
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind host."),
+    port: int = typer.Option(9000, "--port", help="Bind port."),
+    capacity: int = typer.Option(4, "--capacity", "-c", min=1, max=16, help="Max concurrent tasks."),
+    coordinator: str = typer.Option("http://localhost:8000", "--coordinator", help="Farm coordinator API URL."),
+) -> None:
+    """Start a local render-farm worker node."""
+    from .render_farm import start_worker_server, WorkerNode
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    server = start_worker_server(host, port, capacity)
+    worker = server._worker
+
+    # Register with coordinator
+    reg_url = f"{coordinator}/farm/workers/register"
+    payload = _json.dumps({
+        "worker_id": worker.worker_id,
+        "host": worker.host,
+        "port": worker.port,
+        "capacity": worker.capacity,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        reg_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            reg_data = _json.loads(resp.read().decode("utf-8"))
+            if reg_data.get("success"):
+                console.print(f"[green]Registered worker[/green] {worker.worker_id} with coordinator")
+            else:
+                console.print(f"[yellow]Worker already registered[/yellow] {worker.worker_id}")
+    except Exception as exc:
+        console.print(f"[yellow]Could not register with coordinator:[/yellow] {exc}")
+
+    console.print(f"[green]Worker listening[/green] on http://{host}:{port}")
+    console.print(f"Capacity: {capacity} | ID: {worker.worker_id}")
+    console.print("Press Ctrl+C to stop.")
+
+    # Start heartbeat thread
+    def _heartbeat_loop() -> None:
+        while True:
+            try:
+                hb_url = f"{coordinator}/farm/workers/{urllib.parse.quote(worker.worker_id)}/heartbeat"
+                hb_req = urllib.request.Request(hb_url, method="POST")
+                with urllib.request.urlopen(hb_req, timeout=5):
+                    pass
+            except Exception:
+                pass
+            time.sleep(10)
+
+    hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+    hb_thread.start()
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("[yellow]Shutting down worker...[/yellow]")
+    finally:
+        server.shutdown_server()
 
 
 def main() -> None:
