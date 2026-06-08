@@ -18,6 +18,11 @@ interface ParamPanelProps {
   onChangeOcrLang?: (lang: string) => void;
   ocrVertical?: boolean;
   onToggleOcrVertical?: () => void;
+  // v1.1 performance
+  gpuEnabled?: boolean;
+  onToggleGpu?: () => void;
+  streamingEnabled?: boolean;
+  onToggleStreaming?: () => void;
 }
 
 export const ParamPanel: React.FC<ParamPanelProps> = ({
@@ -36,6 +41,10 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
   onChangeOcrLang,
   ocrVertical = false,
   onToggleOcrVertical,
+  gpuEnabled = false,
+  onToggleGpu,
+  streamingEnabled = false,
+  onToggleStreaming,
 }) => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [activePreset, setActivePreset] = useState<string>('default');
@@ -343,12 +352,25 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
       </div>
 
       <div className="param-section">
+        <label className="param-label">Performance</label>
+        <div className="param-check-row">
+          <input id="gpu" type="checkbox" checked={gpuEnabled} onChange={onToggleGpu} />
+          <label htmlFor="gpu">GPU Acceleration</label>
+        </div>
+        <div className="param-check-row">
+          <input id="streaming" type="checkbox" checked={streamingEnabled} onChange={onToggleStreaming} />
+          <label htmlFor="streaming">Streaming Large Files</label>
+        </div>
+      </div>
+
+      <div className="param-section">
         <label className="param-label">OCR Language</label>
         <select
           className="param-select"
           value={ocrLang}
           onChange={(e) => onChangeOcrLang?.(e.target.value)}
         >
+          <option value="auto">Auto</option>
           <option value="eng">English</option>
           <option value="chi_sim">简体中文</option>
           <option value="chi_tra">繁體中文</option>

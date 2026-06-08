@@ -118,6 +118,46 @@ export function useTauri() {
     return invoke('recognize_text_multilang', { inputPath, lang })
   }, [])
 
+  /// Get performance stats from backend.
+  const getPerformanceStats = useCallback(async (inputPath: string): Promise<string> => {
+    return invoke('get_performance_stats', { inputPath })
+  }, [])
+
+  /// Save workspace.
+  const saveWorkspace = useCallback(async (name: string | null, openFiles: string[], preset: string): Promise<string> => {
+    return invoke('save_workspace', { name, openFiles: JSON.stringify(openFiles), preset })
+  }, [])
+
+  /// Load workspace.
+  const loadWorkspace = useCallback(async (name: string): Promise<string> => {
+    return invoke('load_workspace', { name })
+  }, [])
+
+  /// List workspaces.
+  const listWorkspaces = useCallback(async (): Promise<string> => {
+    return invoke('list_workspaces')
+  }, [])
+
+  /// Get checkpoints.
+  const getCheckpoints = useCallback(async (): Promise<string> => {
+    return invoke('get_checkpoints')
+  }, [])
+
+  /// Resume checkpoint.
+  const resumeCheckpoint = useCallback(async (checkpointId: string): Promise<string> => {
+    return invoke('resume_checkpoint', { checkpointId })
+  }, [])
+
+  /// Enable plugin hotreload.
+  const enableHotreload = useCallback(async (): Promise<void> => {
+    return invoke('enable_hotreload')
+  }, [])
+
+  /// Disable plugin hotreload.
+  const disableHotreload = useCallback(async (): Promise<void> => {
+    return invoke('disable_hotreload')
+  }, [])
+
   return {
     convertImage,
     batchConvert,
@@ -142,5 +182,13 @@ export function useTauri() {
     getOcrLanguages,
     detectTextRegionsMultilang,
     recognizeTextMultilang,
+    getPerformanceStats,
+    saveWorkspace,
+    loadWorkspace,
+    listWorkspaces,
+    getCheckpoints,
+    resumeCheckpoint,
+    enableHotreload,
+    disableHotreload,
   }
 }

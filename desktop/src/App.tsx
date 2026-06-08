@@ -24,6 +24,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   externalEditor: null,
   apiHost: '127.0.0.1',
   apiPort: 8000,
+  // v1.1 performance defaults
+  gpuEnabled: false,
+  streamingEnabled: false,
+  memoryLimit: null,
+  autoSaveInterval: 60,
 }
 
 function App() {
@@ -34,7 +39,7 @@ function App() {
   const [marketVisible, setMarketVisible] = useState(false)
   const [pluginVisible, setPluginVisible] = useState(false)
   const [historyVisible, setHistoryVisible] = useState(false)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [options, setOptions] = useState<TraceOptions>({
@@ -60,17 +65,108 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [ocrLang, setOcrLang] = useState('eng')
   const [ocrVertical, setOcrVertical] = useState(false)
+  // v1.1 performance
+  const [gpuEnabled, setGpuEnabled] = useState(false)
+  const [streamingEnabled, setStreamingEnabled] = useState(false)
+  const [memoryStatus, setMemoryStatus] = useState<{ percent?: number; used_mb?: number; total_mb?: number; available?: boolean; message?: string } | null>(null)
+  const [gpuStatus, setGpuStatus] = useState<string>('未检测到')
+  const [performanceSuggestions, setPerformanceSuggestions] = useState<string[]>([])
+  // v1.1 workspace
+  const [workspaces, setWorkspaces] = useState<{ name: string }[]>([])
+  const [hasCrashRecovery, setHasCrashRecovery] = useState(false)
+  // v1.1 checkpoint
+  const [checkpoints, setCheckpoints] = useState<{ name: string; queue_id: string }[]>([])
 
   const { activePreset, selectPreset, getPresetOptions } = usePresets()
   const queue = useQueue()
   const tauri = useTauri()
 
   // Toast helper
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setToast({ message, type })
     if (toastTimeout.current) clearTimeout(toastTimeout.current)
     toastTimeout.current = setTimeout(() => setToast(null), 3000)
   }, [])
+
+  // v1.1: Check crash recovery on mount
+  useEffect(() => {
+    async function checkCrashRecovery() {
+      try {
+        const result = await tauri.listWorkspaces()
+        if (result) {
+          const parsed = JSON.parse(result) as { workspaces?: { name: string }[]; crash_recovery?: boolean }
+          if (parsed.workspaces) {
+            setWorkspaces(parsed.workspaces)
+          }
+          if (parsed.crash_recovery) {
+            setHasCrashRecovery(true)
+            showToast('检测到崩溃恢复数据，可从侧边栏恢复上次会话', 'warning')
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    checkCrashRecovery()
+  }, [tauri, showToast])
+
+  // v1.1: Auto-save workspace interval
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const openFiles = queue.tasks.map((t) => t.inputPath)
+        await tauri.saveWorkspace('auto_save', openFiles, activePreset)
+      } catch {
+        // ignore auto-save errors
+      }
+    }, (settings.autoSaveInterval || 60) * 1000)
+    return () => clearInterval(interval)
+  }, [queue.tasks, activePreset, settings.autoSaveInterval, tauri])
+
+  // v1.1: Poll performance stats
+  useEffect(() => {
+    async function pollPerformance() {
+      try {
+        const selectedTask = queue.tasks.find((t) => t.id === selectedTaskId)
+        if (selectedTask?.inputPath) {
+          const result = await tauri.getPerformanceStats(selectedTask.inputPath)
+          if (result) {
+            const parsed = JSON.parse(result) as {
+              memory?: { percent?: number; used_mb?: number; total_mb?: number; available?: boolean; message?: string }
+              gpu?: string
+              suggestions?: string[]
+            }
+            if (parsed.memory) setMemoryStatus(parsed.memory)
+            if (parsed.gpu) setGpuStatus(parsed.gpu)
+            if (parsed.suggestions) setPerformanceSuggestions(parsed.suggestions)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    pollPerformance()
+    const interval = setInterval(pollPerformance, 5000)
+    return () => clearInterval(interval)
+  }, [selectedTaskId, queue.tasks, tauri])
+
+  // v1.1: Load checkpoints
+  useEffect(() => {
+    async function loadCheckpoints() {
+      try {
+        const result = await tauri.getCheckpoints()
+        if (result) {
+          const parsed = JSON.parse(result) as { checkpoints?: { name: string; queue_id: string }[] }
+          if (parsed.checkpoints) {
+            setCheckpoints(parsed.checkpoints)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    loadCheckpoints()
+  }, [tauri])
 
   // Check environment on mount
   useEffect(() => {
@@ -82,7 +178,7 @@ function App() {
       handleOpenFileDialog()
     })
     const unlistenAbout = listen('menu-about', () => {
-      showToast('Bitmap Vector Studio v0.5.0', 'success')
+      showToast('Bitmap Vector Studio v1.1.0', 'success')
     })
 
     return () => {
@@ -214,6 +310,72 @@ function App() {
     showToast('Settings saved', 'success')
   }, [showToast])
 
+  // v1.1 workspace handlers
+  const handleSaveWorkspace = useCallback(async () => {
+    try {
+      const openFiles = queue.tasks.map((t) => t.inputPath)
+      await tauri.saveWorkspace(null, openFiles, activePreset)
+      showToast('Workspace saved', 'success')
+      // Refresh list
+      const result = await tauri.listWorkspaces()
+      if (result) {
+        const parsed = JSON.parse(result) as { workspaces?: { name: string }[] }
+        if (parsed.workspaces) setWorkspaces(parsed.workspaces)
+      }
+    } catch (error) {
+      showToast(`Failed to save workspace: ${error}`, 'error')
+    }
+  }, [queue.tasks, activePreset, tauri, showToast])
+
+  const handleLoadWorkspace = useCallback(async (name: string) => {
+    try {
+      const result = await tauri.loadWorkspace(name)
+      if (result) {
+        const parsed = JSON.parse(result) as { preset?: string; options?: TraceOptions }
+        if (parsed.preset) {
+          selectPreset(parsed.preset)
+          setOptions(getPresetOptions(parsed.preset))
+        }
+        if (parsed.options) {
+          setOptions(parsed.options)
+        }
+        showToast(`Loaded workspace: ${name}`, 'success')
+      }
+    } catch (error) {
+      showToast(`Failed to load workspace: ${error}`, 'error')
+    }
+  }, [tauri, selectPreset, getPresetOptions, showToast])
+
+  const handleRestoreLast = useCallback(async () => {
+    try {
+      const result = await tauri.loadWorkspace('crash_recovery')
+      if (result) {
+        const parsed = JSON.parse(result) as { preset?: string; options?: TraceOptions }
+        if (parsed.preset) {
+          selectPreset(parsed.preset)
+          setOptions(getPresetOptions(parsed.preset))
+        }
+        if (parsed.options) {
+          setOptions(parsed.options)
+        }
+        showToast('Restored last session', 'success')
+        setHasCrashRecovery(false)
+      }
+    } catch (error) {
+      showToast(`Failed to restore: ${error}`, 'error')
+    }
+  }, [tauri, selectPreset, getPresetOptions, showToast])
+
+  // v1.1 checkpoint handler
+  const handleResumeCheckpoint = useCallback(async (id: string) => {
+    try {
+      await tauri.resumeCheckpoint(id)
+      showToast(`Resumed checkpoint: ${id}`, 'success')
+    } catch (error) {
+      showToast(`Failed to resume checkpoint: ${error}`, 'error')
+    }
+  }, [tauri, showToast])
+
   const selectedTask = queue.tasks.find((t) => t.id === selectedTaskId)
 
   return (
@@ -230,6 +392,13 @@ function App() {
             onAddFiles={handleAddFiles}
             onLoadHistoryParams={handleLoadHistoryParams}
             onToast={showToast}
+            onSaveWorkspace={handleSaveWorkspace}
+            onLoadWorkspace={handleLoadWorkspace}
+            onRestoreLast={handleRestoreLast}
+            workspaces={workspaces}
+            hasCrashRecovery={hasCrashRecovery}
+            checkpoints={checkpoints}
+            onResumeCheckpoint={handleResumeCheckpoint}
           />
         }
         main={
@@ -249,6 +418,10 @@ function App() {
             onChangeOcrLang={setOcrLang}
             ocrVertical={ocrVertical}
             onToggleOcrVertical={() => setOcrVertical((v) => !v)}
+            gpuEnabled={gpuEnabled}
+            onToggleGpu={() => setGpuEnabled((v) => !v)}
+            streamingEnabled={streamingEnabled}
+            onToggleStreaming={() => setStreamingEnabled((v) => !v)}
           />
         }
         preview={
@@ -272,6 +445,9 @@ function App() {
             onCancelAll={handleCancelAll}
             onClearCompleted={handleClearCompleted}
             onToast={showToast}
+            memoryStatus={memoryStatus}
+            gpuStatus={gpuStatus}
+            performanceSuggestions={performanceSuggestions}
           />
         }
         dropZone={<DropZone onDropFiles={handleAddFiles} />}

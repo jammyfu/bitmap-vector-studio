@@ -22,6 +22,10 @@ interface StatusBarProps {
   onClearCompleted: () => void;
   elapsedMs?: number;
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  // v1.1 performance
+  memoryStatus?: { percent?: number; used_mb?: number; total_mb?: number; available?: boolean; message?: string } | null;
+  gpuStatus?: string;
+  performanceSuggestions?: string[];
 }
 
 function formatDuration(ms: number): string {
@@ -43,6 +47,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   onClearCompleted,
   elapsedMs = 0,
   onToast,
+  memoryStatus,
+  gpuStatus,
+  performanceSuggestions,
 }) => {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [polling, setPolling] = useState(false);
@@ -150,6 +157,22 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span className="statusbar-idle">Ready</span>
         )}
         {polling && <span className="statusbar-polling">●</span>}
+        {/* v1.1 performance info */}
+        {memoryStatus && memoryStatus.available && (
+          <span className="statusbar-mem" title={`Memory: ${memoryStatus.used_mb}MB / ${memoryStatus.total_mb}MB`}>
+            🧠 {memoryStatus.percent?.toFixed(0)}%
+          </span>
+        )}
+        {gpuStatus && gpuStatus !== '未检测到' && gpuStatus !== '不可用' && (
+          <span className="statusbar-gpu" title={`GPU: ${gpuStatus}`}>
+            ⚡ {gpuStatus}
+          </span>
+        )}
+        {performanceSuggestions && performanceSuggestions.length > 0 && (
+          <span className="statusbar-suggestion" title={performanceSuggestions.join('\n')}>
+            💡 {performanceSuggestions.length} tips
+          </span>
+        )}
       </div>
 
       <div className="statusbar-center">

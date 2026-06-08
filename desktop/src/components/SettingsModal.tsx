@@ -13,7 +13,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, settings, onSave, onToast }) => {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'plugins'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'plugins' | 'performance'>('general');
 
   const { call: callGetConfig } = useInvoke<Record<string, never>, string>('get_config');
   const { call: callSetConfig } = useInvoke<{ key: string; value: string }, void>('set_config');
@@ -110,6 +110,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
           </button>
           <button className={`modal-tab ${activeTab === 'plugins' ? 'active' : ''}`} onClick={() => setActiveTab('plugins')}>
             Plugins ({plugins.length})
+          </button>
+          <button className={`modal-tab ${activeTab === 'performance' ? 'active' : ''}`} onClick={() => setActiveTab('performance')}>
+            Performance
           </button>
         </div>
 
@@ -223,6 +226,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
                 </div>
               ))}
             </div>
+          )}
+
+          {activeTab === 'performance' && (
+            <>
+              <div className="settings-section">
+                <h3>GPU</h3>
+                <div className="settings-row">
+                  <label>Prefer GPU</label>
+                  <input
+                    type="checkbox"
+                    checked={draft.gpuEnabled}
+                    onChange={(e) => update('gpuEnabled', e.target.checked)}
+                  />
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Memory</h3>
+                <div className="settings-row">
+                  <label>Memory Limit (MB)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={65536}
+                    value={draft.memoryLimit || ''}
+                    placeholder="Unlimited"
+                    onChange={(e) => update('memoryLimit', e.target.value ? parseInt(e.target.value, 10) : null)}
+                  />
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Auto Save</h3>
+                <div className="settings-row">
+                  <label>Auto Save Interval (seconds)</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={3600}
+                    value={draft.autoSaveInterval}
+                    onChange={(e) => update('autoSaveInterval', parseInt(e.target.value, 10))}
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
 

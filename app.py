@@ -139,6 +139,56 @@ try:
 except Exception:
     _HAS_MARKET = False
 
+# v1.1 modules — import with graceful degradation
+try:
+    from vector_studio.performance import PerformanceMonitor, StreamingImageProcessor
+
+    _HAS_PERFORMANCE = True
+except Exception:
+    _HAS_PERFORMANCE = False
+
+try:
+    from vector_studio.gpu_backend import detect_gpu, gpu_available, GPUBackend
+
+    _HAS_GPU_BACKEND = True
+except Exception:
+    _HAS_GPU_BACKEND = False
+
+try:
+    from vector_studio.startup_optimizer import StartupOptimizer
+
+    _HAS_STARTUP_OPTIMIZER = True
+except Exception:
+    _HAS_STARTUP_OPTIMIZER = False
+
+try:
+    from vector_studio.plugin_hotreload import PluginWatcher
+
+    _HAS_PLUGIN_HOTRELOAD = True
+except Exception:
+    _HAS_PLUGIN_HOTRELOAD = False
+
+try:
+    from vector_studio.checkpoint import CheckpointManager
+
+    _HAS_CHECKPOINT = True
+except Exception:
+    _HAS_CHECKPOINT = False
+
+try:
+    from vector_studio.workspace import WorkspaceManager, Workspace, CrashRecovery
+
+    _HAS_WORKSPACE = True
+except Exception:
+    _HAS_WORKSPACE = False
+
+try:
+    from vector_studio.ocr_languages import get_tesseract_languages, check_language_available
+
+    _HAS_OCR_LANGUAGES = True
+except Exception:
+    _HAS_OCR_LANGUAGES = False
+
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
 st.caption("VTracer 驱动的 Illustrator-like 位图转 SVG 工具")
@@ -407,6 +457,199 @@ def _stop_api_service(proc: subprocess.Popen | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v1.1 Helpers
+# ---------------------------------------------------------------------------
+
+def _get_performance_monitor() -> "PerformanceMonitor | None":
+    """获取或初始化 PerformanceMonitor。"""
+    if not _HAS_PERFORMANCE:
+        return None
+    if "performance_monitor" not in st.session_state or st.session_state.performance_monitor is None:
+        st.session_state.performance_monitor = PerformanceMonitor()
+    return st.session_state.performance_monitor
+
+
+def _get_workspace_manager() -> "WorkspaceManager | None":
+    """获取或初始化 WorkspaceManager。"""
+    if not _HAS_WORKSPACE:
+        return None
+    if "workspace_manager" not in st.session_state or st.session_state.workspace_manager is None:
+        st.session_state.workspace_manager = WorkspaceManager()
+    return st.session_state.workspace_manager
+
+
+def _get_checkpoint_manager() -> "CheckpointManager | None":
+    """获取或初始化 CheckpointManager。"""
+    if not _HAS_CHECKPOINT:
+        return None
+    if "checkpoint_manager" not in st.session_state or st.session_state.checkpoint_manager is None:
+        st.session_state.checkpoint_manager = CheckpointManager()
+    return st.session_state.checkpoint_manager
+
+
+def _get_gpu_status() -> str:
+    """获取 GPU 状态字符串。"""
+    if not _HAS_GPU_BACKEND:
+        return "不可用"
+    try:
+        backend = detect_gpu()
+        if backend.value == "NONE":
+            return "未检测到"
+        return backend.value
+    except Exception:
+        return "检测失败"
+
+
+def _get_memory_status() -> dict:
+    """获取内存状态字典。"""
+    monitor = _get_performance_monitor()
+    if monitor is None:
+        return {"available": False, "message": "性能监控不可用"}
+    try:
+        return monitor.check_memory()
+    except Exception as e:
+        return {"available": False, "message": f"检测失败: {e}"}
+
+
+def _get_performance_suggestions(image_path: Path | None = None) -> list[str]:
+    """获取性能优化建议。"""
+    monitor = _get_performance_monitor()
+    if monitor is None or image_path is None:
+        return []
+    try:
+        return monitor.suggest_optimization(str(image_path))
+    except Exception:
+        return []
+
+
+def _save_workspace_state(name: str | None = None) -> None:
+    """保存当前工作区状态。"""
+    wm = _get_workspace_manager()
+    if wm is None:
+        st.session_state["ui_message"] = ("error", "工作区管理器不可用")
+        return
+    try:
+        ws = Workspace(
+            preset=st.session_state.get("preset_selector", "poster"),
+            options=build_options_from_state(),
+            uploaded_file_name=st.session_state.get("uploaded_file_name"),
+        )
+        path = wm.save(ws, name)
+        st.session_state["ui_message"] = ("success", f"工作区已保存: {path.name}")
+    except Exception as e:
+        st.session_state["ui_message"] = ("error", f"保存工作区失败: {e}")
+
+
+def _load_workspace_state(name: str) -> None:
+    """加载工作区状态。"""
+    wm = _get_workspace_manager()
+    if wm is None:
+        st.session_state["ui_message"] = ("error", "工作区管理器不可用")
+        return
+    try:
+        ws = wm.load(name)
+        if ws.options:
+            opts = ws.options
+            st.session_state.colormode = opts.colormode
+            st.session_state.hierarchical = opts.hierarchical
+            st.session_state.mode = opts.mode
+            st.session_state.filter_speckle = int(opts.filter_speckle)
+            st.session_state.color_precision = int(opts.color_precision)
+            st.session_state.layer_difference = int(opts.layer_difference)
+            st.session_state.corner_threshold = int(opts.corner_threshold)
+            st.session_state.length_threshold = float(opts.length_threshold)
+            st.session_state.splice_threshold = int(opts.splice_threshold)
+            st.session_state.path_precision = int(opts.path_precision)
+            st.session_state.max_iterations = int(opts.max_iterations)
+            st.session_state.denoise = bool(opts.denoise)
+            st.session_state.max_input_side_enabled = opts.max_input_side is not None
+            st.session_state.max_input_side = int(opts.max_input_side or 2400)
+            st.session_state.posterize_enabled = opts.posterize is not None
+            st.session_state.posterize = int(opts.posterize or 6)
+        if ws.preset:
+            st.session_state.preset_selector = ws.preset
+        st.session_state["ui_message"] = ("success", f"已加载工作区 '{name}'")
+    except Exception as e:
+        st.session_state["ui_message"] = ("error", f"加载工作区失败: {e}")
+
+
+def _check_crash_recovery() -> "Workspace | None":
+    """检查是否有崩溃恢复数据。"""
+    if not _HAS_WORKSPACE:
+        return None
+    try:
+        return CrashRecovery.check_crash_recovery()
+    except Exception:
+        return None
+
+
+def _list_workspaces() -> list[dict]:
+    """列出所有工作区。"""
+    wm = _get_workspace_manager()
+    if wm is None:
+        return []
+    try:
+        return wm.list_workspaces()
+    except Exception:
+        return []
+
+
+def _list_checkpoints() -> list[dict]:
+    """列出所有检查点。"""
+    cm = _get_checkpoint_manager()
+    if cm is None:
+        return []
+    try:
+        return cm.list_checkpoints()
+    except Exception:
+        return []
+
+
+def _save_checkpoint_for_batch(queue_id: str, tasks: list) -> None:
+    """为批量队列保存检查点。"""
+    cm = _get_checkpoint_manager()
+    if cm is None:
+        return
+    try:
+        cm.save_checkpoint(queue_id, tasks)
+    except Exception:
+        pass
+
+
+def _get_tesseract_langs() -> list[str]:
+    """获取已安装的 tesseract 语言包。"""
+    if not _HAS_OCR_LANGUAGES:
+        return []
+    try:
+        return get_tesseract_languages()
+    except Exception:
+        return []
+
+
+def _auto_save_workspace() -> None:
+    """自动保存工作区（每60秒）。"""
+    if not _HAS_WORKSPACE:
+        return
+    now = time.time()
+    last_auto_save = st.session_state.get("_last_auto_save", 0)
+    if now - last_auto_save < 60:
+        return
+    try:
+        wm = _get_workspace_manager()
+        if wm is None:
+            return
+        ws = Workspace(
+            preset=st.session_state.get("preset_selector", "poster"),
+            options=build_options_from_state(),
+            uploaded_file_name=st.session_state.get("uploaded_file_name"),
+        )
+        wm.save(ws, "auto_save")
+        st.session_state["_last_auto_save"] = now
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Session state 初始化
 # ---------------------------------------------------------------------------
 if "initialized" not in st.session_state:
@@ -441,6 +684,17 @@ if "initialized" not in st.session_state:
     # v0.5 market
     st.session_state.preset_market = None
     st.session_state.market_presets = None
+    # v1.1 performance
+    st.session_state.performance_monitor = None
+    st.session_state.use_gpu = False
+    st.session_state.streaming_process = False
+    # v1.1 workspace
+    st.session_state.workspace_manager = None
+    st.session_state.checkpoint_manager = None
+    st.session_state._last_auto_save = 0
+    # v1.1 OCR
+    st.session_state.ocr_language = "auto"
+    st.session_state.ocr_vertical = False
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -455,6 +709,63 @@ with st.sidebar:
             st.error(msg_text)
         elif msg_type == "warning":
             st.warning(msg_text)
+
+    # -----------------------------------------------------------------------
+    # v1.1: 工作区管理按钮组
+    # -----------------------------------------------------------------------
+    st.header("💾 工作区")
+    ws_col1, ws_col2, ws_col3 = st.columns(3)
+    with ws_col1:
+        if st.button("保存", key="ws_save_btn"):
+            _save_workspace_state()
+            st.rerun()
+    with ws_col2:
+        workspaces = _list_workspaces()
+        ws_names = [ws.get("name", "") for ws in workspaces if ws.get("name")]
+        if ws_names:
+            selected_ws = st.selectbox("加载", ws_names, key="ws_load_select", label_visibility="collapsed")
+            if st.button("加载", key="ws_load_btn"):
+                _load_workspace_state(selected_ws)
+                st.rerun()
+        else:
+            st.caption("无工作区")
+    with ws_col3:
+        recovered = _check_crash_recovery()
+        if recovered:
+            if st.button("恢复上次", key="ws_recover_btn"):
+                try:
+                    wm = _get_workspace_manager()
+                    if wm:
+                        ws = wm.restore_last()
+                        if ws and ws.options:
+                            opts = ws.options
+                            st.session_state.colormode = opts.colormode
+                            st.session_state.hierarchical = opts.hierarchical
+                            st.session_state.mode = opts.mode
+                            st.session_state.filter_speckle = int(opts.filter_speckle)
+                            st.session_state.color_precision = int(opts.color_precision)
+                            st.session_state.layer_difference = int(opts.layer_difference)
+                            st.session_state.corner_threshold = int(opts.corner_threshold)
+                            st.session_state.length_threshold = float(opts.length_threshold)
+                            st.session_state.splice_threshold = int(opts.splice_threshold)
+                            st.session_state.path_precision = int(opts.path_precision)
+                            st.session_state.max_iterations = int(opts.max_iterations)
+                            st.session_state.denoise = bool(opts.denoise)
+                            st.session_state.max_input_side_enabled = opts.max_input_side is not None
+                            st.session_state.max_input_side = int(opts.max_input_side or 2400)
+                            st.session_state.posterize_enabled = opts.posterize is not None
+                            st.session_state.posterize = int(opts.posterize or 6)
+                        if ws and ws.preset:
+                            st.session_state.preset_selector = ws.preset
+                        st.session_state["ui_message"] = ("success", "已恢复上次会话")
+                        st.rerun()
+                except Exception as e:
+                    st.session_state["ui_message"] = ("error", f"恢复失败: {e}")
+                    st.rerun()
+        else:
+            st.caption("无恢复数据")
+
+    st.divider()
 
     st.header("转换预设")
 
@@ -541,6 +852,15 @@ with st.sidebar:
             st.caption("🤖 AI语义简化不可用（vector_studio.ai_simplify 导入失败）")
         if _HAS_AI_OCR:
             st.checkbox("🔤 OCR文字识别", key="ai_ocr_enabled")
+            # v1.1 OCR 多语言增强
+            ocr_langs = ["auto", "eng", "chi_sim", "chi_tra", "jpn", "kor", "ara", "rus"]
+            st.selectbox("OCR语言", ocr_langs, key="ocr_language")
+            st.checkbox("检测竖排文字", key="ocr_vertical")
+            installed_langs = _get_tesseract_langs()
+            if installed_langs:
+                st.caption(f"已安装语言包: {', '.join(installed_langs[:10])}{'...' if len(installed_langs) > 10 else ''}")
+            else:
+                st.caption("未检测到已安装的 tesseract 语言包")
         else:
             st.caption("🔤 OCR文字识别不可用（vector_studio.ai_ocr 导入失败）")
         st.checkbox("限制输入最大边长", key="max_input_side_enabled")
@@ -837,6 +1157,48 @@ with st.sidebar:
                 st.session_state["ui_message"] = ("error", f"清空失败: {e}")
                 st.rerun()
 
+    # -----------------------------------------------------------------------
+    # v1.1: 性能面板
+    # -----------------------------------------------------------------------
+    with st.expander("⚡ 性能"):
+        # 内存状态
+        mem_status = _get_memory_status()
+        if mem_status.get("available"):
+            st.markdown(f"**内存使用:** `{mem_status.get('percent', '-'):.1f}%` ({mem_status.get('used_mb', '-')} MB / {mem_status.get('total_mb', '-')} MB)")
+        else:
+            st.caption(f"内存状态: {mem_status.get('message', '未知')}")
+
+        # GPU 状态
+        gpu_status = _get_gpu_status()
+        st.markdown(f"**GPU 状态:** `{gpu_status}`")
+        if _HAS_GPU_BACKEND and gpu_status != "未检测到":
+            st.checkbox("使用 GPU 加速", key="use_gpu")
+        else:
+            st.caption("GPU 加速不可用")
+
+        st.checkbox("流式处理大文件", key="streaming_process")
+
+        # 性能建议
+        if uploaded is not None:
+            try:
+                with tempfile.TemporaryDirectory(prefix="vector-studio-perf-") as tmp:
+                    tmp_dir = Path(tmp)
+                    input_path = _save_uploaded_file(uploaded, tmp_dir)
+                    suggestions = _get_performance_suggestions(input_path)
+                    if suggestions:
+                        st.markdown("**优化建议:**")
+                        for s in suggestions:
+                            st.markdown(f"- {s}")
+                    else:
+                        st.caption("暂无优化建议")
+            except Exception:
+                st.caption("无法获取优化建议")
+        else:
+            st.caption("上传图片后显示优化建议")
+
+    st.divider()
+    st.caption("💡 每 60 秒自动保存工作区")
+
 
 # ---------------------------------------------------------------------------
 # 主区域
@@ -856,7 +1218,11 @@ uploaded = st.file_uploader(
     type=["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"],
 )
 
+# v1.1 自动保存工作区
+_auto_save_workspace()
+
 if uploaded is not None:
+    st.session_state.uploaded_file_name = uploaded.name
     # -----------------------------------------------------------------------
     # 1. 智能分析区域
     # -----------------------------------------------------------------------
@@ -1469,10 +1835,48 @@ if uploaded is not None:
                                 )
                                 task_ids.append(tid)
                         st.session_state.batch_task_ids = task_ids
+                        # v1.1 自动保存检查点
+                        _save_checkpoint_for_batch("batch_ui", task_ids)
                         st.session_state["ui_message"] = ("success", f"已添加 {len(task_ids)} 个任务到队列")
                         st.rerun()
                     except Exception as e:
                         st.error(f"添加队列失败: {e}")
+
+            # v1.1 断点续传
+            with st.expander("🔄 断点续传"):
+                checkpoints = _list_checkpoints()
+                if checkpoints:
+                    st.markdown(f"**可用检查点:** {len(checkpoints)} 个")
+                    cp_names = [cp.get("name", cp.get("queue_id", "unknown")) for cp in checkpoints]
+                    selected_cp = st.selectbox("选择检查点", cp_names, key="checkpoint_select")
+                    if st.button("恢复检查点", key="resume_checkpoint_btn"):
+                        try:
+                            cm = _get_checkpoint_manager()
+                            if cm:
+                                tasks = cm.load_checkpoint(selected_cp)
+                                if tasks:
+                                    if "batch_queue" not in st.session_state or st.session_state.batch_queue is None:
+                                        st.session_state.batch_queue = TaskQueue(max_workers=4)
+                                    queue = st.session_state.batch_queue
+                                    # 重新添加任务
+                                    new_ids = []
+                                    for task in tasks:
+                                        tid = queue.add_task(
+                                            task.input_path,
+                                            task.output_path,
+                                            task.options,
+                                            optimize_level=optimize_level,
+                                        )
+                                        new_ids.append(tid)
+                                    st.session_state.batch_task_ids = new_ids
+                                    st.session_state["ui_message"] = ("success", f"已恢复 {len(new_ids)} 个任务")
+                                    st.rerun()
+                                else:
+                                    st.warning("检查点中没有任务")
+                        except Exception as e:
+                            st.error(f"恢复检查点失败: {e}")
+                else:
+                    st.caption("暂无可用检查点")
 
             # 队列控制与状态显示
             queue = st.session_state.get("batch_queue")

@@ -54,4 +54,9 @@ export interface AppSettings {
   externalEditor: string | null;
   apiHost: string;
   apiPort: number;
+  // v1.1 performance
+  gpuEnabled: boolean;
+  streamingEnabled: boolean;
+  memoryLimit: number | null;
+  autoSaveInterval: number;
 }

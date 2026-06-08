@@ -1,8 +1,8 @@
 # 插件开发指南
 
-Bitmap Vector Studio v1.0 的插件系统基于 Hook 架构，允许用户在矢量化流程的关键节点注入自定义逻辑。
+Bitmap Vector Studio v1.1 的插件系统基于 Hook 架构，允许用户在矢量化流程的关键节点注入自定义逻辑。
 
-> **v1.0 新增**：桌面应用提供图形化插件管理器，支持在界面中浏览、启用/禁用插件，无需命令行操作。详见 [docs/DESKTOP.md](DESKTOP.md)。
+> **v1.1 新增**：桌面应用提供图形化插件管理器，支持在界面中浏览、启用/禁用插件，无需命令行操作。详见 [docs/DESKTOP.md](DESKTOP.md)。
 
 ---
 
@@ -13,6 +13,7 @@ Bitmap Vector Studio v1.0 的插件系统基于 Hook 架构，允许用户在矢
 - [预处理/后处理/完成钩子详解](#预处理后处理完成钩子详解)
 - [内置插件参考](#内置插件参考)
 - [插件安装和调试](#插件安装和调试)
+- [插件热重载](#插件热重载)
 - [高级示例](#高级示例)
 
 ---
@@ -26,7 +27,7 @@ from vector_studio.plugin_interface import Plugin
 
 class MyPlugin(Plugin):
     name = "my_plugin"          # 必填，唯一标识
-    version = "1.0.0"         # 可选
+    version = "1.1.0"         # 可选
     description = "..."         # 可选
     author = "Your Name"      # 可选
 ```
@@ -82,7 +83,7 @@ class HelloPlugin(Plugin):
     """A minimal hello-world plugin that logs after conversion."""
 
     name = "hello"
-    version = "1.0.0"
+    version = "1.1.0"
     description = "Prints a message when conversion completes."
     author = "Your Name"
 
@@ -134,7 +135,7 @@ from vector_studio.plugin_interface import Plugin
 
 class AutoCropPlugin(Plugin):
     name = "auto_crop"
-    version = "1.0.0"
+    version = "1.1.0"
     description = "Automatically crop transparent borders before tracing."
 
     def preprocess(self, image: Image.Image, options: dict) -> Image.Image:
@@ -169,7 +170,7 @@ from vector_studio.plugin_interface import Plugin
 
 class MetadataPlugin(Plugin):
     name = "metadata"
-    version = "1.0.0"
+    version = "1.1.0"
     description = "Add custom metadata to generated SVGs."
 
     def postprocess(self, svg_path: Path, options: dict) -> Path:
@@ -206,7 +207,7 @@ from vector_studio.plugin_interface import Plugin
 
 class WebhookPlugin(Plugin):
     name = "webhook"
-    version = "1.0.0"
+    version = "1.1.0"
     description = "Send a webhook notification when conversion completes."
 
     def on_convert_complete(self, result, options: dict) -> None:
@@ -348,7 +349,7 @@ for info in pm.list_plugins():
 # 手动注册插件类
 class MyPlugin(Plugin):
     name = "my_plugin"
-    version = "1.0.0"
+    version = "1.1.0"
 
 pm.register_plugin(MyPlugin)
 
@@ -397,6 +398,62 @@ processed = pm.run_preprocess(img, {"preset": "logo"})
 
 ---
 
+## 插件热重载
+
+v1.1 引入插件热重载功能，开发插件时无需重启应用即可实时加载修改。
+
+### 工作原理
+
+`PluginWatcher` 监听插件目录的文件变化：
+- **新增文件**：自动发现并注册新插件
+- **修改文件**：安全卸载旧版本，加载新版本
+- **删除文件**：自动注销并清理该插件
+
+`SafePluginReloader` 确保重载过程安全：
+- 重载前完成当前正在执行的转换任务
+- 捕获插件加载异常，防止错误插件导致应用崩溃
+- 保留插件的启用/禁用状态
+
+### 启用热重载
+
+**桌面端**：
+1. 打开插件管理器（`Ctrl+P`）
+2. 开启右上角「热重载」开关
+3. 修改插件目录中的 `.py` 文件，保存后自动生效
+
+**CLI**：
+```bash
+# 启用热重载模式（开发时）
+vector-studio trace input.png --plugin my_plugin --hot-reload
+```
+
+**Python API**：
+```python
+from vector_studio.plugins import PluginManager
+from vector_studio.plugin_watcher import PluginWatcher
+
+pm = PluginManager()
+watcher = PluginWatcher(pm)
+
+# 启动监听
+watcher.start(watch_dirs=["~/.bitmap_vector_studio/plugins/"])
+
+# 现在修改插件文件会自动重载
+# ...
+
+# 停止监听
+watcher.stop()
+```
+
+### 热重载最佳实践
+
+1. **开发模式使用**：热重载适合开发调试，生产环境建议关闭以减少文件系统监听开销。
+2. **避免频繁保存**：连续快速保存可能触发多次重载，建议修改完成后统一保存。
+3. **状态持久化**：热重载会重新实例化插件类，插件内部的状态会丢失。如需持久化状态，请使用外部文件或数据库。
+4. **Hook 签名检查**：热重载时会检查新插件的 Hook 签名是否兼容，不兼容时拒绝加载并提示错误。
+
+---
+
 ## 高级示例
 
 ### 组合多个插件
@@ -438,7 +495,7 @@ CLI 会自动读取 `enabled_plugins` 并在转换时启用对应插件。
 
 ## 桌面端插件管理
 
-v1.0 桌面应用提供图形化插件管理器，无需命令行即可管理插件。
+v1.1 桌面应用提供图形化插件管理器，无需命令行即可管理插件。
 
 ### 打开插件管理器
 

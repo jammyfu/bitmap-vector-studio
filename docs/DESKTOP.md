@@ -1,6 +1,6 @@
 # 桌面应用使用指南
 
-Bitmap Vector Studio v1.0 提供基于 Tauri 的跨平台桌面应用，将 Python 后端的强大功能与原生桌面体验相结合。
+Bitmap Vector Studio v1.1 提供基于 Tauri 的跨平台桌面应用，将 Python 后端的强大功能与原生桌面体验相结合。
 
 ---
 
@@ -13,6 +13,10 @@ Bitmap Vector Studio v1.0 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 - [文件拖拽使用](#文件拖拽使用)
 - [队列管理](#队列管理)
 - [自动更新](#自动更新)
+- [性能设置](#性能设置)
+- [工作区管理](#工作区管理)
+- [断点续传](#断点续传)
+- [OCR 多语言设置](#ocr-多语言设置)
 - [故障排查](#故障排查)
 
 ---
@@ -22,13 +26,13 @@ Bitmap Vector Studio v1.0 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### Windows（MSI / NSIS）
 
 **MSI 安装包（推荐）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.0.0_x64_en-US.msi`
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.1.0_x64_en-US.msi`
 2. 双击运行安装向导
 3. 按提示完成安装（支持自定义安装路径）
 4. 安装完成后从开始菜单启动「Bitmap Vector Studio」
 
 **NSIS 安装包**
-1. 下载 `bitmap-vector-studio_1.0.0_x64-setup.exe`
+1. 下载 `bitmap-vector-studio_1.1.0_x64-setup.exe`
 2. 双击运行，支持便携模式安装（无需管理员权限）
 
 > **系统要求**：Windows 10 版本 1809 或更高，64 位系统，Python 3.9+（首次启动时自动检测）
@@ -36,7 +40,7 @@ Bitmap Vector Studio v1.0 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### macOS（DMG / App）
 
 **DMG 镜像（推荐）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.0.0_x64.dmg`（Intel）或 `bitmap-vector-studio_1.0.0_aarch64.dmg`（Apple Silicon）
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.1.0_x64.dmg`（Intel）或 `bitmap-vector-studio_1.1.0_aarch64.dmg`（Apple Silicon）
 2. 双击挂载 DMG 镜像
 3. 将「Bitmap Vector Studio」应用拖入「应用程序」文件夹
 4. 首次启动时若提示「无法打开」，前往「系统设置 → 隐私与安全性」点击「仍要打开」
@@ -50,26 +54,26 @@ Bitmap Vector Studio v1.0 提供基于 Tauri 的跨平台桌面应用，将 Pyth
 ### Linux（AppImage / DEB / RPM）
 
 **AppImage（推荐，通用）**
-1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.0.0_amd64.AppImage`
+1. 从 [GitHub Releases](https://github.com/jammyfu/bitmap-vector-studio/releases/latest) 下载 `bitmap-vector-studio_1.1.0_amd64.AppImage`
 2. 赋予执行权限：
    ```bash
-   chmod +x bitmap-vector-studio_1.0.0_amd64.AppImage
+   chmod +x bitmap-vector-studio_1.1.0_amd64.AppImage
    ```
 3. 直接运行：
    ```bash
-   ./bitmap-vector-studio_1.0.0_amd64.AppImage
+   ./bitmap-vector-studio_1.1.0_amd64.AppImage
    ```
 4. 可选：使用 [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) 集成到系统菜单
 
 **DEB 包（Debian / Ubuntu）**
 ```bash
-sudo dpkg -i bitmap-vector-studio_1.0.0_amd64.deb
+sudo dpkg -i bitmap-vector-studio_1.1.0_amd64.deb
 sudo apt-get install -f  # 自动解决依赖
 ```
 
 **RPM 包（Fedora / openSUSE）**
 ```bash
-sudo rpm -i bitmap-vector-studio_1.0.0_x86_64.rpm
+sudo rpm -i bitmap-vector-studio_1.1.0_x86_64.rpm
 ```
 
 > **系统要求**：Linux 内核 3.10+，glibc 2.17+，Python 3.9+ 和 libcairo2（首次启动时自动检测）
@@ -121,7 +125,7 @@ sudo rpm -i bitmap-vector-studio_1.0.0_x86_64.rpm
 │          │   缩放: 100%  状态: 就绪      │                   │
 │          │                              │  高级参数          │
 ├──────────┴──────────────────────────────┴───────────────────┤
-│  状态栏: 就绪  |  队列: 0/0  |  版本: 1.0.0                      │
+│  状态栏: 就绪  |  队列: 0/0  |  版本: 1.1.0                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -148,6 +152,9 @@ sudo rpm -i bitmap-vector-studio_1.0.0_x86_64.rpm
 - **预处理**：降噪、限制输入边长、Posterize 颜色量化
 - **智能功能**：背景透明、图像增强、预设推荐
 - **AI 辅助**：实时预览开关、AI 语义简化、OCR 文字识别、局部重描摹
+- **性能设置**：GPU 加速开关、流式处理阈值、内存限制（v1.1）
+- **工作区管理**：自动保存间隔、崩溃恢复开关（v1.1）
+- **OCR 设置**：默认语言、竖排检测开关、Tesseract 路径配置（v1.1）
 - **导出选项**：压缩 SVG、导出 PDF/PNG、优化级别、质量评分
 - **最近任务**：最近 5 条任务记录，一键加载参数
 
@@ -304,6 +311,164 @@ sudo rpm -i bitmap-vector-studio_1.0.0_x86_64.rpm
 1. 在联网设备下载最新版本的安装包
 2. 手动安装覆盖旧版本
 3. 用户配置和预设会自动保留
+
+---
+
+## 性能设置
+
+v1.1 在「设置 → 性能」标签页提供以下配置：
+
+### GPU 加速
+
+| 选项 | 说明 | 默认值 |
+|---|---|---|
+| **启用 GPU 加速** | 自动检测并使用 CUDA / Metal / OpenCL 加速矢量化 | 开启 |
+| **GPU 降级策略** | GPU 初始化失败时自动切换到 CPU | 开启 |
+
+> **注意**：GPU 加速需要对应的驱动程序。NVIDIA 需 CUDA Toolkit，macOS 自动使用 Metal，Linux 可尝试 OpenCL。
+
+### 大文件流式处理
+
+| 选项 | 说明 | 默认值 |
+|---|---|---|
+| **流式处理阈值** | 超过此大小的图片自动启用分块读取（MB） | 100 |
+| **分块大小** | 每次读取的内存块大小（MB） | 32 |
+
+> 处理超大 TIFF/PNG 时，流式处理可避免内存溢出。建议内存 8GB 以下用户将阈值设为 50MB。
+
+### 内存监控
+
+| 选项 | 说明 | 默认值 |
+|---|---|---|
+| **内存限制** | 当内存占用超过此百分比时触发保护策略 | 80% |
+| **自动降频** | 内存紧张时自动降低并发数和预览分辨率 | 开启 |
+
+---
+
+## 工作区管理
+
+v1.1 引入工作区自动保存机制，防止意外崩溃导致进度丢失。
+
+### 自动保存
+
+在「设置 → 工作区」中配置：
+
+| 选项 | 说明 | 默认值 |
+|---|---|---|
+| **自动保存间隔** | 每隔多少秒自动保存一次工作区状态 | 60 |
+| **崩溃恢复** | 异常退出后重启时提示恢复工作区 | 开启 |
+| **最大工作区数** | 保留的最近工作区快照数量 | 10 |
+
+### 工作区内容
+
+自动保存的工作区包含：
+- 当前打开的文件队列（含文件路径和状态）
+- 参数面板的所有设置
+- 预览画布的缩放和模式状态
+- 插件启用状态
+- 历史面板数据
+
+### 手动管理工作区
+
+```bash
+# 保存当前工作区
+vector-studio workspace save project_a
+
+# 加载工作区
+vector-studio workspace load project_a
+
+# 列出所有工作区
+vector-studio workspace list
+
+# 删除工作区
+vector-studio workspace delete project_a
+```
+
+---
+
+## 断点续传
+
+v1.1 的批量任务支持断点续传，异常中断后可恢复未完成的任务。
+
+### 自动检查点
+
+批量转换时，`CheckpointManager` 自动按以下策略保存进度：
+- 每完成 5 个文件保存一次检查点
+- 异常中断时立即保存当前进度
+- 检查点保留 7 天，过期自动清理
+
+### 恢复任务
+
+**桌面端**：
+1. 重启应用后，若检测到未完成的检查点，队列面板显示「🔄 可恢复任务」提示
+2. 点击「恢复」按钮，自动加载未完成的文件并继续转换
+3. 已完成的文件不会重复处理
+
+**CLI**：
+```bash
+# 列出可恢复的检查点
+vector-studio resume list
+
+# 恢复指定检查点
+vector-studio resume checkpoint-id
+
+# 清除已完成的检查点
+vector-studio resume clear
+```
+
+### 检查点文件位置
+
+检查点保存在 `~/.bitmap_vector_studio/checkpoints/` 目录，每个检查点为一个 JSON 文件，包含：
+- 任务队列状态
+- 已完成/失败/待处理的文件列表
+- 转换参数和选项
+
+---
+
+## OCR 多语言设置
+
+v1.1 增强 OCR 功能，支持 10 种语言和竖排文字检测。
+
+### 语言配置
+
+在「设置 → OCR」中配置：
+
+| 选项 | 说明 | 默认值 |
+|---|---|---|
+| **默认语言** | OCR 识别时优先使用的语言包 | `chi_sim+eng` |
+| **竖排检测** | 自动检测竖排排版文字 | 开启 |
+| **Tesseract 路径** | 自定义 Tesseract 可执行文件路径 | 自动检测 |
+
+### 支持的语言
+
+| 语言 | 代码 | 说明 |
+|---|---|---|
+| 简体中文 | `chi_sim` | 常用中文识别 |
+| 繁体中文 | `chi_tra` | 台湾、香港繁体 |
+| 日文 | `jpn` | 含平假名、片假名、汉字 |
+| 韩文 | `kor` | 韩文识别 |
+| 阿拉伯文 | `ara` | 从右至左排版 |
+| 俄文 | `rus` | 西里尔字母 |
+| 德文 | `deu` | 德文识别 |
+| 法文 | `fra` | 法文识别 |
+| 西班牙文 | `spa` | 西班牙文识别 |
+| 英文 | `eng` | 英文识别 |
+
+### 多语言组合
+
+支持用 `+` 连接多个语言包：
+- `chi_sim+eng`：中文 + 英文混合（最常见）
+- `jpn+eng`：日文 + 英文
+- `kor+chi_sim`：韩文 + 中文
+
+### 竖排文字
+
+开启「竖排检测」后，OCR 模块会自动：
+1. 检测文字区域是否为竖排排版
+2. 对竖排区域使用竖排识别模式
+3. 在 SVG 中生成竖排 `<text>` 元素（通过 `writing-mode: vertical-rl`）
+
+适用场景：日文传统书籍、中文古籍、竖排海报。
 
 ---
 

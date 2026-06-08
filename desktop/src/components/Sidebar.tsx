@@ -22,6 +22,15 @@ interface SidebarProps {
   onAddFiles?: (files: string[]) => void;
   onLoadHistoryParams?: (params: unknown) => void;
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  // v1.1 workspace
+  onSaveWorkspace?: () => void;
+  onLoadWorkspace?: (name: string) => void;
+  onRestoreLast?: () => void;
+  workspaces?: { name: string }[];
+  hasCrashRecovery?: boolean;
+  // v1.1 checkpoint
+  checkpoints?: { name: string; queue_id: string }[];
+  onResumeCheckpoint?: (id: string) => void;
 }
 
 const statusIcon: Record<ConversionTask['status'], string> = {
@@ -50,6 +59,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddFiles,
   onLoadHistoryParams,
   onToast,
+  onSaveWorkspace,
+  onLoadWorkspace,
+  onRestoreLast,
+  workspaces = [],
+  hasCrashRecovery = false,
+  checkpoints = [],
+  onResumeCheckpoint,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; taskId: string } | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -130,6 +146,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="sidebar" onClick={closeContextMenu}>
+      {/* v1.1 Workspace Management */}
+      <div className="sidebar-workspace">
+        <div className="sidebar-workspace-row">
+          <button className="btn btn-sm" onClick={onSaveWorkspace} title="Save workspace">
+            💾 Save
+          </button>
+          {workspaces.length > 0 && (
+            <select
+              className="sidebar-select"
+              onChange={(e) => onLoadWorkspace?.(e.target.value)}
+              defaultValue=""
+            >
+              <option value="" disabled>Load workspace…</option>
+              {workspaces.map((ws) => (
+                <option key={ws.name} value={ws.name}>{ws.name}</option>
+              ))}
+            </select>
+          )}
+          {hasCrashRecovery && (
+            <button className="btn btn-sm btn-warning" onClick={onRestoreLast} title="Restore last session">
+              🔄 Restore
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* v1.1 Checkpoint Recovery */}
+      {checkpoints.length > 0 && (
+        <div className="sidebar-checkpoint">
+          <div className="sidebar-checkpoint-row">
+            <select
+              className="sidebar-select"
+              onChange={(e) => onResumeCheckpoint?.(e.target.value)}
+              defaultValue=""
+            >
+              <option value="" disabled>Resume checkpoint…</option>
+              {checkpoints.map((cp) => (
+                <option key={cp.queue_id} value={cp.queue_id}>{cp.name || cp.queue_id}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       <div className="sidebar-header">
         <h3>Queue ({tasks.length})</h3>
         <div className="sidebar-actions">
