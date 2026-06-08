@@ -175,3 +175,96 @@ class TestGPUBackendMock:
         result = _cpu_preprocess(img)
         assert isinstance(result, Image.Image)
         assert result.size == (10, 10)
+
+
+class TestBenchmarkMore:
+    def test_benchmark_with_preset(self, tmp_path: Path):
+        from PIL import Image
+        from vector_studio.cli import app
+        from typer.testing import CliRunner
+
+        img = tmp_path / "img.png"
+        Image.new("RGB", (100, 100)).save(img)
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=0.4,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.cli.trace_image", return_value=mock_result):
+            runner = CliRunner()
+            result = runner.invoke(app, ["benchmark", str(img), "--runs", "2", "--preset", "logo"])
+        assert result.exit_code == 0
+        assert "Benchmark" in result.output
+
+    def test_benchmark_comparison_output(self, tmp_path: Path):
+        from PIL import Image
+        from vector_studio.cli import app
+        from typer.testing import CliRunner
+
+        img = tmp_path / "img.png"
+        Image.new("RGB", (100, 100)).save(img)
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.cli.trace_image", return_value=mock_result):
+            runner = CliRunner()
+            result = runner.invoke(app, ["benchmark", str(img), "--runs", "3"])
+        assert result.exit_code == 0
+        assert "Benchmark" in result.output
+        assert "Min" in result.output
+        assert "Max" in result.output
+        assert "Mean" in result.output
+
+    def test_benchmark_with_gpu_flag(self, tmp_path: Path):
+        from PIL import Image
+        from vector_studio.cli import app
+        from typer.testing import CliRunner
+
+        img = tmp_path / "img.png"
+        Image.new("RGB", (100, 100)).save(img)
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=0.2,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.cli.trace_image", return_value=mock_result):
+            runner = CliRunner()
+            result = runner.invoke(app, ["benchmark", str(img), "--runs", "1", "--gpu"])
+        assert result.exit_code == 0
+
+    def test_performance_monitor_suggestions_small_image(self, tmp_path: Path):
+        from vector_studio.performance import PerformanceMonitor
+        from PIL import Image
+
+        monitor = PerformanceMonitor()
+        img = tmp_path / "img.png"
+        Image.new("RGB", (100, 100)).save(img)
+        suggestions = monitor.suggest_optimization(img)
+        assert isinstance(suggestions, list)
+
+    def test_streaming_processor_dimensions_threshold(self, tmp_path: Path):
+        from vector_studio.performance import StreamingImageProcessor
+
+        img = tmp_path / "big.png"
+        from PIL import Image
+        Image.new("RGB", (6000, 6000)).save(img)
+        assert StreamingImageProcessor._should_stream(img)
+
+    def test_streaming_processor_small_dimensions_no_stream(self, tmp_path: Path):
+        from vector_studio.performance import StreamingImageProcessor
+
+        img = tmp_path / "small.png"
+        from PIL import Image
+        Image.new("RGB", (100, 100)).save(img)
+        assert not StreamingImageProcessor._should_stream(img)

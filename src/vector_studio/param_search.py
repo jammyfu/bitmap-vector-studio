@@ -126,7 +126,7 @@ def score_result(svg_path: Path, original_path: Path, elapsed: float) -> float:
     and color richness:
 
     .. math::
-        score = 100 - size\_penalty - path\_penalty + speed\_bonus + color\_bonus
+        score = 100 - size_penalty - path_penalty + speed_bonus + color_bonus
 
     Parameters
     ----------

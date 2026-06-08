@@ -59,4 +59,7 @@ export interface AppSettings {
   streamingEnabled: boolean;
   memoryLimit: number | null;
   autoSaveInterval: number;
+  // v1.2 cloud sync
+  cloudSyncEnabled: boolean;
+  cloudApiKey: string | null;
 }

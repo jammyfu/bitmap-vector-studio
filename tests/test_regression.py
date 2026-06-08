@@ -168,3 +168,91 @@ class TestVersionCompatibility:
         assert hasattr(Plugin, "preprocess")
         assert hasattr(Plugin, "postprocess")
         assert hasattr(Plugin, "on_convert_complete")
+
+
+class TestRegressionMore:
+    def test_streaming_mode_does_not_crash_on_small_image(self, tmp_path: Path):
+        """Regression: stream=True on small images should still work."""
+        from PIL import Image
+        img = tmp_path / "small.png"
+        Image.new("RGB", (100, 100)).save(img)
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=False):
+            with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+                mock_prepare.return_value = tmp_path / "normalized.png"
+                Image.new("RGB", (10, 10)).save(mock_prepare.return_value)
+                with patch("vector_studio.tracer._trace_with_python_binding"):
+                    with patch("vector_studio.tracer.optimize_svg_file"):
+                        with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                            result = trace_image(img, out, stream=True)
+        assert result.svg_path == out
+
+    def test_batch_nested_directories_preserve_structure(self, tmp_path: Path):
+        """Regression: batch recursive must preserve directory structure."""
+        from vector_studio.cli import app
+        from typer.testing import CliRunner
+
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        sub = input_dir / "sub"
+        sub.mkdir()
+        (sub / "img.png").write_bytes(b"fake")
+        output_dir = tmp_path / "output"
+
+        mock_result = MagicMock()
+        mock_result.svg_path = output_dir / "sub" / "img.svg"
+
+        with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
+            runner = CliRunner()
+            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--recursive"])
+        assert result.exit_code == 0
+        assert mock_trace.call_count == 1
+        passed_input = mock_trace.call_args[0][0]
+        assert passed_input.parent.name == "sub"
+
+    def test_api_temp_cleanup_on_exception(self, tmp_path: Path):
+        """Regression: API temp files must be cleaned up even on errors."""
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+        from vector_studio.api import app, _cleanup_api_temp
+
+        client = TestClient(app)
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+
+        with patch("vector_studio.api.trace_image", side_effect=RuntimeError("boom")):
+            with img.open("rb") as f:
+                response = client.post(
+                    "/convert",
+                    files={"file": ("test.png", f, "image/png")},
+                    data={"preset": "poster"},
+                )
+        assert response.status_code == 500
+        _cleanup_api_temp()
+
+    def test_options_posterize_none_does_not_crash(self):
+        """Regression: posterize=None must be handled gracefully."""
+        opts = TraceOptions(posterize=None)
+        kwargs = opts.vtracer_kwargs()
+        assert "posterize" not in kwargs or kwargs.get("posterize") is None
+
+    def test_cli_batch_with_zero_images_exits_cleanly(self, tmp_path: Path):
+        """Regression: batch on empty dir must exit 0, not crash."""
+        from vector_studio.cli import app
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["batch", str(tmp_path), str(tmp_path / "out")])
+        assert result.exit_code == 0
+        assert "No supported images" in result.output
+
+    def test_svg_stats_on_malformed_xml(self, tmp_path: Path):
+        """Regression: svg_stats on malformed XML must not crash."""
+        from vector_studio.svg_tools import svg_stats
+        bad_svg = tmp_path / "bad.svg"
+        bad_svg.write_text("<svg><path d=\"M0 0\"><not-closed>")
+        stats = svg_stats(bad_svg)
+        assert isinstance(stats, dict)
+        assert "paths" in stats

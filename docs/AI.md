@@ -1,6 +1,6 @@
 # AI 功能文档
 
-Bitmap Vector Studio v1.1 引入纯 Pillow / NumPy 实现的 AI 辅助功能，无需 PyTorch、TensorFlow 等深度学习框架，在本地即可完成对复杂照片的语义简化、卡通化效果以及文字区域检测与识别。
+Bitmap Vector Studio v1.2 引入纯 Pillow / NumPy 实现的 AI 辅助功能，无需 PyTorch、TensorFlow 等深度学习框架，在本地即可完成对复杂照片的语义简化、卡通化效果以及文字区域检测与识别。
 
 ---
 

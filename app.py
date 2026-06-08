@@ -189,6 +189,28 @@ try:
 except Exception:
     _HAS_OCR_LANGUAGES = False
 
+# v1.2 modules — import with graceful degradation
+try:
+    from vector_studio.engines import EngineRegistry, EngineBenchmark
+
+    _HAS_ENGINES = True
+except Exception:
+    _HAS_ENGINES = False
+
+try:
+    from vector_studio.plugin_sdk import PluginValidator, PluginScaffold, PluginDebugger
+
+    _HAS_PLUGIN_SDK = True
+except Exception:
+    _HAS_PLUGIN_SDK = False
+
+try:
+    from vector_studio.cloud_sync import CloudSyncManager
+
+    _HAS_CLOUD_SYNC = True
+except Exception:
+    _HAS_CLOUD_SYNC = False
+
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
 st.caption("VTracer 驱动的 Illustrator-like 位图转 SVG 工具")
@@ -626,6 +648,62 @@ def _get_tesseract_langs() -> list[str]:
         return []
 
 
+# ---------------------------------------------------------------------------
+# v1.2 Helpers
+# ---------------------------------------------------------------------------
+
+def _get_engine_registry() -> "EngineRegistry | None":
+    """获取或初始化 EngineRegistry。"""
+    if not _HAS_ENGINES:
+        return None
+    if "engine_registry" not in st.session_state or st.session_state.engine_registry is None:
+        st.session_state.engine_registry = EngineRegistry()
+    return st.session_state.engine_registry
+
+
+def _list_engines() -> list[dict]:
+    """列出所有可用引擎。"""
+    registry = _get_engine_registry()
+    if registry is None:
+        return []
+    try:
+        return registry.list_engines()
+    except Exception:
+        return []
+
+
+def _get_cloud_sync_manager() -> "CloudSyncManager | None":
+    """获取或初始化 CloudSyncManager。"""
+    if not _HAS_CLOUD_SYNC:
+        return None
+    if "cloud_sync_manager" not in st.session_state or st.session_state.cloud_sync_manager is None:
+        st.session_state.cloud_sync_manager = CloudSyncManager()
+    return st.session_state.cloud_sync_manager
+
+
+def _share_svg(svg_path: Path) -> dict | None:
+    """分享 SVG 到云端。"""
+    manager = _get_cloud_sync_manager()
+    if manager is None:
+        return None
+    try:
+        return manager.share_svg(str(svg_path))
+    except Exception as e:
+        st.session_state["ui_message"] = ("error", f"云端分享失败: {e}")
+        return None
+
+
+def _get_shared_files() -> list[dict]:
+    """获取已分享文件列表。"""
+    manager = _get_cloud_sync_manager()
+    if manager is None:
+        return []
+    try:
+        return manager.get_shared_files()
+    except Exception:
+        return []
+
+
 def _auto_save_workspace() -> None:
     """自动保存工作区（每60秒）。"""
     if not _HAS_WORKSPACE:
@@ -695,6 +773,16 @@ if "initialized" not in st.session_state:
     # v1.1 OCR
     st.session_state.ocr_language = "auto"
     st.session_state.ocr_vertical = False
+    # v1.2 engines
+    st.session_state.engine_selector = "自动选择"
+    st.session_state.engine_benchmark_result = None
+    # v1.2 plugin dev
+    st.session_state.plugin_scaffold_name = ""
+    st.session_state.plugin_validate_path = ""
+    st.session_state.plugin_test_path = ""
+    # v1.2 cloud sync
+    st.session_state.cloud_share_result = None
+    st.session_state.cloud_sync_manager = None
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -764,6 +852,61 @@ with st.sidebar:
                     st.rerun()
         else:
             st.caption("无恢复数据")
+
+    st.divider()
+
+    # -----------------------------------------------------------------------
+    # v1.2: 引擎选择
+    # -----------------------------------------------------------------------
+    st.header("🔧 矢量化引擎")
+    engine_options = ["自动选择", "VTracer", "Potrace", "AutoTrace"]
+    if _HAS_ENGINES:
+        engines = _list_engines()
+        engine_status = {}
+        for e in engines:
+            name = e.get("name", "")
+            available = e.get("available", False)
+            engine_status[name] = available
+        # Show availability
+        status_lines = []
+        for opt in engine_options:
+            if opt == "自动选择":
+                status_lines.append("• 自动选择: 根据图片类型智能选择")
+            else:
+                avail = engine_status.get(opt, False)
+                status_lines.append(f"• {opt}: {'✅ 可用' if avail else '❌ 不可用'}")
+        st.caption("\n".join(status_lines))
+
+        st.selectbox("选择引擎", engine_options, key="engine_selector")
+
+        if st.button("📊 引擎对比", key="engine_benchmark"):
+            if uploaded is None:
+                st.session_state["ui_message"] = ("warning", "请先上传图片再进行引擎对比")
+            else:
+                with st.spinner("正在对比引擎性能…"):
+                    try:
+                        with tempfile.TemporaryDirectory(prefix="vector-studio-benchmark-") as tmp:
+                            tmp_dir = Path(tmp)
+                            input_path = _save_uploaded_file(uploaded, tmp_dir)
+                            result = EngineBenchmark.compare_engines(str(input_path))
+                            st.session_state["engine_benchmark_result"] = result
+                            st.session_state["ui_message"] = ("success", f"引擎对比完成，共 {len(result)} 个引擎")
+                    except Exception as e:
+                        st.session_state["ui_message"] = ("error", f"引擎对比失败: {e}")
+                st.rerun()
+
+        if st.session_state.get("engine_benchmark_result"):
+            result = st.session_state["engine_benchmark_result"]
+            with st.expander("对比结果"):
+                for r in result:
+                    name = r.get("engine", "-")
+                    score = r.get("score", 0)
+                    time_s = r.get("time_seconds", 0)
+                    size_kb = r.get("size_kb", 0)
+                    st.markdown(f"**{name}**: 评分 `{score:.1f}` | 耗时 `{time_s:.2f}s` | 大小 `{size_kb:.1f} KB`")
+    else:
+        st.warning("引擎管理模块不可用（vector_studio.engines 导入失败）")
+        st.selectbox("选择引擎", engine_options, key="engine_selector", disabled=True)
 
     st.divider()
 
@@ -958,6 +1101,58 @@ with st.sidebar:
                         except Exception as e:
                             st.session_state["ui_message"] = ("error", f"扫描失败: {e}")
                             st.rerun()
+
+        # -----------------------------------------------------------------------
+        # v1.2: 插件开发工具
+        # -----------------------------------------------------------------------
+        if _HAS_PLUGIN_SDK:
+            with st.expander("🛠️ 插件开发工具"):
+                st.markdown("**生成插件模板**")
+                scaffold_name = st.text_input("插件名称", key="plugin_scaffold_name_input", value=st.session_state.get("plugin_scaffold_name", ""))
+                if st.button("生成模板", key="plugin_scaffold_btn"):
+                    if not scaffold_name.strip():
+                        st.warning("请输入插件名称")
+                    else:
+                        try:
+                            from pathlib import Path as _Path
+                            out_dir = _Path("plugins") / scaffold_name.strip()
+                            out_dir.mkdir(parents=True, exist_ok=True)
+                            path = PluginScaffold.generate(scaffold_name.strip(), str(out_dir))
+                            st.session_state["ui_message"] = ("success", f"插件模板已生成: {path}")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"生成模板失败: {e}")
+                        st.rerun()
+
+                st.markdown("**验证插件**")
+                validate_path = st.text_input("插件路径", key="plugin_validate_path_input", value=st.session_state.get("plugin_validate_path", ""))
+                if st.button("验证", key="plugin_validate_btn"):
+                    if not validate_path.strip():
+                        st.warning("请输入插件路径")
+                    else:
+                        try:
+                            ok, errors = PluginValidator.validate(validate_path.strip())
+                            if ok:
+                                st.session_state["ui_message"] = ("success", "插件验证通过")
+                            else:
+                                st.session_state["ui_message"] = ("error", f"验证失败: {'; '.join(errors)}")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"验证出错: {e}")
+                        st.rerun()
+
+                st.markdown("**测试插件**")
+                test_path = st.text_input("插件路径", key="plugin_test_path_input", value=st.session_state.get("plugin_test_path", ""))
+                if st.button("测试", key="plugin_test_btn"):
+                    if not test_path.strip():
+                        st.warning("请输入插件路径")
+                    else:
+                        try:
+                            result = PluginDebugger.test_plugin(test_path.strip())
+                            st.session_state["ui_message"] = ("success", f"测试结果: {result}")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"测试出错: {e}")
+                        st.rerun()
+        else:
+            st.caption("🛠️ 插件开发工具不可用（vector_studio.plugin_sdk 导入失败）")
 
     # -----------------------------------------------------------------------
     # v0.4: 配置管理面板
@@ -1594,7 +1789,7 @@ if uploaded is not None:
                 st.warning(f"无法解析 SVG 结构: {e}")
 
         # 下载按钮
-        dl_col1, dl_col2, dl_col3 = st.columns([1, 1, 2])
+        dl_col1, dl_col2, dl_col3, dl_col4 = st.columns([1, 1, 1, 1])
         with dl_col1:
             st.download_button(
                 "下载 SVG",
@@ -1608,6 +1803,58 @@ if uploaded is not None:
         with dl_col3:
             if st.session_state.get("png_bytes"):
                 st.download_button("下载 PNG 预览", data=st.session_state["png_bytes"], file_name="vectorized.png", mime="image/png")
+        with dl_col4:
+            if st.button("☁️ 云端分享", key="cloud_share_btn"):
+                if not _HAS_CLOUD_SYNC:
+                    st.session_state["ui_message"] = ("error", "云端同步模块不可用")
+                else:
+                    with st.spinner("正在上传到云端…"):
+                        try:
+                            with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="wb") as f:
+                                f.write(st.session_state["svg_bytes"])
+                                tmp_svg = Path(f.name)
+                            result = _share_svg(tmp_svg)
+                            if result:
+                                st.session_state["cloud_share_result"] = result
+                                st.session_state["ui_message"] = ("success", "云端分享成功")
+                            else:
+                                st.session_state["ui_message"] = ("error", "云端分享失败")
+                        except Exception as e:
+                            st.session_state["ui_message"] = ("error", f"分享失败: {e}")
+                    st.rerun()
+
+        # 云端分享结果
+        if st.session_state.get("cloud_share_result"):
+            share = st.session_state["cloud_share_result"]
+            with st.container(border=True):
+                st.subheader("☁️ 云端分享")
+                url = share.get("url", "")
+                qr_code = share.get("qr_code", "")
+                if url:
+                    st.markdown(f"**分享链接:** [{url}]({url})")
+                if qr_code:
+                    st.markdown("**QR 码:**")
+                    st.markdown(
+                        f'<img src="{qr_code}" style="max-width:200px;">',
+                        unsafe_allow_html=True,
+                    )
+                if st.button("清除分享结果", key="clear_share_result"):
+                    st.session_state["cloud_share_result"] = None
+                    st.rerun()
+
+        # 我的分享列表
+        if _HAS_CLOUD_SYNC:
+            with st.expander("📋 我的分享"):
+                shared_files = _get_shared_files()
+                if not shared_files:
+                    st.caption("暂无分享文件")
+                else:
+                    st.markdown(f"**共 {len(shared_files)} 个分享文件**")
+                    for sf in shared_files:
+                        fname = sf.get("file_name", "-")
+                        surl = sf.get("url", "")
+                        created = sf.get("created_at", "-")
+                        st.markdown(f"• `{fname}` — {created} — [{surl}]({surl})" if surl else f"• `{fname}` — {created}")
 
         # 外部编辑器
         st.divider()

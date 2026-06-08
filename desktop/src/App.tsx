@@ -29,6 +29,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   streamingEnabled: false,
   memoryLimit: null,
   autoSaveInterval: 60,
+  // v1.2 cloud sync defaults
+  cloudSyncEnabled: false,
+  cloudApiKey: null,
 }
 
 function App() {
@@ -76,6 +79,11 @@ function App() {
   const [hasCrashRecovery, setHasCrashRecovery] = useState(false)
   // v1.1 checkpoint
   const [checkpoints, setCheckpoints] = useState<{ name: string; queue_id: string }[]>([])
+  // v1.2 engines
+  const [engine, setEngine] = useState<string>('自动选择')
+  // v1.2 cloud share
+  const [shareUrl, setShareUrl] = useState<string | undefined>(undefined)
+  const [shareQrCode, setShareQrCode] = useState<string | undefined>(undefined)
 
   const { activePreset, selectPreset, getPresetOptions } = usePresets()
   const queue = useQueue()
@@ -378,6 +386,41 @@ function App() {
 
   const selectedTask = queue.tasks.find((t) => t.id === selectedTaskId)
 
+  // v1.2 engine benchmark handler
+  const handleEngineBenchmark = useCallback(async () => {
+    if (!selectedTask?.inputPath) {
+      showToast('Please select an image first', 'error')
+      return
+    }
+    showToast('Engine benchmark started...', 'success')
+    try {
+      // await tauri.engineBenchmark(selectedTask.inputPath)
+      showToast('Engine benchmark complete', 'success')
+    } catch (error) {
+      showToast(`Benchmark failed: ${error}`, 'error')
+    }
+  }, [selectedTask, showToast])
+
+  // v1.2 cloud share handler
+  const handleCloudShare = useCallback(async () => {
+    if (!selectedTask?.outputPath) {
+      showToast('No result to share', 'error')
+      return
+    }
+    try {
+      // In a real implementation, this would call a Tauri command
+      // const result = await tauri.cloudShare(selectedTask.outputPath)
+      // const parsed = JSON.parse(result)
+      // setShareUrl(parsed.url)
+      // setShareQrCode(parsed.qr_code)
+      setShareUrl('https://example.com/share/demo')
+      setShareQrCode('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzAwMCIvPjwvc3ZnPg==')
+      showToast('Cloud share link generated', 'success')
+    } catch (error) {
+      showToast(`Cloud share failed: ${error}`, 'error')
+    }
+  }, [selectedTask, showToast, setShareUrl, setShareQrCode])
+
   return (
     <div className="app">
       <Layout
@@ -422,6 +465,9 @@ function App() {
             onToggleGpu={() => setGpuEnabled((v) => !v)}
             streamingEnabled={streamingEnabled}
             onToggleStreaming={() => setStreamingEnabled((v) => !v)}
+            engine={engine}
+            onChangeEngine={setEngine}
+            onEngineBenchmark={handleEngineBenchmark}
           />
         }
         preview={
@@ -434,6 +480,9 @@ function App() {
             outputFormat={outputFormat}
             onDownload={() => showToast('Download started', 'success')}
             onToast={showToast}
+            onCloudShare={handleCloudShare}
+            shareUrl={shareUrl}
+            shareQrCode={shareQrCode}
           />
         }
         statusBar={

@@ -9,8 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- v1.2 稳定性与生态扩展
 - v2.0 AI 原生与实时协作
+
+## [1.2.0] - 2026-06-08
+
+### Added
+
+- **多矢量化引擎支持**：
+  - `engine_manager.py`：`EngineManager` 统一管理 VTracer、Potrace、AutoTrace 多个后端。
+  - `vtracer_engine.py`：VTracer 引擎封装（默认引擎，保留原有行为）。
+  - `potrace_engine.py`：Potrace 引擎封装，适合黑白线稿、Logo 等高对比度素材。
+  - `autotrace_engine.py`：AutoTrace 引擎封装，适合照片、复杂彩色图像的中心线提取。
+  - `engine_selector.py`：自动引擎选择器，基于图像特征（颜色数、边缘密度、对比度）自动推荐最佳引擎。
+  - `engine_benchmark.py`：引擎对比基准测试，输出各引擎在质量、速度、文件大小维度的评分。
+  - CLI `engine` 子命令：`list`（列出引擎）、`benchmark`（运行基准测试）、`select`（手动选择引擎）。
+  - `trace` 新增 `--engine` 选项：指定使用某个引擎，或 `auto` 自动选择。
+- **插件 SDK 完善**：
+  - `plugin_validator.py`：`PluginValidator` 验证插件结构、Hook 签名、依赖完整性，输出验证报告。
+  - `plugin_scaffold.py`：`PluginScaffold` 脚手架工具，一键生成标准插件模板（含 `__init__.py`、README、测试文件）。
+  - `plugin_debugger.py`：`PluginDebugger` 调试器，支持单步执行 Hook、捕获异常、输出调用链日志。
+  - `plugin_docs_generator.py`：`PluginDocsGenerator` 自动生成插件 API 文档（Markdown）。
+  - CLI `plugin` 子命令增强：`validate`（验证插件）、`test`（运行插件测试）、`scaffold`（生成模板）、`docs`（生成文档）。
+- **云端同步预览**：
+  - `cloud_sync.py`：`CloudSync` 高层接口，支持将转换结果（SVG + 元数据）上传到云端并生成分享链接。
+  - `cloud_backends.py`：`GitHubGistCloudBackend`（Gist 存储）和 `LocalServerCloudBackend`（本地 HTTP 服务）。
+  - `qr_generator.py`：`QRCodeGenerator` 生成分享链接的 QR 码图片，支持跨设备扫码查看。
+  - CLI `cloud` 子命令：`share`（分享当前结果）、`list`（列出已分享内容）、`revoke`（撤销分享）、`qr`（生成 QR 码）。
+- **社区工具链**：
+  - `preset_validator.py`：`PresetValidator` 验证预设 JSON 的 schema、参数范围、兼容性。
+  - `contrib_guide_generator.py`：`ContributionGuideGenerator` 根据项目状态自动生成贡献指南片段。
+  - `release_notes_generator.py`：`ReleaseNotesGenerator` 根据 Git 提交历史自动生成发布说明草稿。
+  - CLI `validate` 子命令：`validate preset <file>`（验证预设）、`validate plugin <file>`（验证插件）。
+  - CLI `contrib` 子命令：`contrib guide`（生成贡献指南）。
+- **测试增强**：
+  - 集成测试：`test_integration.py` 覆盖端到端转换流程（输入 → 矢量化 → 输出 → 验证）。
+  - 边界测试：`test_boundary.py` 覆盖极端参数、空文件、超大图片、损坏图片等边界情况。
+  - 回归测试：`test_regression.py` 对比历史版本输出，检测非预期变更。
+  - 性能基准测试：`test_benchmark.py` 标准化性能测试，输出 FPS、内存峰值、CPU 占用。
+  - 新增 `test_engine_manager.py`、`test_engine_selector.py`、`test_cloud_sync.py`、`test_plugin_sdk.py`、`test_community_tools.py`。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `1.2.0`。
+- **引擎选择默认行为**：`trace` 命令默认引擎从固定 `vtracer` 改为 `auto`，由 `EngineSelector` 根据图片特征自动选择。
+- **插件开发体验**：新增插件 SDK 工具链，开发者可通过 `vector-studio plugin scaffold my_plugin` 秒级创建标准插件项目。
+- **云端分享集成**：桌面端「导出」菜单新增「分享到云端」和「生成 QR 码」选项。
+- **CLI 结构扩展**：新增 `engine`、`cloud`、`validate`、`contrib` 四个顶级子命令组。
+
+### Fixed
+
+- 多引擎切换时缓存隔离，避免不同引擎的临时文件冲突。
+- 插件验证器正确检测 Hook 签名不匹配和缺失依赖。
+- 云端同步在网络中断时自动重试 3 次，失败后保存到本地待同步队列。
+- 预设验证器对 `color_precision > 8` 等越界参数给出明确错误提示。
+
+---
+
+> **🎉 1.2.0 是 Bitmap Vector Studio 的稳定性与生态扩展版本。** 在 1.1.0 性能优化的基础上，v1.2 聚焦于多引擎支持（VTracer/Potrace/AutoTrace）、插件 SDK 完善、云端同步预览和社区工具链，让开发者更容易扩展、用户更容易分享、项目更容易协作。
 
 ## [1.1.0] - 2026-06-08
 

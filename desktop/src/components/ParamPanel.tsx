@@ -23,6 +23,10 @@ interface ParamPanelProps {
   onToggleGpu?: () => void;
   streamingEnabled?: boolean;
   onToggleStreaming?: () => void;
+  // v1.2 engines
+  engine?: string;
+  onChangeEngine?: (engine: string) => void;
+  onEngineBenchmark?: () => void;
 }
 
 export const ParamPanel: React.FC<ParamPanelProps> = ({
@@ -45,6 +49,9 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
   onToggleGpu,
   streamingEnabled = false,
   onToggleStreaming,
+  engine = '自动选择',
+  onChangeEngine,
+  onEngineBenchmark,
 }) => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [activePreset, setActivePreset] = useState<string>('default');
@@ -224,6 +231,28 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
         )}
         <button className="btn btn-sm btn-secondary" onClick={handleRecommend} disabled={isRecommending || !inputPath}>
           {isRecommending ? 'Analyzing...' : 'Recommend'}
+        </button>
+      </div>
+
+      <div className="param-section">
+        <label className="param-label">Engine</label>
+        <select
+          className="param-select"
+          value={engine}
+          onChange={(e) => onChangeEngine?.(e.target.value)}
+        >
+          <option value="自动选择">Auto Select</option>
+          <option value="VTracer">VTracer</option>
+          <option value="Potrace">Potrace</option>
+          <option value="AutoTrace">AutoTrace</option>
+        </select>
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={onEngineBenchmark}
+          disabled={!inputPath}
+          style={{ marginTop: 8 }}
+        >
+          Benchmark
         </button>
       </div>
 

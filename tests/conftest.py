@@ -104,3 +104,70 @@ def mock_external_editor(tmp_path: Path):
     editor.is_available = True
     editor.platform = "windows"
     return editor
+
+
+
+@pytest.fixture
+def sample_image_bw(tmp_path: Path) -> Path:
+    """A small black-and-white PNG for binary preset tests."""
+    img_path = tmp_path / "bw_image.png"
+    img = Image.new("L", (50, 50), color=128)
+    img.save(img_path, format="PNG")
+    return img_path
+
+
+@pytest.fixture
+def sample_image_rgba(tmp_path: Path) -> Path:
+    """A small RGBA PNG with transparency."""
+    img_path = tmp_path / "rgba_image.png"
+    img = Image.new("RGBA", (100, 100), color=(255, 0, 0, 128))
+    img.save(img_path, format="PNG")
+    return img_path
+
+
+@pytest.fixture
+def sample_image_very_small(tmp_path: Path) -> Path:
+    """A tiny 1x1 PNG for edge-case tests."""
+    img_path = tmp_path / "tiny.png"
+    img = Image.new("RGB", (1, 1), color=(0, 0, 0))
+    img.save(img_path, format="PNG")
+    return img_path
+
+
+@pytest.fixture
+def sample_config_path(tmp_path: Path) -> Path:
+    """A valid config file path with logo preset."""
+    from vector_studio.config import Config
+    cfg = Config(default_preset="logo", export_pdf=True)
+    path = tmp_path / "config.json"
+    cfg.save(path)
+    return path
+
+
+@pytest.fixture
+def mock_trace_result(tmp_path: Path) -> "TraceResult":
+    """A reusable mock TraceResult pointing into tmp_path."""
+    from vector_studio.models import TraceResult
+    svg = tmp_path / "out.svg"
+    svg.write_text("<svg></svg>")
+    return TraceResult(
+        input_path=tmp_path / "in.png",
+        svg_path=svg,
+        engine="python-vtracer",
+        elapsed_seconds=0.5,
+        stats={"paths": 3},
+    )
+
+
+@pytest.fixture
+def mock_engine_registry():
+    """Patch EngineRegistry to return a single mock engine."""
+    from unittest.mock import MagicMock, patch
+    mock_engine = MagicMock()
+    mock_engine.is_available.return_value = True
+    mock_engine.get_info.return_value = {"name": "vtracer", "version": "1.0", "available": True}
+    with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
+        with patch("vector_studio.engines.EngineRegistry.list_engines", return_value=[
+            {"name": "vtracer", "version": "1.0", "available": True, "supported_formats": [".png"], "supported_outputs": [".svg"]},
+        ]):
+            yield mock_engine

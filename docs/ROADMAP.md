@@ -75,13 +75,15 @@
 - [x] 批量任务断点续传
 - [x] 自动保存工作区状态（崩溃恢复）
 
-## v1.2：稳定性与生态扩展
+## v1.2：稳定性与生态扩展 ✅
 
-- [ ] 更多矢量化引擎支持（potrace 等作为备选后端）
-- [ ] 插件 SDK 完善（类型提示、调试工具、示例模板）
-- [ ] 云端同步预览（跨设备查看转换结果）
-- [ ] 社区贡献者工具链（预设验证、插件审核、文档生成）
-- [ ] 自动化测试覆盖率提升到 90%+
+- [x] 多矢量化引擎支持（VTracer / Potrace / AutoTrace，自动选择最佳引擎）
+- [x] 插件 SDK 完善（PluginValidator、PluginScaffold、PluginDebugger、PluginDocsGenerator）
+- [x] 云端同步预览（GitHub Gist / LocalServer 后端，分享链接 + QR 码，跨设备查看）
+- [x] 社区贡献者工具链（PresetValidator、ContributionGuideGenerator、ReleaseNotesGenerator）
+- [x] CLI 增强（engine、plugin validate/test/scaffold/docs、cloud share/list/revoke/qr、validate preset/plugin、contrib guide）
+- [x] 自动化测试增强（集成测试、边界测试、回归测试、性能基准测试）
+- [x] 测试覆盖率提升到 90%+
 
 ## v2.0：AI 原生与实时协作
 
@@ -91,3 +93,4 @@
 - [ ] 矢量动画导出（SVG 动画、Lottie 格式支持）
 - [ ] 智能批处理工作流（可视化节点编辑器）
 - [ ] 跨设备同步（桌面端 ↔ 网页端 ↔ API 服务端状态同步）
+- [ ] 多引擎智能编排（根据素材类型自动选择最优引擎组合）

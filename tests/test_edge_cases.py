@@ -99,7 +99,7 @@ class TestConcurrency:
             stats={"paths": 3},
         )
 
-        with patch("vector_studio.cli.trace_image", return_value=mock_result):
+        with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
             from vector_studio.cli import app
             from typer.testing import CliRunner
             runner = CliRunner()
@@ -114,11 +114,13 @@ class TestLargeFileHandling:
         image = Image.new("RGB", (6000, 6000), color=(0, 0, 0))
         image.save(img, format="PNG")
         out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
 
         with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=True):
             with patch("vector_studio.performance.StreamingImageProcessor.process_large_image", return_value=out):
                 with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
-                    result = trace_image(img, out, stream=True)
+                    with patch("vector_studio.tracer.optimize_svg_file"):
+                        result = trace_image(img, out, stream=True)
         assert result.engine == "streaming-vtracer"
 
     def test_very_large_file_size(self, tmp_path: Path):
@@ -169,3 +171,124 @@ class TestMemoryAndResourceLimits:
             assert loader.is_loaded("fake_module")
             loader.unload("fake_module")
             assert not loader.is_loaded("fake_module")
+
+
+class TestEmptyAndCorruptFilesMore:
+    def test_zero_byte_jpg_raises_error(self, tmp_path: Path):
+        empty = tmp_path / "empty.jpg"
+        empty.write_bytes(b"")
+        out = tmp_path / "out.svg"
+        with pytest.raises((FileNotFoundError, ValueError, RuntimeError, OSError)):
+            trace_image(empty, out)
+
+    def test_truncated_png_raises_error(self, tmp_path: Path):
+        bad = tmp_path / "bad.png"
+        bad.write_bytes(b"\x89PNG\r\n\x1a\n")
+        out = tmp_path / "out.svg"
+        with pytest.raises((ValueError, RuntimeError, OSError)):
+            trace_image(bad, out)
+
+    def test_unsupported_extension_tiff(self, tmp_path: Path):
+        # tiff is actually supported, so test a truly unsupported one
+        bad = tmp_path / "image.raw"
+        bad.write_text("not a real raw")
+        out = tmp_path / "out.svg"
+        with pytest.raises(ValueError, match="Unsupported input format"):
+            trace_image(bad, out)
+
+
+class TestNetworkAndExternalFailuresMore:
+    def test_api_client_timeout(self, tmp_path: Path):
+        from vector_studio.api_client import VectorStudioClient
+        client = VectorStudioClient("http://localhost:9999")
+        with patch("urllib.request.urlopen", side_effect=Exception("Timeout")):
+            with pytest.raises(Exception):
+                client.health()
+
+    def test_market_search_network_failure(self, tmp_path: Path):
+        from vector_studio.market import PresetMarket
+        market = PresetMarket()
+        with patch("urllib.request.urlopen", side_effect=Exception("DNS error")):
+            presets = market.search("logo")
+        assert presets == []
+
+
+class TestConcurrencyMore:
+    def test_concurrent_plugin_preprocess(self, tmp_path: Path):
+        from vector_studio.plugin_interface import Plugin
+        from vector_studio.plugins import PluginManager
+        from PIL import Image
+        import threading
+
+        class SlowPlugin(Plugin):
+            name = "slow"
+            lock = threading.Lock()
+            count = 0
+
+            def preprocess(self, image, options):
+                with self.lock:
+                    SlowPlugin.count += 1
+                return image
+
+        manager = PluginManager()
+        manager.register_plugin(SlowPlugin)
+        img = Image.new("RGB", (10, 10))
+        errors = []
+
+        def worker():
+            try:
+                manager.run_preprocess(img, {})
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        assert SlowPlugin.count == 10
+
+    def test_concurrent_batch_with_same_output_dir(self, tmp_path: Path):
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        output_dir = tmp_path / "output"
+        for i in range(3):
+            (input_dir / f"img{i}.png").write_bytes(b"fake")
+
+        mock_result = TraceResult(
+            input_path=input_dir / "img0.png",
+            svg_path=output_dir / "img0.svg",
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
+            from vector_studio.cli import app
+            from typer.testing import CliRunner
+            runner = CliRunner()
+            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2"])
+        assert result.exit_code == 0
+
+
+class TestMemoryAndResourceLimitsMore:
+    def test_performance_monitor_estimate_large_image(self):
+        from vector_studio.performance import PerformanceMonitor
+        from vector_studio.models import TraceOptions
+        monitor = PerformanceMonitor()
+        opts = TraceOptions(colormode="color", mode="spline")
+        estimated = monitor.estimate_conversion_time((8000, 8000), opts)
+        assert estimated > 0
+        assert isinstance(estimated, float)
+
+    def test_lazy_module_loader_double_load(self):
+        from vector_studio.performance import LazyModuleLoader
+        loader = LazyModuleLoader()
+        with patch("importlib.import_module") as mock_import:
+            mock_mod = MagicMock()
+            mock_import.return_value = mock_mod
+            loader.load("fake_module")
+            loader.load("fake_module")
+            assert mock_import.call_count == 1  # Should cache

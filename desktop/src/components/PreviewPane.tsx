@@ -10,6 +10,10 @@ interface PreviewPaneProps {
   outputFormat?: 'svg' | 'pdf' | 'png';
   onDownload?: () => void;
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  // v1.2 cloud share
+  onCloudShare?: () => void;
+  shareUrl?: string;
+  shareQrCode?: string;
 }
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
@@ -21,6 +25,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   outputFormat = 'svg',
   onDownload,
   onToast,
+  onCloudShare,
+  shareUrl,
+  shareQrCode,
 }) => {
   const [mode, setMode] = useState<'side-by-side' | 'overlay'>('side-by-side');
   const [overlayPos, setOverlayPos] = useState(50);
@@ -147,8 +154,23 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
               Download {outputFormat.toUpperCase()}
             </button>
           )}
+          {displayResult && (
+            <button className="btn btn-sm btn-secondary" onClick={onCloudShare}>
+              ☁️ Share
+            </button>
+          )}
         </div>
       </div>
+
+      {shareUrl && (
+        <div className="preview-share-bar" style={{ padding: '8px 12px', background: '#f5f5f5', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 14 }}>☁️ Share URL:</span>
+          <a href={shareUrl} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: '#0066cc' }}>{shareUrl}</a>
+          {shareQrCode && (
+            <img src={shareQrCode} alt="QR" style={{ width: 48, height: 48, marginLeft: 'auto' }} />
+          )}
+        </div>
+      )}
 
       <div className="preview-body" ref={containerRef}>
         {!hasContent && (

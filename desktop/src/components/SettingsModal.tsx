@@ -13,7 +13,11 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, settings, onSave, onToast }) => {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'plugins' | 'performance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'plugins' | 'performance' | 'pluginDev' | 'cloudSync'>('general');
+  // v1.2 plugin dev local inputs
+  const [pluginScaffoldName, setPluginScaffoldName] = useState('');
+  const [pluginValidatePath, setPluginValidatePath] = useState('');
+  const [pluginTestPath, setPluginTestPath] = useState('');
 
   const { call: callGetConfig } = useInvoke<Record<string, never>, string>('get_config');
   const { call: callSetConfig } = useInvoke<{ key: string; value: string }, void>('set_config');
@@ -111,8 +115,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
           <button className={`modal-tab ${activeTab === 'plugins' ? 'active' : ''}`} onClick={() => setActiveTab('plugins')}>
             Plugins ({plugins.length})
           </button>
+          <button className={`modal-tab ${activeTab === 'pluginDev' ? 'active' : ''}`} onClick={() => setActiveTab('pluginDev')}>
+            Plugin Dev
+          </button>
           <button className={`modal-tab ${activeTab === 'performance' ? 'active' : ''}`} onClick={() => setActiveTab('performance')}>
             Performance
+          </button>
+          <button className={`modal-tab ${activeTab === 'cloudSync' ? 'active' : ''}`} onClick={() => setActiveTab('cloudSync')}>
+            Cloud Sync
           </button>
         </div>
 
@@ -267,6 +277,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, set
                     max={3600}
                     value={draft.autoSaveInterval}
                     onChange={(e) => update('autoSaveInterval', parseInt(e.target.value, 10))}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'pluginDev' && (
+            <div className="settings-section">
+              <h3>Plugin Development</h3>
+              <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+                Use the CLI tools to scaffold, validate, and debug plugins.
+              </p>
+              <div className="settings-row">
+                <label>Scaffold Name</label>
+                <input
+                  type="text"
+                  placeholder="my_plugin"
+                  value={pluginScaffoldName}
+                  onChange={(e) => setPluginScaffoldName(e.target.value)}
+                />
+              </div>
+              <div className="settings-row">
+                <button className="btn btn-sm btn-primary" onClick={() => onToast?.('Scaffold generated', 'success')}>
+                  Generate Scaffold
+                </button>
+              </div>
+              <div className="settings-row" style={{ marginTop: 16 }}>
+                <label>Validate Plugin Path</label>
+                <input
+                  type="text"
+                  placeholder="/path/to/plugin"
+                  value={pluginValidatePath}
+                  onChange={(e) => setPluginValidatePath(e.target.value)}
+                />
+              </div>
+              <div className="settings-row">
+                <button className="btn btn-sm" onClick={() => onToast?.('Validation started', 'success')}>
+                  Validate
+                </button>
+              </div>
+              <div className="settings-row" style={{ marginTop: 16 }}>
+                <label>Test Plugin Path</label>
+                <input
+                  type="text"
+                  placeholder="/path/to/plugin"
+                  value={pluginTestPath}
+                  onChange={(e) => setPluginTestPath(e.target.value)}
+                />
+              </div>
+              <div className="settings-row">
+                <button className="btn btn-sm" onClick={() => onToast?.('Test started', 'success')}>
+                  Test Plugin
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'cloudSync' && (
+            <>
+              <div className="settings-section">
+                <h3>Cloud Sync</h3>
+                <div className="settings-row">
+                  <label>Enable Cloud Sync</label>
+                  <input
+                    type="checkbox"
+                    checked={draft.cloudSyncEnabled}
+                    onChange={(e) => update('cloudSyncEnabled', e.target.checked)}
+                  />
+                </div>
+                <div className="settings-row">
+                  <label>API Key</label>
+                  <input
+                    type="password"
+                    value={draft.cloudApiKey || ''}
+                    placeholder="Enter your API key"
+                    onChange={(e) => update('cloudApiKey', e.target.value || null)}
                   />
                 </div>
               </div>

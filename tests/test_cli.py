@@ -783,11 +783,12 @@ class TestPluginCommands:
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
+        manager = PluginManager()
+        manager._plugin_classes = {"watermark": WatermarkPlugin}
         with patch("vector_studio.cli.Config.load", return_value=cfg):
             with patch("vector_studio.cli.Config.save"):
-                with patch.object(PluginManager, "_plugin_classes", {"watermark": WatermarkPlugin}):
-                    with patch.object(PluginManager, "_enabled", set()):
-                        result = runner.invoke(app, ["plugin", "enable", "watermark"])
+                with patch("vector_studio.cli.PluginManager", return_value=manager):
+                    result = runner.invoke(app, ["plugin", "enable", "watermark"])
         assert result.exit_code == 0
         assert "Enabled" in result.output
 
@@ -1042,3 +1043,101 @@ class TestEngineCommands:
                 result = runner.invoke(app, ["engine", "auto", str(img)])
         assert result.exit_code == 0
         assert "vtracer" in result.output or "Done" in result.output
+
+
+class TestEngineCommandsMore:
+    def test_engine_benchmark_with_multiple_engines(self, tmp_path):
+        img = tmp_path / "img.png"
+        img.write_bytes(b"fake")
+        with patch("vector_studio.engines.EngineBenchmark.compare_engines", return_value=[
+            {"engine": "vtracer", "elapsed_seconds": 0.5, "file_bytes": 100, "paths": 3, "quality_score": 80},
+            {"engine": "potrace", "elapsed_seconds": 0.3, "file_bytes": 80, "paths": 2, "quality_score": 75},
+        ]):
+            result = runner.invoke(app, ["engine", "benchmark", str(img), "--engine", "vtracer", "--engine", "potrace"])
+        assert result.exit_code == 0
+        assert "vtracer" in result.output
+        assert "potrace" in result.output
+
+
+class TestCloudCommandsMore:
+    def test_cloud_share_with_custom_expire(self, tmp_path):
+        svg = tmp_path / "test.svg"
+        svg.write_text("<svg></svg>")
+        with patch("vector_studio.cli._get_cloud_manager") as mock_mgr:
+            mock_mgr.return_value.share_svg.return_value = {
+                "url": "http://localhost:8000/share/abc",
+                "expire_at": "2025-01-01",
+                "file_id": "abc",
+                "qr_code": "base64data",
+            }
+            result = runner.invoke(app, ["cloud", "share", str(svg), "--expire", "48"])
+        assert result.exit_code == 0
+        assert "Shared" in result.output
+
+    def test_cloud_share_missing_file(self):
+        result = runner.invoke(app, ["cloud", "share", "/nonexistent/file.svg"])
+        assert result.exit_code != 0
+
+    def test_cloud_qr_with_output(self, tmp_path):
+        with patch("vector_studio.cli._get_cloud_manager") as mock_mgr:
+            mock_mgr.return_value.backend.get_qr_code.return_value = b"pngdata"
+            out = tmp_path / "qr.png"
+            result = runner.invoke(app, ["cloud", "qr", "abc", "--output", str(out)])
+        assert result.exit_code == 0
+        assert out.exists()
+
+
+class TestContribCommandsMore:
+    def test_contrib_guide_custom_output(self, tmp_path):
+        output = tmp_path / "CUSTOM_CONTRIBUTING.md"
+        result = runner.invoke(app, ["contrib", "guide", "--output", str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+
+
+class TestCliEngineFlagOnTrace:
+    def test_trace_with_stream_flag(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="streaming-vtracer",
+            elapsed_seconds=1.0,
+            stats={},
+        )
+        with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
+            result = runner.invoke(app, ["trace", str(img), "--stream"])
+        assert result.exit_code == 0
+        assert mock_trace.call_args[1]["stream"] is True
+
+    def test_trace_with_gpu_flag(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=1.0,
+            stats={},
+        )
+        with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
+            result = runner.invoke(app, ["trace", str(img), "--gpu"])
+        assert result.exit_code == 0
+        assert mock_trace.call_args[1]["use_gpu"] is True
+
+    def test_trace_with_ai_simplify_flag(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=1.0,
+            stats={},
+        )
+        with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
+            result = runner.invoke(app, ["trace", str(img), "--ai-simplify", "--simplify-type", "photo"])
+        assert result.exit_code == 0
+        assert mock_trace.call_args[1]["ai_simplify"] is True
+        assert mock_trace.call_args[1]["simplify_type"] == "photo"

@@ -468,3 +468,90 @@ class TestAsyncConvertMore:
             )
         assert response.status_code == 400
         assert "Unsupported input format" in response.json()["detail"]
+
+
+class TestShareEndpointsMore:
+    def test_share_missing_file(self):
+        response = client.post("/share")
+        assert response.status_code == 422
+
+    def test_share_qr_not_found(self):
+        from vector_studio.cloud_sync import LocalServerBackend
+        from datetime import datetime, timezone, timedelta
+        import tempfile
+        tmpdir = Path(tempfile.mkdtemp())
+        backend = LocalServerBackend(storage_dir=tmpdir, base_url="http://localhost:8000")
+        # Do NOT add "abc" to shares so it returns 404
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.backend = backend
+            response = client.get("/share/abc/qr")
+        assert response.status_code == 404
+
+    def test_share_with_custom_expire(self, tmp_path: Path):
+        svg = tmp_path / "test.svg"
+        svg.write_text("<svg></svg>")
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.share_svg.return_value = {
+                "url": "http://localhost:8000/share/abc",
+                "file_id": "abc",
+                "expire_at": "2025-01-01T00:00:00",
+                "qr_code": "base64data",
+            }
+            with svg.open("rb") as f:
+                response = client.post("/share?expire_hours=48", files={"file": ("test.svg", f, "image/svg+xml")})
+        assert response.status_code == 200
+        assert response.json()["file_id"] == "abc"
+
+
+class TestApiHealthMore:
+    def test_health_returns_version(self):
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "version" in data
+        assert data["status"] == "ok"
+
+
+class TestApiConvertMore:
+    def test_convert_with_custom_options(self, tmp_path: Path):
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+        svg = tmp_path / "out.svg"
+        svg.write_text("<svg></svg>")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=svg,
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+        with patch("vector_studio.api.trace_image", return_value=mock_result):
+            with img.open("rb") as f:
+                response = client.post(
+                    "/convert",
+                    files={"file": ("test.png", f, "image/png")},
+                    data={"preset": "logo", "options": '{"filter_speckle": 2}'},
+                )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/svg+xml"
+
+    def test_convert_with_empty_options(self, tmp_path: Path):
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+        svg = tmp_path / "out.svg"
+        svg.write_text("<svg></svg>")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=svg,
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+        with patch("vector_studio.api.trace_image", return_value=mock_result):
+            with img.open("rb") as f:
+                response = client.post(
+                    "/convert",
+                    files={"file": ("test.png", f, "image/png")},
+                    data={"preset": "poster", "options": "{}"},
+                )
+        assert response.status_code == 200

@@ -373,6 +373,7 @@ class TestTraceImageAdvancedOptions:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake image data")
         out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
         normalized = tmp_path / "normalized.png"
         from PIL import Image
         Image.new("RGB", (10, 10)).save(normalized)
@@ -380,7 +381,7 @@ class TestTraceImageAdvancedOptions:
         with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=True):
             with patch("vector_studio.performance.StreamingImageProcessor.process_large_image", return_value=out):
                 with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
-                    with patch("vector_studio.tracer.prepare_input", return_value=normalized):
+                    with patch("vector_studio.tracer.optimize_svg_file"):
                         result = trace_image(img, out, stream=True)
         assert result.engine == "streaming-vtracer"
 
@@ -437,12 +438,16 @@ class TestTraceImageAdvancedOptions:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake image data")
         out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
         normalized = tmp_path / "normalized.png"
         from PIL import Image
         Image.new("RGB", (10, 10)).save(normalized)
 
-        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
-            mock_prepare.return_value = normalized
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
             with patch("vector_studio.tracer._trace_with_python_binding"):
                 with patch("vector_studio.tracer.optimize_svg_file"):
                     with patch("vector_studio.tracer.svg_stats", return_value={}):
@@ -485,3 +490,118 @@ class TestTraceImageAdvancedOptions:
                             with patch("vector_studio.ai_ocr.integrate_text_to_svg"):
                                 result = trace_image(img, out, ai_ocr=True, ocr_lang="eng")
         assert result.svg_path == out
+
+
+class TestTraceImageEngineParameter:
+    """Tests for explicit engine parameter passing."""
+
+    def test_explicit_potrace_engine(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        mock_engine = MagicMock()
+        mock_engine.is_available.return_value = True
+        mock_engine.trace.return_value = None
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        result = trace_image(img, out, engine="potrace")
+        assert result.engine == "potrace"
+
+    def test_explicit_autotrace_engine(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        mock_engine = MagicMock()
+        mock_engine.is_available.return_value = True
+        mock_engine.trace.return_value = None
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        result = trace_image(img, out, engine="autotrace")
+        assert result.engine == "autotrace"
+
+    def test_unavailable_engine_falls_back_to_vtracer(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        mock_engine = MagicMock()
+        mock_engine.is_available.return_value = False
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer.VTracerEngine") as mock_vtracer_cls:
+                mock_vtracer = mock_vtracer_cls.return_value
+                mock_vtracer.is_available.return_value = True
+                with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
+                    with patch("vector_studio.tracer.optimize_svg_file"):
+                        with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                            result = trace_image(img, out, engine="potrace")
+        assert result.engine == "vtracer"
+
+    def test_unknown_engine_falls_back_to_vtracer(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer.VTracerEngine") as mock_vtracer_cls:
+                mock_vtracer = mock_vtracer_cls.return_value
+                mock_vtracer.is_available.return_value = True
+                with patch("vector_studio.engines.EngineRegistry.get_engine", side_effect=ValueError("unknown")):
+                    with patch("vector_studio.tracer.optimize_svg_file"):
+                        with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                            result = trace_image(img, out, engine="unknown_engine")
+        assert result.engine == "vtracer"
+
+    def test_engine_case_insensitive(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        mock_engine = MagicMock()
+        mock_engine.is_available.return_value = True
+        mock_engine.trace.return_value = None
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        result = trace_image(img, out, engine="VTRACER")
+        assert result.engine == "vtracer"
