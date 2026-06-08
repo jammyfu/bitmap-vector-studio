@@ -9,10 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- Tauri 桌面端
-- 拖拽队列
-- 原生文件菜单
-- 自动更新机制
+- v1.1 性能优化与体验打磨
+- v2.0 AI 原生与实时协作
+
+## [1.0.0] - 2026-06-08
+
+### Added
+
+- **Tauri 桌面应用**：完整的跨平台桌面应用，基于 Tauri（Rust + React）。
+  - `desktop/`：桌面端源码目录，包含 React 前端和 Rust 后端。
+  - 原生窗口和菜单：文件菜单（打开/保存/导出）、编辑菜单（撤销/重做/复制）、视图菜单（预览模式/缩放/全屏）、帮助菜单（文档/检查更新/关于）。
+  - 三栏布局：左侧文件队列、中间预览画布、右侧参数面板。
+- **文件拖拽队列**：支持多文件拖拽到窗口，自动加入转换队列。
+  - 队列管理：添加、删除、清空、重新排序。
+  - 进度跟踪：每个任务显示转换进度、状态（等待中/转换中/已完成/失败）。
+  - 批量导出：队列任务完成后一键导出所有 SVG。
+- **前端-Rust-Python 桥接**：23 个 Tauri Command 实现前端与 Python 后端的无缝通信。
+  - `trace_image`、`batch_convert`、`get_presets`、`save_preset`、`delete_preset` 等核心转换命令。
+  - `get_history`、`clear_history`、`export_history` 历史管理命令。
+  - `get_plugins`、`enable_plugin`、`disable_plugin` 插件管理命令。
+  - `get_market_presets`、`install_market_preset`、`publish_preset` 市场命令。
+  - `open_file_dialog`、`save_file_dialog` 原生文件对话框。
+  - `check_update`、`install_update` 自动更新命令。
+- **实时预览（桌面端增强）**：参数变化 600ms 防抖触发预览，支持暂停/恢复实时预览。
+- **预设市场浏览器**：桌面端内置市场浏览器，支持搜索、分类筛选、一键安装、本地评分。
+- **插件管理器**：桌面端图形化插件管理，显示插件列表、启用/禁用开关、Hook 信息。
+- **历史面板**：桌面端历史任务查看，支持参数复用、删除单条/清空全部、导出报告。
+- **键盘快捷键**：
+  - `Ctrl+O`：打开文件
+  - `Ctrl+M`：打开市场
+  - `Ctrl+P`：打开插件管理器
+  - `Ctrl+H`：打开历史面板
+  - `Ctrl+,`：打开设置
+  - `Esc`：关闭当前面板/取消操作
+- **自动更新**：Tauri updater 集成，启动时自动检测 GitHub Releases 新版本并提示安装。
+- **多平台打包**：支持 MSI、NSIS、DMG、App、AppImage、DEB、RPM 七种安装包格式。
+- **GitHub Actions CI**：`.github/workflows/` 新增跨平台桌面构建工作流，自动构建 Windows / macOS / Linux 安装包并上传到 Releases。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `1.0.0`。
+- **README 重构**：新增桌面应用板块，使用方式重新排序（桌面应用为首选推荐）。
+- **开发状态升级**：`pyproject.toml` 中 `Development Status` 从 `3 - Alpha` 更新为 `4 - Beta`。
+- **项目结构扩展**：新增 `desktop/` 目录，包含 `src/`（React 前端）、`src-tauri/`（Rust 后端）、`dist/`（构建输出）。
+
+### Fixed
+
+- 桌面端首次启动时自动检测 Python 环境并提示安装依赖，避免启动失败。
+- 文件拖拽时正确处理多文件选择和文件夹过滤（仅接受图片文件）。
+- 队列任务失败时自动记录错误日志，不影响其他任务继续执行。
+- 实时预览在高频参数调整时避免重复请求（600ms 防抖 + 请求去重）。
+- 自动更新在检查失败时静默处理，不阻断应用启动流程。
+
+---
+
+> **🎉 1.0.0 是 Bitmap Vector Studio 的首个稳定版本。** 从 v0.1 的 MVP 到 v1.0 的完整桌面应用，项目经历了 5 个主要迭代，涵盖了核心转换、智能优化、生态集成、AI 辅助和桌面产品化五个阶段。感谢所有贡献者的支持！
 
 ## [0.5.0] - 2026-06-08
 

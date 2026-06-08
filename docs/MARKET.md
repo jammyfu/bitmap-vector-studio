@@ -1,6 +1,6 @@
 # 预设市场文档
 
-Bitmap Vector Studio v0.5 引入预设市场（Preset Market），允许用户浏览、搜索、安装和发布矢量化预设。市场后端基于 GitHub Gist 和 GitHub Repository，无需额外服务器即可实现预设的在线分享与分发。
+Bitmap Vector Studio v1.0 引入预设市场（Preset Market），允许用户浏览、搜索、安装和发布矢量化预设。市场后端基于 GitHub Gist 和 GitHub Repository，无需额外服务器即可实现预设的在线分享与分发。
 
 ---
 

@@ -1,6 +1,8 @@
 # API 文档
 
-Bitmap Vector Studio v0.5 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
+Bitmap Vector Studio v1.0 提供基于 FastAPI 的 RESTful API，支持同步/异步位图转矢量转换、批量任务、预设查询和智能推荐。
+
+> **v1.0 新增**：桌面应用通过 Tauri Command 桥接 Python 后端，提供与 Web API 等价的功能。详见 [docs/DESKTOP.md](DESKTOP.md)。
 
 ---
 
@@ -70,7 +72,7 @@ docker-compose up -d vector-studio
 ```json
 {
   "status": "ok",
-  "version": "0.5.0"
+  "version": "1.0.0"
 }
 ```
 
@@ -373,7 +375,7 @@ client = VectorStudioClient("http://localhost:8000")
 
 # 检查服务健康
 health = client.health()
-print(health)  # {'status': 'ok', 'version': '0.5.0'}
+print(health)  # {'status': 'ok', 'version': '1.0.0'}
 ```
 
 ### 同步转换
@@ -504,6 +506,58 @@ curl -X POST "http://localhost:8000/batch" \
 ```bash
 curl -X POST "http://localhost:8000/recommend" \
   -F "file=@logo.png" | python -m json.tool
+```
+
+---
+
+## 桌面端 API（Tauri Command）
+
+v1.0 桌面应用通过 Tauri Command 桥接 Python 后端，提供与 Web API 等价的功能。所有 Command 均为异步，前端通过 `@tauri-apps/api` 调用。
+
+### Command 列表
+
+| Command | 参数 | 返回值 | 说明 |
+|---|---|---|---|
+| `trace_image` | `{ filePath, options }` | `{ svgPath, stats, duration }` | 单图转换 |
+| `batch_convert` | `{ filePaths, options }` | `{ taskIds }` | 批量转换 |
+| `get_presets` | - | `Preset[]` | 获取所有预设 |
+| `save_preset` | `{ name, options, description }` | `{ success }` | 保存用户预设 |
+| `delete_preset` | `{ name }` | `{ success }` | 删除用户预设 |
+| `get_history` | `{ limit? }` | `TaskRecord[]` | 获取历史任务 |
+| `clear_history` | - | `{ success }` | 清空历史 |
+| `export_history` | `{ format, path? }` | `{ filePath }` | 导出历史报告 |
+| `get_plugins` | - | `PluginInfo[]` | 获取插件列表 |
+| `enable_plugin` | `{ name }` | `{ success }` | 启用插件 |
+| `disable_plugin` | `{ name }` | `{ success }` | 禁用插件 |
+| `get_market_presets` | `{ backend?, query? }` | `MarketPreset[]` | 获取市场预设 |
+| `install_market_preset` | `{ id, backend? }` | `{ success }` | 安装市场预设 |
+| `publish_preset` | `{ name, token, backend? }` | `{ presetId }` | 发布预设到市场 |
+| `open_file_dialog` | `{ multiple?, filters? }` | `string[]` | 打开文件对话框 |
+| `save_file_dialog` | `{ defaultName?, filter? }` | `string` | 保存文件对话框 |
+| `check_update` | - | `{ hasUpdate, version, url }` | 检查更新 |
+| `install_update` | - | `{ success }` | 安装更新 |
+| `get_app_version` | - | `string` | 获取应用版本 |
+| `show_notification` | `{ title, body }` | `{ success }` | 显示系统通知 |
+
+### 前端调用示例
+
+```typescript
+import { invoke } from '@tauri-apps/api/tauri';
+
+// 单图转换
+const result = await invoke('trace_image', {
+  filePath: '/path/to/image.png',
+  options: { preset: 'logo', color_precision: 7 }
+});
+
+// 获取预设列表
+const presets = await invoke('get_presets');
+
+// 打开文件对话框
+const files = await invoke('open_file_dialog', {
+  multiple: true,
+  filters: [{ name: 'Images', extensions: ['png', 'jpg', 'webp'] }]
+});
 ```
 
 ---

@@ -1,6 +1,6 @@
 [package]
 name = "bitmap-vector-studio-desktop"
-version = "0.5.0"
+version = "1.0.0"
 description = "Bitmap Vector Studio desktop application"
 authors = ["Bitmap Vector Studio Contributors"]
 license = "MIT"

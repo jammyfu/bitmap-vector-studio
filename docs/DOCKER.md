@@ -1,6 +1,8 @@
 # Docker 使用指南
 
-Bitmap Vector Studio v0.5 提供多阶段 Dockerfile 和 docker-compose.yml，支持以 API 服务或 CLI 工具两种方式运行。
+Bitmap Vector Studio v1.0 提供多阶段 Dockerfile 和 docker-compose.yml，支持以 API 服务或 CLI 工具两种方式运行。
+
+> **v1.0 新增**：桌面应用已作为首选使用方式，Docker 部署适合服务器端 API 服务和自动化流水线场景。详见 [docs/DESKTOP.md](DESKTOP.md)。
 
 ---
 
@@ -325,7 +327,7 @@ docker run --user $(id -u):$(id -g) \
 docker buildx create --use
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t jammyfu/bitmap-vector-studio:0.5.0 \
+  -t jammyfu/bitmap-vector-studio:1.0.0 \
   -t jammyfu/bitmap-vector-studio:latest \
   --push .
 ```
@@ -336,6 +338,6 @@ docker buildx build \
 docker buildx build \
   --target cli \
   --platform linux/amd64,linux/arm64 \
-  -t jammyfu/bitmap-vector-studio:0.5.0-cli \
+  -t jammyfu/bitmap-vector-studio:1.0.0-cli \
   --push .
 ```

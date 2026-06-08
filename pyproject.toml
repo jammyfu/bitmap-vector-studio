@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bitmap-vector-studio"
-version = "0.5.0"
+version = "1.0.0"
 description = "Illustrator-like bitmap/raster to SVG vector conversion studio powered by VTracer."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["svg", "vectorization", "vtracer", "bitmap", "raster-to-vector", "image-trace"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: End Users/Desktop",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
