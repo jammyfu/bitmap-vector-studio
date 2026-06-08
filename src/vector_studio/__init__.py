@@ -33,6 +33,41 @@ from .svg_tools import (
     suggest_optimization,
 )
 
+from .smart_background import (
+    detect_background_color,
+    remove_background,
+    is_likely_logo,
+)
+from .enhance import (
+    edge_enhance,
+    scan_denoise,
+    auto_contrast,
+    sharpen,
+    adaptive_enhance,
+)
+from .smart_recommend import (
+    analyze_image_features,
+    recommend_preset,
+    recommend_for_image,
+)
+from .svg_optimizer import (
+    merge_same_color_paths,
+    merge_similar_colors,
+    simplify_path_data,
+    svg_quality_score,
+    optimize_svg_comprehensive,
+)
+from .param_search import (
+    ParamGrid,
+    search_best_params,
+    quick_search,
+    score_result,
+)
+from .task_queue import (
+    ConversionTask,
+    TaskQueue,
+)
+
 __all__ = [
     # Core
     "TraceOptions",
@@ -64,6 +99,34 @@ __all__ = [
     "analyze_svg_structure",
     "extract_color_palette",
     "suggest_optimization",
+    # Smart background (v0.3)
+    "detect_background_color",
+    "remove_background",
+    "is_likely_logo",
+    # Enhance (v0.3)
+    "edge_enhance",
+    "scan_denoise",
+    "auto_contrast",
+    "sharpen",
+    "adaptive_enhance",
+    # Smart recommend (v0.3)
+    "analyze_image_features",
+    "recommend_preset",
+    "recommend_for_image",
+    # SVG optimizer (v0.3)
+    "merge_same_color_paths",
+    "merge_similar_colors",
+    "simplify_path_data",
+    "svg_quality_score",
+    "optimize_svg_comprehensive",
+    # Param search (v0.3)
+    "ParamGrid",
+    "search_best_params",
+    "quick_search",
+    "score_result",
+    # Task queue (v0.3)
+    "ConversionTask",
+    "TaskQueue",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

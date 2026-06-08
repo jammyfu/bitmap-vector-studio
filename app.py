@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import html
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
@@ -33,6 +34,49 @@ from vector_studio.external_editors import (
 )
 from vector_studio.svg_tools import export_svg_to_pdf, export_svg_to_png
 from vector_studio.tracer import trace_image
+
+# v0.3 modules — import with graceful degradation
+try:
+    from vector_studio.smart_recommend import recommend_for_image, analyze_image_features
+
+    _HAS_SMART_RECOMMEND = True
+except Exception:
+    _HAS_SMART_RECOMMEND = False
+
+try:
+    from vector_studio.smart_background import is_likely_logo, remove_background
+
+    _HAS_SMART_BG = True
+except Exception:
+    _HAS_SMART_BG = False
+
+try:
+    from vector_studio.enhance import adaptive_enhance
+
+    _HAS_ENHANCE = True
+except Exception:
+    _HAS_ENHANCE = False
+
+try:
+    from vector_studio.svg_optimizer import optimize_svg_comprehensive, svg_quality_score
+
+    _HAS_SVG_OPTIMIZER = True
+except Exception:
+    _HAS_SVG_OPTIMIZER = False
+
+try:
+    from vector_studio.param_search import quick_search, search_best_params, ParamGrid
+
+    _HAS_PARAM_SEARCH = True
+except Exception:
+    _HAS_PARAM_SEARCH = False
+
+try:
+    from vector_studio.task_queue import TaskQueue
+
+    _HAS_TASK_QUEUE = True
+except Exception:
+    _HAS_TASK_QUEUE = False
 
 st.set_page_config(page_title="Bitmap Vector Studio", page_icon="🖋️", layout="wide")
 st.title("Bitmap Vector Studio")
@@ -159,12 +203,35 @@ def extract_svg_layers(svg_text: str) -> list[dict]:
     return unique[:30]
 
 
+def _save_uploaded_file(uploaded_file, tmp_dir: Path) -> Path:
+    """将 Streamlit UploadedFile 保存到临时目录并返回路径。"""
+    suffix = Path(uploaded_file.name).suffix or ".png"
+    dest = tmp_dir / f"{uploaded_file.file_id or 'upload'}{suffix}"
+    dest.write_bytes(uploaded_file.getvalue())
+    return dest
+
+
+def _color_for_score(score: float) -> str:
+    """根据评分返回颜色标识。"""
+    if score >= 80:
+        return "🟢"
+    elif score >= 60:
+        return "🟡"
+    else:
+        return "🔴"
+
+
 # ---------------------------------------------------------------------------
 # Session state 初始化
 # ---------------------------------------------------------------------------
 if "initialized" not in st.session_state:
     apply_preset_values("poster")
     st.session_state.initialized = True
+    st.session_state.smart_remove_bg = False
+    st.session_state.enhance_enabled = False
+    st.session_state.enhance_type = "auto"
+    st.session_state.optimize_level = "basic"
+    st.session_state.batch_running = False
 
 # ---------------------------------------------------------------------------
 # 侧边栏
@@ -254,6 +321,9 @@ with st.sidebar:
 
     with st.expander("🖼️ 预处理"):
         st.checkbox("轻度降噪", key="denoise")
+        st.checkbox("🧠 智能背景透明", key="smart_remove_bg")
+        st.checkbox("✨ 图像增强", key="enhance_enabled")
+        st.selectbox("增强类型", ["auto", "scan", "photo", "logo"], key="enhance_type")
         st.checkbox("限制输入最大边长", key="max_input_side_enabled")
         st.number_input(
             "最大边长 px",
@@ -267,7 +337,14 @@ with st.sidebar:
         st.slider("Posterize bits", 1, 8, key="posterize", disabled=not st.session_state.posterize_enabled)
 
     with st.expander("📤 导出选项"):
-        st.checkbox("压缩清理 SVG", value=True, key="optimize")
+        st.checkbox("启用 SVG 优化", value=True, key="optimize")
+        st.radio(
+            "SVG优化级别",
+            ["basic", "comprehensive", "aggressive"],
+            index=["basic", "comprehensive", "aggressive"].index(st.session_state.get("optimize_level", "basic")),
+            key="optimize_level",
+        )
+        st.caption("basic = 清理空白 | comprehensive = 合并路径+颜色 | aggressive = 最大压缩")
         st.checkbox("同时导出 PDF", value=False, key="export_pdf")
         st.checkbox("同时导出 PNG 预览", value=False, key="export_png")
 
@@ -350,22 +427,97 @@ with st.sidebar:
 
 options = build_options_from_state()
 optimize = st.session_state.get("optimize", True)
+optimize_level = st.session_state.get("optimize_level", "basic") if optimize else "none"
 export_pdf = st.session_state.get("export_pdf", False)
 export_png = st.session_state.get("export_png", False)
+smart_remove_bg = st.session_state.get("smart_remove_bg", False)
+enhance_enabled = st.session_state.get("enhance_enabled", False)
+enhance_type = st.session_state.get("enhance_type", "auto") if enhance_enabled else None
 
-uploaded = st.file_uploader("上传 PNG / JPG / WEBP / BMP / TIFF", type=["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"])
+uploaded = st.file_uploader(
+    "上传 PNG / JPG / WEBP / BMP / TIFF",
+    type=["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"],
+)
 
 if uploaded is not None:
+    # -----------------------------------------------------------------------
+    # 1. 智能分析区域
+    # -----------------------------------------------------------------------
+    with st.container():
+        if _HAS_SMART_RECOMMEND and st.button("🔍 智能分析", key="smart_analyze"):
+            with st.spinner("正在分析图片特征…"):
+                try:
+                    with tempfile.TemporaryDirectory(prefix="vector-studio-analyze-") as tmp:
+                        tmp_dir = Path(tmp)
+                        input_path = _save_uploaded_file(uploaded, tmp_dir)
+                        preset, confidence, reason, features = recommend_for_image(input_path)
+                        st.session_state["smart_analysis_result"] = {
+                            "preset": preset,
+                            "confidence": confidence,
+                            "reason": reason,
+                            "features": features,
+                        }
+                except Exception as e:
+                    st.session_state["ui_message"] = ("error", f"智能分析失败: {e}")
+                    st.rerun()
+
+        if "smart_analysis_result" in st.session_state:
+            result = st.session_state["smart_analysis_result"]
+            preset = result["preset"]
+            confidence = result["confidence"]
+            reason = result["reason"]
+            features = result["features"]
+
+            with st.container(border=True):
+                st.markdown("#### 🔍 智能分析结果")
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    st.markdown(f"**推荐预设:** `{preset}`")
+                    st.markdown(f"**置信度:** {confidence * 100:.0f}%")
+                with c2:
+                    st.markdown(f"**推荐理由:** {reason}")
+                with c3:
+                    if st.button("应用推荐", key="apply_recommend"):
+                        if preset in preset_options:
+                            apply_preset_values(preset)
+                            st.session_state["ui_message"] = ("success", f"已应用推荐预设 '{preset}'")
+                            st.rerun()
+                        else:
+                            st.warning(f"推荐预设 '{preset}' 不可用")
+
+                with st.expander("图片特征摘要"):
+                    fc1, fc2, fc3, fc4 = st.columns(4)
+                    fc1.metric("分辨率", f"{features.get('width', 0)}×{features.get('height', 0)}")
+                    fc2.metric("颜色数", features.get("color_count", "-"))
+                    fc3.metric("边缘密度", features.get("edge_density", "-"))
+                    fc4.metric("亮度均值", features.get("mean_brightness", "-"))
+
+                    if features.get("is_likely_logo"):
+                        st.info(f"🎯 检测到可能是 Logo: {features.get('logo_reason', '')}")
+
+    # 当智能背景透明开启时，如果检测到可能是Logo，显示提示信息
+    if smart_remove_bg and _HAS_SMART_BG:
+        try:
+            with tempfile.TemporaryDirectory(prefix="vector-studio-logo-check-") as tmp:
+                tmp_dir = Path(tmp)
+                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                from PIL import Image
+
+                with Image.open(input_path) as img:
+                    is_logo, logo_reason = is_likely_logo(img)
+                if is_logo:
+                    st.info(f"🧠 智能背景: 检测到 Logo 特征 ({logo_reason})，将自动移除背景")
+        except Exception:
+            pass
+
     preview_mode = st.radio("预览模式", ["并排对比", "叠加对比"], horizontal=True, key="preview_mode")
 
     if st.button("开始转换", type="primary"):
         with st.spinner("正在转换 SVG…"):
             with tempfile.TemporaryDirectory(prefix="vector-studio-ui-") as tmp:
                 tmp_dir = Path(tmp)
-                suffix = Path(uploaded.name).suffix or ".png"
-                input_path = tmp_dir / f"input{suffix}"
+                input_path = _save_uploaded_file(uploaded, tmp_dir)
                 svg_path = tmp_dir / "result.svg"
-                input_path.write_bytes(uploaded.getvalue())
 
                 try:
                     result = trace_image(
@@ -373,8 +525,11 @@ if uploaded is not None:
                         svg_path,
                         options,
                         optimize=optimize,
+                        optimize_level=optimize_level,
                         export_pdf=export_pdf,
                         export_png=export_png,
+                        smart_remove_bg=smart_remove_bg,
+                        enhance=enhance_type,
                     )
                     st.session_state["svg_text"] = result.svg_path.read_text(encoding="utf-8")
                     st.session_state["svg_bytes"] = result.svg_path.read_bytes()
@@ -384,6 +539,16 @@ if uploaded is not None:
                     st.session_state["pdf_bytes"] = result.pdf_path.read_bytes() if result.pdf_path else None
                     st.session_state["png_bytes"] = result.png_path.read_bytes() if result.png_path else None
                     st.session_state["last_preset_used"] = st.session_state.preset_selector
+
+                    # SVG 质量评分
+                    if _HAS_SVG_OPTIMIZER:
+                        try:
+                            scores = svg_quality_score(result.svg_path)
+                            st.session_state["svg_quality"] = scores
+                        except Exception:
+                            st.session_state["svg_quality"] = None
+                    else:
+                        st.session_state["svg_quality"] = None
 
                     try:
                         record_task(result, st.session_state.preset_selector, options)
@@ -473,6 +638,20 @@ if uploaded is not None:
         c3.metric("Paths", st.session_state.get("stats", {}).get("paths", 0))
         c4.metric("File size", f"{st.session_state.get('stats', {}).get('file_bytes', 0) / 1024:.1f} KB")
 
+        # SVG 质量评分
+        svg_quality = st.session_state.get("svg_quality")
+        if svg_quality:
+            st.subheader("质量评分")
+            overall = svg_quality.get("overall", 0)
+            color = _color_for_score(overall)
+            st.markdown(f"{color} **综合评分:** `{overall:.0f}` / 100")
+            with st.expander("各维度评分"):
+                q1, q2, q3, q4 = st.columns(4)
+                q1.metric("文件大小", svg_quality.get("file_size_score", 0))
+                q2.metric("路径效率", svg_quality.get("path_efficiency", 0))
+                q3.metric("复杂度", svg_quality.get("complexity_score", 0))
+                q4.metric("颜色效率", svg_quality.get("color_efficiency", 0))
+
         # SVG 结构
         with st.expander("📐 SVG 结构"):
             try:
@@ -556,5 +735,273 @@ if uploaded is not None:
                     st.warning(f"打开出错: {e}")
         else:
             st.info("未检测到可用的外部矢量编辑器（如 Inkscape、Illustrator 等）")
+
+    # -----------------------------------------------------------------------
+    # 4. 参数搜索面板
+    # -----------------------------------------------------------------------
+    with st.expander("🎯 参数搜索"):
+        if not _HAS_PARAM_SEARCH:
+            st.warning("参数搜索模块不可用")
+        else:
+            search_mode = st.radio("搜索模式", ["快速搜索", "深度搜索"], horizontal=True, key="search_mode")
+
+            if search_mode == "快速搜索":
+                preset_candidates = st.multiselect(
+                    "试跑预设",
+                    list(BUILTIN_PRESET_NAMES),
+                    default=["logo", "poster", "photo"],
+                    key="quick_search_presets",
+                )
+                if st.button("开始快速搜索", key="run_quick_search"):
+                    if not preset_candidates:
+                        st.warning("请至少选择一个预设")
+                    else:
+                        with st.spinner("正在快速搜索最佳预设…"):
+                            try:
+                                with tempfile.TemporaryDirectory(prefix="vector-studio-search-") as tmp:
+                                    tmp_dir = Path(tmp)
+                                    input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                    out_dir = tmp_dir / "search"
+                                    best_preset, best_path, best_score = quick_search(
+                                        input_path, out_dir, preset_candidates=preset_candidates
+                                    )
+                                    st.session_state["quick_search_result"] = {
+                                        "preset": best_preset,
+                                        "path": best_path,
+                                        "score": best_score,
+                                    }
+                                    st.success(f"最佳预设: {best_preset} (评分: {best_score:.1f})")
+                            except Exception as e:
+                                st.error(f"快速搜索失败: {e}")
+
+                if "quick_search_result" in st.session_state:
+                    res = st.session_state["quick_search_result"]
+                    st.markdown(f"**最佳预设:** `{res['preset']}` | **评分:** `{res['score']:.1f}`")
+                    if st.button("应用此预设", key="apply_quick_search"):
+                        preset = res["preset"]
+                        if preset in preset_options:
+                            apply_preset_values(preset)
+                            st.session_state["ui_message"] = ("success", f"已应用快速搜索结果 '{preset}'")
+                            st.rerun()
+                        else:
+                            st.warning(f"预设 '{preset}' 不可用")
+
+            else:
+                st.markdown("**深度搜索参数范围**")
+                dc1, dc2, dc3, dc4 = st.columns(4)
+                with dc1:
+                    cp_low = st.number_input("颜色精度下限", 1, 8, 4, key="deep_cp_low")
+                    cp_high = st.number_input("颜色精度上限", 1, 8, 8, key="deep_cp_high")
+                with dc2:
+                    fs_low = st.number_input("滤斑点下限", 0, 128, 0, key="deep_fs_low")
+                    fs_high = st.number_input("滤斑点上限", 0, 128, 8, key="deep_fs_high")
+                with dc3:
+                    ld_low = st.number_input("层级间隔下限", 0, 255, 8, key="deep_ld_low")
+                    ld_high = st.number_input("层级间隔上限", 0, 255, 32, key="deep_ld_high")
+                with dc4:
+                    ct_low = st.number_input("角点阈值下限", 0, 180, 40, key="deep_ct_low")
+                    ct_high = st.number_input("角点阈值上限", 0, 180, 80, key="deep_ct_high")
+
+                deep_presets = st.multiselect(
+                    "基础预设候选",
+                    list(BUILTIN_PRESET_NAMES),
+                    default=["logo", "poster", "photo"],
+                    key="deep_search_presets",
+                )
+                max_combinations = st.slider("最多试跑组合数", 1, 50, 20, key="deep_max_combo")
+
+                if st.button("开始深度搜索", key="run_deep_search"):
+                    with st.spinner("正在深度搜索最佳参数…"):
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="vector-studio-deep-") as tmp:
+                                tmp_dir = Path(tmp)
+                                input_path = _save_uploaded_file(uploaded, tmp_dir)
+                                out_dir = tmp_dir / "search"
+                                grid = ParamGrid(
+                                    color_precision_range=(int(cp_low), int(cp_high)),
+                                    filter_speckle_range=(int(fs_low), int(fs_high)),
+                                    layer_difference_range=(int(ld_low), int(ld_high)),
+                                    corner_threshold_range=(int(ct_low), int(ct_high)),
+                                    preset_candidates=deep_presets or ["poster"],
+                                )
+                                best_options, best_path, best_score, all_results = search_best_params(
+                                    input_path, out_dir, grid=grid, max_combinations=max_combinations
+                                )
+                                st.session_state["deep_search_result"] = {
+                                    "options": best_options,
+                                    "path": best_path,
+                                    "score": best_score,
+                                    "all_results": all_results,
+                                }
+                        except Exception as e:
+                            st.error(f"深度搜索失败: {e}")
+
+                if "deep_search_result" in st.session_state:
+                    res = st.session_state["deep_search_result"]
+                    best_options = res["options"]
+                    best_score = res["score"]
+                    all_results = res["all_results"]
+
+                    st.markdown(f"**最佳评分:** `{best_score:.1f}`")
+                    if st.button("应用此参数", key="apply_deep_search"):
+                        st.session_state.colormode = best_options.colormode
+                        st.session_state.hierarchical = best_options.hierarchical
+                        st.session_state.mode = best_options.mode
+                        st.session_state.filter_speckle = int(best_options.filter_speckle)
+                        st.session_state.color_precision = int(best_options.color_precision)
+                        st.session_state.layer_difference = int(best_options.layer_difference)
+                        st.session_state.corner_threshold = int(best_options.corner_threshold)
+                        st.session_state.length_threshold = float(best_options.length_threshold)
+                        st.session_state.splice_threshold = int(best_options.splice_threshold)
+                        st.session_state.path_precision = int(best_options.path_precision)
+                        st.session_state.max_iterations = int(best_options.max_iterations)
+                        st.session_state["ui_message"] = ("success", "已应用深度搜索最佳参数")
+                        st.rerun()
+
+                    with st.expander("搜索结果表格"):
+                        table_data = []
+                        for r in all_results:
+                            opts = r["options"]
+                            score = r["score"]
+                            elapsed = r.get("elapsed", 0)
+                            error = r.get("error", "")
+                            try:
+                                from vector_studio.svg_tools import svg_stats
+
+                                stats = svg_stats(r["svg_path"])
+                                file_bytes = stats.get("file_bytes", 0)
+                                paths = stats.get("paths", 0)
+                            except Exception:
+                                file_bytes = 0
+                                paths = 0
+                            table_data.append(
+                                {
+                                    "预设": getattr(opts, "preset_name", "-"),
+                                    "颜色精度": opts.color_precision,
+                                    "滤斑点": opts.filter_speckle,
+                                    "层级间隔": opts.layer_difference,
+                                    "角点阈值": opts.corner_threshold,
+                                    "文件大小(KB)": round(file_bytes / 1024, 1),
+                                    "路径数": paths,
+                                    "评分": round(score, 1) if score > float("-inf") else "失败",
+                                    "耗时(s)": round(elapsed, 2),
+                                    "错误": error[:30] if error else "",
+                                }
+                            )
+                        st.dataframe(table_data, use_container_width=True)
+
+    # -----------------------------------------------------------------------
+    # 5. 批量队列面板
+    # -----------------------------------------------------------------------
+    with st.expander("📦 批量队列"):
+        if not _HAS_TASK_QUEUE:
+            st.warning("批量队列模块不可用")
+        else:
+            batch_files = st.file_uploader(
+                "选择多个文件加入队列",
+                type=["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"],
+                accept_multiple_files=True,
+                key="batch_uploader",
+            )
+
+            if batch_files:
+                st.markdown(f"**已选择 {len(batch_files)} 个文件**")
+                for f in batch_files:
+                    st.caption(f"• {f.name}")
+
+                if st.button("➕ 添加到队列", key="add_batch"):
+                    try:
+                        if "batch_queue" not in st.session_state or st.session_state.batch_queue is None:
+                            st.session_state.batch_queue = TaskQueue(max_workers=4)
+                        queue = st.session_state.batch_queue
+                        task_ids = []
+                        with tempfile.TemporaryDirectory(prefix="vector-studio-batch-") as tmp:
+                            tmp_dir = Path(tmp)
+                            for f in batch_files:
+                                input_path = _save_uploaded_file(f, tmp_dir)
+                                out_path = tmp_dir / f"{Path(f.name).stem}.svg"
+                                tid = queue.add_task(
+                                    input_path,
+                                    out_path,
+                                    build_options_from_state(),
+                                    optimize_level=optimize_level,
+                                )
+                                task_ids.append(tid)
+                        st.session_state.batch_task_ids = task_ids
+                        st.session_state["ui_message"] = ("success", f"已添加 {len(task_ids)} 个任务到队列")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"添加队列失败: {e}")
+
+            # 队列控制与状态显示
+            queue = st.session_state.get("batch_queue")
+            if queue is not None:
+                st.divider()
+                ctrl1, ctrl2, ctrl3 = st.columns(3)
+                with ctrl1:
+                    if st.button("▶️ 开始批量转换", key="batch_start"):
+                        try:
+                            queue.start()
+                            st.session_state.batch_running = True
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"启动失败: {e}")
+                with ctrl2:
+                    if st.button("⏸️ 暂停", key="batch_pause"):
+                        try:
+                            queue.pause()
+                            st.session_state["ui_message"] = ("warning", "队列已暂停")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"暂停失败: {e}")
+                    if st.button("▶️ 恢复", key="batch_resume"):
+                        try:
+                            queue.resume()
+                            st.session_state.batch_running = True
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"恢复失败: {e}")
+                with ctrl3:
+                    if st.button("⏹️ 取消全部", key="batch_cancel"):
+                        try:
+                            for tid in st.session_state.get("batch_task_ids", []):
+                                queue.cancel(tid)
+                            st.session_state.batch_running = False
+                            st.session_state["ui_message"] = ("warning", "已取消所有任务")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"取消失败: {e}")
+
+                # 状态表格
+                statuses = queue.get_all_status()
+                if statuses:
+                    st.markdown("**任务列表**")
+                    table_rows = []
+                    for s in statuses:
+                        table_rows.append(
+                            {
+                                "任务ID": s["task_id"][:8],
+                                "文件": Path(s["input_path"]).name,
+                                "状态": s["status"],
+                                "进度": f"{s['progress']:.0f}%",
+                                "输出": Path(s["output_path"]).name,
+                            }
+                        )
+                    st.dataframe(table_rows, use_container_width=True)
+
+                    # 自动刷新
+                    if st.session_state.get("batch_running"):
+                        all_done = all(
+                            s["status"] in ("completed", "failed", "cancelled") for s in statuses
+                        )
+                        if not all_done:
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.session_state.batch_running = False
+                            st.success("批量转换已完成")
+                else:
+                    st.caption("队列为空")
+
 else:
     st.info("上传图片后，可以先用 `poster` 或 `logo` 预设；照片素材再切到 `photo` 。")

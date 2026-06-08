@@ -9,11 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- 自动背景透明处理
-- OpenCV 边缘增强与扫描件去噪
-- SVG 路径合并和颜色合并优化
-- 智能预设推荐
-- 批量任务队列与进度可视化
+- 插件系统与自定义后处理
+- 预设市场与在线分享
+- Docker 镜像与包管理器发布
+- AI 辅助重绘与 OCR
+
+## [0.3.0] - 2025-06-08
+
+### Added
+
+- **智能背景透明**：自动检测 Logo 类图片的背景色并移除，生成透明 PNG 后进入矢量化。支持边缘颜色聚类分析和非矩形背景检测。
+- **图像增强**：纯 Pillow 实现，无需 OpenCV。包含边缘增强（`edge_enhance`）、扫描件去噪（`scan_denoise`）、自适应对比度（`auto_contrast`）、智能锐化（`sharpen`）和自动类型判断（`adaptive_enhance`）。
+- **智能预设推荐**：分析图片颜色数量、边缘密度、宽高比、对称性等特征，自动推荐最佳预设（bw / logo / pixel_art / photo / poster / scan），并给出置信度和推荐理由。
+- **SVG 深度优化**：新增 `svg_optimizer` 模块，支持路径合并（`merge_same_color_paths`）、相似颜色合并（`merge_similar_colors`）、路径简化（`simplify_path_data`）和综合优化（`optimize_svg_comprehensive`）。
+- **SVG 质量评分**：从文件大小、路径效率、复杂度、颜色效率四个维度计算 SVG 综合质量分（0-100）。
+- **参数搜索**：`search` CLI 命令支持多参数批量试跑，自动挑选最优结果。支持完整网格搜索（`search_best_params`）和快速预设搜索（`quick_search`）。
+- **批量任务队列**：`TaskQueue` 支持异步并发转换、进度跟踪、失败重试、暂停恢复。`batch` 命令新增 `--workers` 和 `--retry` 选项。
+- **队列 CLI 子命令**：新增 `vector-studio queue add/status/start/report` 命令组，支持任务队列管理。
+- **优化级别控制**：`trace` 和 `batch` 命令新增 `--optimize-level` 选项（none / basic / comprehensive / aggressive），精细控制 SVG 优化深度。
+- **质量评分输出**：`trace` 和 `batch` 命令新增 `--score` 选项，转换后输出 SVG 质量评分。
+- **智能 CLI 选项**：`trace` 命令新增 `--smart-remove-bg`（背景透明）、`--enhance`（图像增强）、`--recommend`（预设推荐）。
+- **NumPy 可选依赖**：智能分析和背景透明功能推荐安装 NumPy，通过 `pip install -e ".[smart]"` 安装。
+- **完整测试覆盖**：新增 `test_smart_background.py`、`test_smart_recommend.py`、`test_enhance.py`、`test_svg_optimizer.py`、`test_param_search.py`、`test_task_queue.py` 等测试模块。
+
+### Changed
+
+- **CLI 增强**：`trace` 命令支持 `--recommend` 模式，仅分析图片并输出推荐预设，不执行转换。
+- **批量转换增强**：`batch` 命令当 `--workers > 1` 或 `--retry > 0` 时，自动使用 `TaskQueue` 并发处理。
+- **SVG 优化升级**：`optimize_svg_text` 和 `optimize_svg_file` 保留原有功能，`svg_optimizer` 提供更深度的优化能力。
+- **依赖调整**：核心依赖保持纯 Pillow，智能功能通过可选依赖 NumPy 增强。
+
+### Fixed
+
+- 批量转换在大文件夹下的内存占用优化（TaskQueue 流式处理）。
+- SVG 路径合并时保留命名空间和 viewBox 的稳定性修复。
+- 参数搜索在极端参数组合下的异常处理增强。
 
 ## [0.2.0] - 2025-06-08
 
