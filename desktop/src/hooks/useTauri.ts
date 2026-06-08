@@ -103,6 +103,21 @@ export function useTauri() {
     return invoke('market_install', { id, name })
   }, [])
 
+  /// Get available OCR languages.
+  const getOcrLanguages = useCallback(async (): Promise<string> => {
+    return invoke('get_ocr_languages')
+  }, [])
+
+  /// Detect text regions with optional language support.
+  const detectTextRegionsMultilang = useCallback(async (inputPath: string, lang?: string, vertical?: boolean): Promise<string> => {
+    return invoke('detect_text_regions_multilang', { inputPath, lang, vertical })
+  }, [])
+
+  /// Recognize text with optional language support.
+  const recognizeTextMultilang = useCallback(async (inputPath: string, lang?: string): Promise<string> => {
+    return invoke('recognize_text_multilang', { inputPath, lang })
+  }, [])
+
   return {
     convertImage,
     batchConvert,
@@ -124,5 +139,8 @@ export function useTauri() {
     setConfig,
     marketList,
     marketInstall,
+    getOcrLanguages,
+    detectTextRegionsMultilang,
+    recognizeTextMultilang,
   }
 }

@@ -11,6 +11,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Any
 
+from .checkpoint import CheckpointManager
 from .models import TraceOptions, TraceResult
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
 
@@ -74,6 +75,8 @@ class TaskQueue:
         max_workers: int = 4,
         output_dir: Path | None = None,
         max_retries: int = 2,
+        checkpoint_manager: CheckpointManager | None = None,
+        queue_id: str | None = None,
     ) -> None:
         self.max_workers = max_workers
         self.output_dir = output_dir
@@ -87,6 +90,8 @@ class TaskQueue:
         self._paused = threading.Event()
         self._active_threads: list[threading.Thread] = []
         self._active_threads_lock = threading.Lock()
+        self.checkpoint_manager = checkpoint_manager
+        self.queue_id = queue_id or str(uuid.uuid4())
 
     # ------------------------------------------------------------------
     # Public API
@@ -117,6 +122,12 @@ class TaskQueue:
         with self._lock:
             self._tasks[task_id] = task
         self._queue.put(task)
+        # Auto-save checkpoint if manager is present.
+        if self.checkpoint_manager is not None:
+            try:
+                self.checkpoint_manager.save_checkpoint(self.queue_id, list(self._tasks.values()))
+            except Exception:  # noqa: BLE001
+                pass
         return task_id
 
     def add_batch(
@@ -155,9 +166,25 @@ class TaskQueue:
         """Start the background worker thread that consumes the queue."""
         if self._worker_thread is not None and self._worker_thread.is_alive():
             return
+        # Attempt to resume from a previous checkpoint.
+        if self.checkpoint_manager is not None:
+            restored = self.checkpoint_manager.load_checkpoint(self.queue_id)
+            if restored:
+                with self._lock:
+                    for task in restored:
+                        if task.status in ("pending", "running"):
+                            task.status = "pending"
+                            task.progress = 0.0
+                            task.started_at = None
+                            self._tasks[task.task_id] = task
+                            self._queue.put(task)
+                logger.info("Resumed %d tasks from checkpoint %s", len(restored), self.queue_id)
         self._shutdown.clear()
         self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker_thread.start()
+        # Start auto-save if a checkpoint manager is attached.
+        if self.checkpoint_manager is not None:
+            self.checkpoint_manager.auto_save(self.queue_id, list(self._tasks.values()))
 
     def pause(self) -> None:
         """Pause processing new tasks (running tasks continue)."""
@@ -335,3 +362,9 @@ class TaskQueue:
                 except ValueError:
                     pass
             self._queue.task_done()
+            # Update checkpoint after task completion if manager is present.
+            if self.checkpoint_manager is not None:
+                try:
+                    self.checkpoint_manager.save_checkpoint(self.queue_id, list(self._tasks.values()))
+                except Exception:  # noqa: BLE001
+                    pass

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -7,10 +8,11 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from .ai_ocr import detect_text_regions, integrate_text_to_svg, recognize_text
+from .ai_ocr import detect_text_regions, integrate_text_to_svg, recognize_text, recognize_text_multilang
 from .ai_simplify import adaptive_simplify
 from .models import TraceOptions, TraceResult
 from .plugin_interface import Plugin
+from .performance import PerformanceMonitor, StreamingImageProcessor
 from .preprocess import prepare_input
 from .svg_optimizer import optimize_svg_comprehensive
 from .svg_tools import (
@@ -21,6 +23,7 @@ from .svg_tools import (
     optimize_svg_file,
     svg_stats,
 )
+from .gpu_backend import detect_gpu, gpu_preprocess, GPUBackend
 
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -62,8 +65,11 @@ def trace_image(
     plugins: list[Plugin] | None = None,
     ai_simplify: bool = False,
     ai_ocr: bool = False,
+    ocr_lang: str | None = None,
     simplify_type: str = "auto",
     preview_mode: bool = False,
+    use_gpu: bool = False,
+    stream: bool = False,
 ) -> TraceResult:
     """Convert a raster image to SVG using VTracer.
 
@@ -86,12 +92,20 @@ def trace_image(
     ai_ocr:
         If True, detect and embed recognized text as editable SVG ``<text>``
         elements after tracing.
+    ocr_lang:
+        Optional OCR language code (e.g. ``"chi_sim"``, ``"jpn"``). When
+        ``ai_ocr`` is enabled, this language is passed to the OCR engine.
     simplify_type:
         Strategy for AI simplification: ``"photo"``, ``"complex"``, ``"sketch"``,
         or ``"auto"``.
     preview_mode:
         When ``True``, limits the input size to 400 px and skips PDF/PNG/EPS
         exports for a fast low-resolution preview.
+    use_gpu:
+        When ``True``, attempt GPU-accelerated preprocessing. Falls back to CPU
+        if no GPU is available or the operation fails.
+    stream:
+        When ``True``, force chunked/streaming processing for large images.
     """
     start = time.perf_counter()
     input_path = Path(input_path)
@@ -110,8 +124,18 @@ def trace_image(
         "enhance": enhance,
         "ai_simplify": ai_simplify,
         "ai_ocr": ai_ocr,
+        "ocr_lang": ocr_lang,
         "simplify_type": simplify_type,
+        "use_gpu": use_gpu,
+        "stream": stream,
     }
+
+    # Performance monitoring hook
+    perf_monitor = PerformanceMonitor()
+    perf_suggestions = perf_monitor.suggest_optimization(input_path)
+    if perf_suggestions:
+        logger = logging.getLogger(__name__)
+        logger.debug("Performance suggestions: %s", perf_suggestions)
 
     if preview_mode:
         opts_dict = asdict(options)
@@ -133,10 +157,80 @@ def trace_image(
     if output_path.suffix.lower() != ".svg":
         output_path = output_path.with_suffix(".svg")
 
+    # Auto-detect large images and use streaming processor
+    if stream or StreamingImageProcessor._should_stream(input_path):
+        processor = StreamingImageProcessor()
+        svg_path = processor.process_large_image(input_path, output_path, options)
+        # Build a minimal TraceResult for the streaming path
+        elapsed = time.perf_counter() - start
+        result = TraceResult(
+            input_path=input_path,
+            svg_path=svg_path,
+            engine="streaming-vtracer",
+            elapsed_seconds=elapsed,
+            stats=svg_stats(svg_path),
+        )
+        # Post-processing for streaming result
+        if optimize and optimize_level != "none":
+            if optimize_level == "basic":
+                optimize_svg_file(svg_path)
+            elif optimize_level in {"comprehensive", "aggressive"}:
+                optimize_svg_comprehensive(svg_path, aggressive=(optimize_level == "aggressive"))
+        if name_layers:
+            name_svg_layers(svg_path)
+        if export_pdf:
+            pdf_path = export_svg_to_pdf(svg_path, svg_path.with_suffix(".pdf"))
+            result = TraceResult(
+                input_path=input_path,
+                svg_path=svg_path,
+                engine=result.engine,
+                elapsed_seconds=result.elapsed_seconds,
+                stats=result.stats,
+                pdf_path=pdf_path,
+            )
+        if export_png:
+            png_path = export_svg_to_png(svg_path, svg_path.with_suffix(".png"), scale=png_scale)
+            result = TraceResult(
+                input_path=input_path,
+                svg_path=svg_path,
+                engine=result.engine,
+                elapsed_seconds=result.elapsed_seconds,
+                stats=result.stats,
+                pdf_path=result.pdf_path,
+                png_path=png_path,
+            )
+        if export_eps:
+            eps_path = export_svg_to_eps_with_inkscape(svg_path, svg_path.with_suffix(".eps"))
+            result = TraceResult(
+                input_path=input_path,
+                svg_path=svg_path,
+                engine=result.engine,
+                elapsed_seconds=result.elapsed_seconds,
+                stats=result.stats,
+                pdf_path=result.pdf_path,
+                png_path=result.png_path,
+                eps_path=eps_path,
+            )
+        return result
+
     engine = "python-vtracer"
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
         prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
+
+        # GPU-accelerated preprocessing (optional)
+        if use_gpu:
+            try:
+                from PIL import Image
+
+                backend = detect_gpu()
+                if backend != GPUBackend.NONE:
+                    with Image.open(normalized_input) as img:
+                        processed = gpu_preprocess(img, backend=backend)
+                        processed.save(normalized_input, format="PNG", optimize=True)
+            except Exception as exc:
+                logger = logging.getLogger(__name__)
+                logger.warning("GPU preprocessing failed, falling back to CPU: %s", exc)
 
         # Run plugin preprocess hooks
         if plugins:
@@ -147,8 +241,6 @@ def trace_image(
                     try:
                         img = plugin.preprocess(img, plugin_options)
                     except Exception as exc:  # noqa: BLE001
-                        import logging
-
                         logging.getLogger(__name__).warning(
                             "Plugin %s preprocess hook failed: %s", plugin.name, exc
                         )
@@ -163,8 +255,6 @@ def trace_image(
                     simplified = adaptive_simplify(img, image_type=simplify_type)
                     simplified.save(normalized_input, format="PNG", optimize=True)
             except Exception as exc:  # noqa: BLE001
-                import logging
-
                 logging.getLogger(__name__).warning("AI simplification failed: %s", exc)
 
         try:
@@ -199,12 +289,10 @@ def trace_image(
             from PIL import Image
 
             with Image.open(input_path) as img:
-                regions = recognize_text(img)
+                regions = recognize_text_multilang(img, lang=ocr_lang)
                 if regions:
                     integrate_text_to_svg(output_path, regions, output_path)
         except Exception as exc:  # noqa: BLE001
-            import logging
-
             logging.getLogger(__name__).warning("AI OCR failed: %s", exc)
 
     # Run plugin postprocess hooks
@@ -212,8 +300,6 @@ def trace_image(
         try:
             output_path = plugin.postprocess(output_path, plugin_options)
         except Exception as exc:  # noqa: BLE001
-            import logging
-
             logging.getLogger(__name__).warning(
                 "Plugin %s postprocess hook failed: %s", plugin.name, exc
             )
@@ -245,8 +331,6 @@ def trace_image(
         try:
             plugin.on_convert_complete(result, plugin_options)
         except Exception as exc:  # noqa: BLE001
-            import logging
-
             logging.getLogger(__name__).warning(
                 "Plugin %s on_complete hook failed: %s", plugin.name, exc
             )

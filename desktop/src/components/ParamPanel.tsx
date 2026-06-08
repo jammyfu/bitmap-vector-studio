@@ -14,6 +14,10 @@ interface ParamPanelProps {
   onChangeOptimizeLevel: (v: number) => void;
   onPreviewResult?: (svgPath: string) => void;
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  ocrLang?: string;
+  onChangeOcrLang?: (lang: string) => void;
+  ocrVertical?: boolean;
+  onToggleOcrVertical?: () => void;
 }
 
 export const ParamPanel: React.FC<ParamPanelProps> = ({
@@ -28,6 +32,10 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
   onChangeOptimizeLevel,
   onPreviewResult,
   onToast,
+  ocrLang = 'eng',
+  onChangeOcrLang,
+  ocrVertical = false,
+  onToggleOcrVertical,
 }) => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [activePreset, setActivePreset] = useState<string>('default');
@@ -331,6 +339,35 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
         <div className="param-check-row">
           <input id="livepreview" type="checkbox" checked={livePreview} onChange={onToggleLivePreview} />
           <label htmlFor="livepreview">Live Preview</label>
+        </div>
+      </div>
+
+      <div className="param-section">
+        <label className="param-label">OCR Language</label>
+        <select
+          className="param-select"
+          value={ocrLang}
+          onChange={(e) => onChangeOcrLang?.(e.target.value)}
+        >
+          <option value="eng">English</option>
+          <option value="chi_sim">简体中文</option>
+          <option value="chi_tra">繁體中文</option>
+          <option value="jpn">日本語</option>
+          <option value="kor">한국어</option>
+          <option value="ara">العربية</option>
+          <option value="rus">Русский</option>
+          <option value="deu">Deutsch</option>
+          <option value="fra">Français</option>
+          <option value="spa">Español</option>
+        </select>
+        <div className="param-check-row">
+          <input
+            id="ocrvertical"
+            type="checkbox"
+            checked={ocrVertical}
+            onChange={onToggleOcrVertical}
+          />
+          <label htmlFor="ocrvertical">Detect Vertical Text</label>
         </div>
       </div>
     </div>

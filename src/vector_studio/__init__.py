@@ -148,6 +148,19 @@ __all__ = [
     "detect_text_regions",
     "recognize_text",
     "integrate_text_to_svg",
+    # AI OCR multi-language (v0.6)
+    "detect_language",
+    "recognize_text_multilang",
+    "detect_vertical_text",
+    "create_text_overlay_svg_multilang",
+    "preprocess_for_ocr",
+    # OCR languages (v0.6)
+    "OCR_LANGUAGE_CONFIG",
+    "get_tesseract_languages",
+    "check_language_available",
+    "suggest_language_pack",
+    "normalize_language_code",
+    "get_language_config",
     # Live preview (v0.5)
     "LivePreviewEngine",
     "PreviewCache",
@@ -174,6 +187,19 @@ from .ai_ocr import (
     detect_text_regions,
     recognize_text,
     integrate_text_to_svg,
+    detect_language,
+    recognize_text_multilang,
+    detect_vertical_text,
+    create_text_overlay_svg_multilang,
+    preprocess_for_ocr,
+)
+from .ocr_languages import (
+    OCR_LANGUAGE_CONFIG,
+    get_tesseract_languages,
+    check_language_available,
+    suggest_language_pack,
+    normalize_language_code,
+    get_language_config,
 )
 from .live_preview import (
     LivePreviewEngine,

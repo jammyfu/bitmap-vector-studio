@@ -432,3 +432,202 @@ pub async fn check_env() -> Result<String, String> {
         Err(e) => Err(format!("Environment check failed: {}", e)),
     }
 }
+
+/// Prewarm the Python environment by importing core modules.
+///
+/// Calls `vector-studio benchmark` with a hidden flag to trigger
+/// startup optimization without producing output.
+///
+/// # Returns
+/// OK on success.
+#[command]
+pub async fn prewarm_env() -> Result<(), String> {
+    python_bridge::call_vector_studio(vec!["benchmark".to_string(), "--help".to_string()])
+        .map(|_| ())
+}
+
+/// Retrieve performance statistics from the Python backend.
+///
+/// # Returns
+/// JSON string containing memory usage, GPU availability, and suggestions.
+#[command]
+pub async fn get_performance_stats(input_path: String) -> Result<String, String> {
+    let args = vec![
+        "trace".to_string(),
+        input_path,
+        "--recommend".to_string(),
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// Retrieve available OCR languages from the Python backend.
+///
+/// # Returns
+/// JSON string containing language codes, names, and installation status.
+#[command]
+pub async fn get_ocr_languages() -> Result<String, String> {
+    python_bridge::call_vector_studio(vec!["ocr".to_string(), "languages".to_string(), "--json".to_string()])
+}
+
+/// Detect text regions in an image with optional multi-language support.
+///
+/// # Arguments
+/// * `input_path` - Absolute path to the source bitmap image.
+/// * `lang` - Optional OCR language code.
+/// * `vertical` - Whether to detect vertical text orientation.
+///
+/// # Returns
+/// JSON string containing detected text regions.
+#[command]
+pub async fn detect_text_regions_multilang(
+    input_path: String,
+    lang: Option<String>,
+    vertical: Option<bool>,
+) -> Result<String, String> {
+    let mut args = vec!["ocr".to_string(), "detect".to_string(), input_path];
+    if let Some(l) = lang {
+        args.push("--lang".to_string());
+        args.push(l);
+    }
+    if vertical.unwrap_or(false) {
+        args.push("--vertical".to_string());
+    }
+    args.push("--json".to_string());
+    python_bridge::call_vector_studio(args)
+}
+
+/// Recognize text in an image with optional multi-language support.
+///
+/// # Arguments
+/// * `input_path` - Absolute path to the source bitmap image.
+/// * `lang` - Optional OCR language code.
+///
+/// # Returns
+/// JSON string containing recognized text lines.
+#[command]
+pub async fn recognize_text_multilang(
+    input_path: String,
+    lang: Option<String>,
+) -> Result<String, String> {
+    let mut args = vec!["ocr".to_string(), "recognize".to_string(), input_path];
+    if let Some(l) = lang {
+        args.push("--lang".to_string());
+        args.push(l);
+    }
+    args.push("--json".to_string());
+    python_bridge::call_vector_studio(args)
+}
+
+/// Save the current workspace state.
+///
+/// # Arguments
+/// * `name` - Workspace name (optional).
+/// * `open_files` - JSON array of open file paths.
+/// * `preset` - Current preset name.
+///
+/// # Returns
+/// The saved workspace file path.
+#[command]
+pub async fn save_workspace(
+    name: Option<String>,
+    open_files: String,
+    preset: String,
+) -> Result<String, String> {
+    let mut args = vec![
+        "workspace".to_string(),
+        "save".to_string(),
+        "--preset".to_string(),
+        preset,
+    ];
+    if let Some(n) = name {
+        args.push(n);
+    }
+    // open_files is passed as a JSON string; the CLI doesn't natively consume it,
+    // but the Python backend can be extended. For now we forward the call.
+    python_bridge::call_vector_studio(args)
+}
+
+/// Load a saved workspace.
+///
+/// # Arguments
+/// * `name` - Workspace name.
+///
+/// # Returns
+/// JSON string containing workspace data.
+#[command]
+pub async fn load_workspace(name: String) -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "workspace".to_string(),
+        "load".to_string(),
+        name,
+    ])
+}
+
+/// List all saved workspaces.
+///
+/// # Returns
+/// JSON array of workspace metadata.
+#[command]
+pub async fn list_workspaces() -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "workspace".to_string(),
+        "list".to_string(),
+        "--json".to_string(),
+    ])
+}
+
+/// Get all available checkpoints.
+///
+/// # Returns
+/// JSON array of checkpoint metadata.
+#[command]
+pub async fn get_checkpoints() -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "resume".to_string(),
+        "--list".to_string(),
+        "--json".to_string(),
+    ])
+}
+
+/// Resume a batch conversion from a checkpoint.
+///
+/// # Arguments
+/// * `checkpoint_id` - Checkpoint identifier.
+///
+/// # Returns
+/// JSON result string.
+#[command]
+pub async fn resume_checkpoint(checkpoint_id: String) -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "resume".to_string(),
+        checkpoint_id,
+    ])
+}
+
+/// Enable plugin hot-reload monitoring.
+///
+/// # Returns
+/// OK on success.
+#[command]
+pub async fn enable_hotreload() -> Result<(), String> {
+    python_bridge::call_vector_studio(vec![
+        "plugin".to_string(),
+        "hotreload".to_string(),
+        "--enable".to_string(),
+    ])
+    .map(|_| ())
+}
+
+/// Disable plugin hot-reload monitoring.
+///
+/// # Returns
+/// OK on success.
+#[command]
+pub async fn disable_hotreload() -> Result<(), String> {
+    python_bridge::call_vector_studio(vec![
+        "plugin".to_string(),
+        "hotreload".to_string(),
+        "--disable".to_string(),
+    ])
+    .map(|_| ())
+}

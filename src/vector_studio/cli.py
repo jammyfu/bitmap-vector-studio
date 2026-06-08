@@ -8,8 +8,16 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from .checkpoint import CheckpointManager
 from .config import Config
 from .external_editors import open_with_default_editor, open_with_editor
+from .ocr_languages import (
+    OCR_LANGUAGE_CONFIG,
+    check_language_available,
+    get_tesseract_languages,
+    normalize_language_code,
+    suggest_language_pack,
+)
 from .param_search import ParamGrid, quick_search, search_best_params
 from .plugin_interface import Plugin
 from .plugins import PluginManager
@@ -18,6 +26,7 @@ from .svg_optimizer import svg_quality_score
 from .svg_tools import svg_stats
 from .task_queue import TaskQueue
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
+from .workspace import Workspace, WorkspaceManager
 
 console = Console()
 app = typer.Typer(
@@ -40,6 +49,14 @@ app.add_typer(plugin_app, name="plugin")
 # Sub-typer for market commands
 market_app = typer.Typer(help="Preset market management.")
 app.add_typer(market_app, name="market")
+
+# Sub-typer for workspace commands
+workspace_app = typer.Typer(help="Workspace management.")
+app.add_typer(workspace_app, name="workspace")
+
+# Sub-typer for OCR commands
+ocr_app = typer.Typer(help="OCR utilities.")
+app.add_typer(ocr_app, name="ocr")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -184,12 +201,16 @@ def trace_command(
     enhance: Optional[str] = typer.Option(None, "--enhance", help="Enhancement type: scan, photo, logo, auto."),
     ai_simplify: bool = typer.Option(False, "--ai-simplify", help="Apply AI semantic simplification before tracing."),
     ai_ocr: bool = typer.Option(False, "--ai-ocr", help="Detect and embed text as editable SVG text elements."),
+    ocr_lang: Optional[str] = typer.Option(None, "--ocr-lang", help="OCR language code (e.g. chi_sim, jpn, kor, ara, rus, deu, fra, spa)."),
+    ocr_vertical: bool = typer.Option(False, "--ocr-vertical", help="Detect vertical text orientation during OCR."),
     simplify_type: str = typer.Option("auto", "--simplify-type", help="Simplification strategy: photo, complex, sketch, auto."),
     recommend: bool = typer.Option(False, "--recommend", help="Only analyze and recommend a preset, do not convert."),
     region: Optional[str] = typer.Option(None, "--region", help="Rectangular region to trace as x,y,w,h."),
     live_preview: bool = typer.Option(False, "--live-preview", help="Fast low-res preview mode."),
     config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
     plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
+    gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
+    stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing for large images."),
 ) -> None:
     """Convert one bitmap image to SVG."""
     config = _load_config(config_path)
@@ -292,7 +313,10 @@ def trace_command(
         plugins=plugins,
         ai_simplify=ai_simplify,
         ai_ocr=ai_ocr,
+        ocr_lang=ocr_lang,
         simplify_type=simplify_type,
+        use_gpu=gpu,
+        stream=stream,
     )
 
     console.print(f"[green]Done[/green] {result.svg_path}")
@@ -322,6 +346,53 @@ def trace_command(
             console.print(f"[red]Failed to open editor:[/red] {exc}")
 
 
+@app.command("benchmark")
+def benchmark_command(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
+    runs: int = typer.Option(3, "--runs", "-r", min=1, max=20, help="Number of benchmark runs."),
+    gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
+    stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing."),
+) -> None:
+    """Run a performance benchmark on a single image."""
+    from .performance import PerformanceMonitor
+    from .startup_optimizer import StartupProfiler
+
+    opts = options_from_preset(preset)
+    monitor = PerformanceMonitor()
+
+    # Estimate before running
+    from PIL import Image
+
+    with Image.open(input_path) as img:
+        estimated = monitor.estimate_conversion_time(img.size, opts)
+    console.print(f"[cyan]Estimated time:[/cyan] {estimated:.2f}s per run")
+
+    times: list[float] = []
+    with StartupProfiler(label="benchmark") as profiler:
+        profiler.stage("warmup")
+        # Warm-up run (not counted)
+        trace_image(input_path, input_path.with_suffix(".svg"), opts, use_gpu=gpu, stream=stream)
+
+        for i in range(runs):
+            profiler.stage(f"run_{i + 1}")
+            result = trace_image(input_path, input_path.with_suffix(".svg"), opts, use_gpu=gpu, stream=stream)
+            times.append(result.elapsed_seconds)
+
+    table = Table(title=f"Benchmark: {input_path.name} ({runs} runs)")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+    table.add_row("Min", f"{min(times):.3f}s")
+    table.add_row("Max", f"{max(times):.3f}s")
+    table.add_row("Mean", f"{sum(times) / len(times):.3f}s")
+    table.add_row("Median", f"{sorted(times)[len(times) // 2]:.3f}s")
+    table.add_row("Engine", result.engine)
+    console.print(table)
+
+    report = profiler.get_report()
+    console.print(f"[cyan]Bottleneck:[/cyan] {report['bottleneck']} ({report['total_seconds']:.3f}s total)")
+
+
 @app.command("batch")
 def batch_command(
     input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input folder."),
@@ -339,6 +410,7 @@ def batch_command(
     retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
     config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
     plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
+    checkpoint: bool = typer.Option(False, "--checkpoint", help="Enable checkpoint/resume for this batch."),
 ) -> None:
     """Batch-convert a folder of images."""
     config = _load_config(config_path)
@@ -411,7 +483,8 @@ def batch_command(
         return
 
     # Concurrent path via TaskQueue.
-    q = TaskQueue(max_workers=workers, output_dir=output_dir, max_retries=retry)
+    cp_mgr = CheckpointManager() if checkpoint else None
+    q = TaskQueue(max_workers=workers, output_dir=output_dir, max_retries=retry, checkpoint_manager=cp_mgr)
     for image_path in images:
         rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
         out_path = (output_dir / rel).with_suffix(".svg")
@@ -423,6 +496,10 @@ def batch_command(
 
     q.start()
     results = q.wait_for_all()
+
+    # Clean up checkpoint on successful completion.
+    if checkpoint and cp_mgr is not None:
+        cp_mgr.delete_checkpoint(q.queue_id)
 
     table = Table(title=f"Batch conversion: {len(results)} image(s)")
     table.add_column("Input")
@@ -899,6 +976,242 @@ def market_info(
             value = ", ".join(str(v) for v in value)
         table.add_row(key, str(value))
     console.print(table)
+
+
+# ------------------------------------------------------------------
+# OCR sub-commands
+# ------------------------------------------------------------------
+
+@ocr_app.command("detect")
+def ocr_detect(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output JSON path for regions."),
+    vertical: bool = typer.Option(False, "--vertical", help="Detect vertical text orientation."),
+) -> None:
+    """Detect text regions in an image."""
+    from PIL import Image
+    from .ai_ocr import detect_text_regions, detect_vertical_text
+
+    with Image.open(input_path) as img:
+        if vertical:
+            regions = detect_vertical_text(img)
+        else:
+            regions = detect_text_regions(img)
+
+    if output:
+        import json
+        output.write_text(json.dumps(regions, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]Saved[/green] {output} ({len(regions)} regions)")
+    else:
+        table = Table(title=f"Text regions: {input_path.name}")
+        table.add_column("#", style="bold")
+        table.add_column("BBox")
+        table.add_column("Confidence")
+        table.add_column("Vertical")
+        for idx, r in enumerate(regions, start=1):
+            table.add_row(
+                str(idx),
+                f"{r['bbox']}",
+                f"{r.get('confidence', 0):.3f}",
+                "yes" if r.get("vertical") else "no",
+            )
+        console.print(table)
+
+
+@ocr_app.command("recognize")
+def ocr_recognize(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    lang: Optional[str] = typer.Option(None, "--lang", "-l", help="OCR language code (e.g. chi_sim, jpn, kor)."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output JSON path for results."),
+) -> None:
+    """Recognize text in an image with optional language support."""
+    from PIL import Image
+    from .ai_ocr import recognize_text_multilang
+
+    with Image.open(input_path) as img:
+        results = recognize_text_multilang(img, lang=lang)
+
+    if output:
+        import json
+        output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]Saved[/green] {output} ({len(results)} lines)")
+    else:
+        table = Table(title=f"OCR results: {input_path.name}")
+        table.add_column("#", style="bold")
+        table.add_column("Text")
+        table.add_column("BBox")
+        table.add_column("Confidence")
+        table.add_column("Lang")
+        for idx, r in enumerate(results, start=1):
+            table.add_row(
+                str(idx),
+                r.get("text", "") or "-",
+                f"{r['bbox']}",
+                f"{r.get('confidence', 0):.3f}",
+                r.get("lang", "eng"),
+            )
+        console.print(table)
+
+
+@ocr_app.command("languages")
+def ocr_languages() -> None:
+    """List available OCR languages and their installation status."""
+    installed = get_tesseract_languages()
+    table = Table(title="OCR Languages")
+    table.add_column("Code", style="bold")
+    table.add_column("Name")
+    table.add_column("Tesseract")
+    table.add_column("Installed")
+    for code, cfg in sorted(OCR_LANGUAGE_CONFIG.items()):
+        tess = cfg["tesseract_code"]
+        is_installed = "yes" if tess in installed else "no"
+        table.add_row(code, cfg["name"], tess, is_installed)
+    console.print(table)
+    if not installed:
+        console.print("[yellow]No Tesseract language packs detected.[/yellow]")
+        console.print("Install Tesseract and language packs to use OCR.")
+
+
+# ------------------------------------------------------------------
+# Resume command
+# ------------------------------------------------------------------
+
+@app.command("resume")
+def resume_command(
+    checkpoint_id: str = typer.Argument("", help="Checkpoint ID to resume."),
+    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
+    retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
+    list_checkpoints: bool = typer.Option(False, "--list", help="List available checkpoints."),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON."),
+) -> None:
+    """Resume an interrupted batch conversion from a checkpoint."""
+    cp_mgr = CheckpointManager()
+
+    if list_checkpoints:
+        checkpoints = cp_mgr.list_checkpoints()
+        if json_output:
+            import json as _json
+            console.print(_json.dumps(checkpoints, indent=2, ensure_ascii=False))
+        else:
+            table = Table(title="Checkpoints")
+            table.add_column("Queue ID", style="bold")
+            table.add_column("Saved At")
+            table.add_column("Tasks")
+            for cp in checkpoints:
+                table.add_row(cp["queue_id"], cp.get("saved_at", "-"), str(cp.get("task_count", 0)))
+            console.print(table)
+        return
+
+    if not checkpoint_id:
+        console.print("[red]Error:[/red] checkpoint_id is required (or use --list)")
+        raise typer.Exit(code=1)
+
+    tasks = cp_mgr.load_checkpoint(checkpoint_id)
+    if tasks is None:
+        console.print(f"[red]No checkpoint found:[/red] {checkpoint_id}")
+        raise typer.Exit(code=1)
+
+    pending_tasks = [t for t in tasks if t.status in ("pending", "running", "failed")]
+    if not pending_tasks:
+        console.print("[green]All tasks in this checkpoint are already completed.[/green]")
+        raise typer.Exit(code=0)
+
+    q = TaskQueue(max_workers=workers, max_retries=retry, checkpoint_manager=cp_mgr, queue_id=checkpoint_id)
+    with q._lock:
+        for task in pending_tasks:
+            task.status = "pending"
+            task.progress = 0.0
+            task.started_at = None
+            q._tasks[task.task_id] = task
+            q._queue.put(task)
+
+    q.start()
+    results = q.wait_for_all()
+
+    table = Table(title=f"Resumed batch: {len(results)} task(s)")
+    table.add_column("Input")
+    table.add_column("Output")
+    table.add_column("Status")
+
+    failures = 0
+    for task in results:
+        if task.status == "completed":
+            table.add_row(str(task.input_path), str(task.output_path), "ok")
+        elif task.status == "failed":
+            failures += 1
+            table.add_row(str(task.input_path), str(task.output_path), f"failed: {task.error}")
+        else:
+            table.add_row(str(task.input_path), str(task.output_path), task.status)
+
+    console.print(table)
+    if failures:
+        raise typer.Exit(code=1)
+    # Clean up checkpoint on full success.
+    cp_mgr.delete_checkpoint(checkpoint_id)
+
+
+# ------------------------------------------------------------------
+# Workspace sub-commands
+# ------------------------------------------------------------------
+
+@workspace_app.command("list")
+def workspace_list() -> None:
+    """List all saved workspaces."""
+    manager = WorkspaceManager()
+    workspaces = manager.list_workspaces()
+    if not workspaces:
+        console.print("[yellow]No saved workspaces.[/yellow]")
+        return
+    table = Table(title="Workspaces")
+    table.add_column("Name", style="bold")
+    table.add_column("Timestamp")
+    for ws in workspaces:
+        table.add_row(ws["name"], ws.get("timestamp", "-"))
+    console.print(table)
+
+
+@workspace_app.command("save")
+def workspace_save(
+    name: Optional[str] = typer.Argument(None, help="Workspace name. Defaults to timestamp."),
+    open_files: list[str] = typer.Option([], "--open-file", help="File paths currently open."),
+    preset: str = typer.Option("poster", "--preset", help="Current preset."),
+) -> None:
+    """Save the current workspace."""
+    manager = WorkspaceManager()
+    ws = Workspace(
+        open_files=open_files,
+        current_preset=preset,
+    )
+    path = manager.save(ws, name=name)
+    console.print(f"[green]Workspace saved:[/green] {path.name}")
+
+
+@workspace_app.command("load")
+def workspace_load(
+    name: str = typer.Argument(..., help="Workspace name to load."),
+) -> None:
+    """Load a saved workspace."""
+    manager = WorkspaceManager()
+    ws = manager.load(name)
+    if ws is None:
+        console.print(f"[red]Workspace not found:[/red] {name}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Loaded workspace[/green] {name}")
+    console.print(f"Preset: {ws.current_preset}")
+    console.print(f"Open files: {', '.join(ws.open_files) or 'none'}")
+
+
+@workspace_app.command("delete")
+def workspace_delete(
+    name: str = typer.Argument(..., help="Workspace name to delete."),
+) -> None:
+    """Delete a saved workspace."""
+    manager = WorkspaceManager()
+    if manager.delete(name):
+        console.print(f"[green]Deleted workspace[/green] {name}")
+    else:
+        console.print(f"[red]Workspace not found:[/red] {name}")
+        raise typer.Exit(code=1)
 
 
 def main() -> None:

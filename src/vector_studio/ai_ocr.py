@@ -16,10 +16,25 @@ except Exception:  # pragma: no cover
 
 from PIL import Image, ImageFilter, ImageStat
 
+from .ocr_languages import (
+    OCR_LANGUAGE_CONFIG,
+    check_language_available,
+    get_language_config,
+    normalize_language_code,
+    suggest_language_pack,
+)
+
 logger = logging.getLogger(__name__)
 
 _SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", _SVG_NS)
+
+# Unicode ranges for heuristic language detection
+_RE_CHINESE = re.compile(r"[\u4e00-\u9fff]")
+_RE_JAPANESE = re.compile(r"[\u3040-\u309f\u30a0-\u30ff]")
+_RE_KOREAN = re.compile(r"[\uac00-\ud7af]")
+_RE_ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]")
+_RE_CYRILLIC = re.compile(r"[\u0400-\u04ff]")
 
 
 def _to_numpy(img: Image.Image) -> Any:
@@ -29,7 +44,35 @@ def _to_numpy(img: Image.Image) -> Any:
     return np.array(img)
 
 
-def detect_text_regions(img: Image.Image) -> list[dict]:
+def detect_language(text: str) -> str:
+    """Heuristically detect the dominant language of *text*.
+
+    Checks for characteristic Unicode blocks in the following priority:
+    Chinese, Japanese, Korean, Arabic, Cyrillic (Russian), English.
+
+    Args:
+        text: Input string (may be empty).
+
+    Returns:
+        Short language code: ``"zh"``, ``"ja"``, ``"ko"``, ``"ar"``, ``"ru"``,
+        or ``"en"``.
+    """
+    if not text:
+        return "en"
+    if _RE_CHINESE.search(text):
+        return "zh"
+    if _RE_JAPANESE.search(text):
+        return "ja"
+    if _RE_KOREAN.search(text):
+        return "ko"
+    if _RE_ARABIC.search(text):
+        return "ar"
+    if _RE_CYRILLIC.search(text):
+        return "ru"
+    return "en"
+
+
+def detect_text_regions(img: Image.Image, min_aspect: float = 1.0) -> list[dict]:
     """Detect likely text regions in an image using heuristic analysis.
 
     Uses contrast analysis, horizontal line density, and aspect-ratio filtering.
@@ -37,6 +80,9 @@ def detect_text_regions(img: Image.Image) -> list[dict]:
 
     Args:
         img: Input PIL image.
+        min_aspect: Minimum width/height aspect ratio for a region to be
+            considered text-like. Defaults to 1.0 (horizontal text). Use a
+            lower value (e.g. 0.1) when vertical text detection is desired.
 
     Returns:
         List of region dictionaries, each with ``bbox`` [x, y, w, h] and
@@ -107,7 +153,7 @@ def detect_text_regions(img: Image.Image) -> list[dict]:
             aspect = rw / rh if rh > 0 else 0
             if rh < 8 or rw < 16:
                 continue
-            if aspect < 1.0 or aspect > 30.0:
+            if aspect < min_aspect or aspect > 30.0:
                 continue
             # Confidence based on edge density within the region
             if _HAS_NUMPY:
@@ -249,6 +295,108 @@ def recognize_text(img: Image.Image, regions: list[dict] | None = None) -> list[
     return regions
 
 
+def recognize_text_multilang(
+    img: Image.Image,
+    regions: list[dict] | None = None,
+    lang: str | None = None,
+) -> list[dict]:
+    """Recognize text in an image with multi-language support.
+
+    If *lang* is provided, the corresponding Tesseract language model is used.
+    If *lang* is omitted, the function attempts to detect the language from
+    any existing text content in *regions* and falls back to English.
+
+    Args:
+        img: Input PIL image.
+        regions: Optional pre-detected text regions. If None, ``detect_text_regions``
+            is called first.
+        lang: Optional language code (e.g. ``"chi_sim"``, ``"jpn"``, ``"zh"``).
+
+    Returns:
+        List of region dictionaries with ``text``, ``bbox``, ``confidence``,
+        and ``lang`` keys.
+    """
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    if regions is None:
+        regions = detect_text_regions(img)
+
+    # Determine language
+    if lang is None and regions:
+        # Try to infer from any existing text in regions
+        sample_text = " ".join(r.get("text", "") for r in regions if r.get("text"))
+        if sample_text:
+            detected = detect_language(sample_text)
+            lang = normalize_language_code(detected)
+        else:
+            lang = "eng"
+    lang = normalize_language_code(lang)
+
+    # Warn if language pack is missing (non-blocking)
+    if not check_language_available(lang):
+        logger.warning(suggest_language_pack(lang))
+
+    ocr_results: list[dict] = []
+    try:
+        import pytesseract
+
+        data = pytesseract.image_to_data(
+            img,
+            lang=lang,
+            output_type=pytesseract.Output.DICT,
+        )
+        n_boxes = len(data["text"])
+        for i in range(n_boxes):
+            text = data["text"][i].strip()
+            if not text:
+                continue
+            conf = int(data["conf"][i])
+            if conf < 30:
+                continue
+            x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
+            ocr_results.append({
+                "text": text,
+                "bbox": [x, y, w, h],
+                "confidence": conf / 100.0,
+                "lang": lang,
+            })
+        return ocr_results
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.debug("pytesseract multilang failed: %s", exc)
+
+    # Fallback to base recognize_text (English-only easyocr or heuristic)
+    base_results = recognize_text(img, regions=regions)
+    for r in base_results:
+        r["lang"] = lang
+    return base_results
+
+
+def detect_vertical_text(img: Image.Image) -> list[dict]:
+    """Detect text regions that are likely vertically oriented.
+
+    A region is flagged as vertical when its width / height ratio is < 0.5.
+
+    Args:
+        img: Input PIL image.
+
+    Returns:
+        List of region dictionaries with an additional ``vertical`` key set
+        to ``True``.
+    """
+    regions = detect_text_regions(img, min_aspect=0.1)
+    vertical_regions: list[dict] = []
+    for r in regions:
+        x, y, w, h = r["bbox"]
+        aspect = w / h if h > 0 else 0
+        if aspect < 0.5:
+            r["vertical"] = True
+            vertical_regions.append(r)
+    return vertical_regions
+
+
 def create_text_overlay_svg(text_regions: list[dict], svg_size: tuple[int, int]) -> str:
     """Generate SVG ``<text>`` elements from recognized text regions.
 
@@ -284,6 +432,101 @@ def create_text_overlay_svg(text_regions: list[dict], svg_size: tuple[int, int])
         )
 
     return "\n".join(fragments)
+
+
+def create_text_overlay_svg_multilang(
+    text_regions: list[dict],
+    svg_size: tuple[int, int],
+) -> str:
+    """Generate SVG ``<text>`` elements with multi-language font support.
+
+    Chooses ``writing-mode`` and ``font-family`` based on each region's
+    ``lang`` field (or auto-detected language from the text content).
+
+    Args:
+        text_regions: List of region dicts with ``text``, ``bbox`` [x, y, w, h],
+            and optionally ``lang`` and ``vertical``.
+        svg_size: (width, height) of the target SVG canvas.
+
+    Returns:
+        SVG text fragment string.
+    """
+    if not text_regions:
+        return ""
+
+    sw, sh = svg_size
+    fragments: list[str] = []
+    for region in text_regions:
+        text = region.get("text", "")
+        if not text:
+            continue
+        x, y, w, h = region["bbox"]
+        font_size = max(8, int(h * 0.7))
+        max_chars = max(1, w // (font_size // 2))
+        display_text = text if len(text) <= max_chars else text[: max_chars - 1] + "..."
+        display_text = display_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+        lang = region.get("lang", "eng")
+        vertical = region.get("vertical", False)
+        config = get_language_config(lang)
+
+        font_family = config.get("font_family", "sans-serif")
+        writing_mode = "tb" if vertical else "horizontal"
+        direction = config.get("direction", "ltr")
+
+        attrs = [
+            f'x="{x}"',
+            f'y="{y + h}"',
+            f'font-size="{font_size}"',
+            f'font-family="{font_family}"',
+            'fill="#000000"',
+        ]
+        if writing_mode == "tb":
+            attrs.append('writing-mode="tb"')
+            attrs.append('glyph-orientation-vertical="0"')
+            # For vertical text, position at top of box
+            attrs[1] = f'y="{y}"'
+        if direction == "rtl":
+            attrs.append('text-anchor="end"')
+            attrs[0] = f'x="{x + w}"'
+        else:
+            attrs.append('text-anchor="start"')
+
+        fragments.append(f'  <text {" ".join(attrs)}>{display_text}</text>')
+
+    return "\n".join(fragments)
+
+
+def preprocess_for_ocr(img: Image.Image, lang: str = "eng") -> Image.Image:
+    """Apply language-specific preprocessing to improve OCR accuracy.
+
+    Args:
+        img: Input PIL image.
+        lang: Language code (e.g. ``"eng"``, ``"chi_sim"``, ``"jpn"``).
+
+    Returns:
+        Preprocessed PIL image (RGB mode).
+    """
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    code = normalize_language_code(lang)
+    config = get_language_config(code)
+    strategy = config.get("preprocess", "standard")
+
+    if strategy == "sharpen":
+        # Light sharpening to preserve thin strokes (CJK)
+        img = img.filter(ImageFilter.SHARPEN)
+        # Slight contrast boost
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=80, threshold=3))
+    elif strategy == "standard":
+        # Gentle denoise for Latin / Arabic / Cyrillic
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+        img = img.filter(ImageFilter.SHARPEN)
+    else:
+        img = img.filter(ImageFilter.SHARPEN)
+
+    return img
 
 
 def integrate_text_to_svg(svg_path: Path, text_regions: list[dict], output_path: Path) -> Path:
@@ -324,7 +567,7 @@ def integrate_text_to_svg(svg_path: Path, text_regions: list[dict], output_path:
     else:
         svg_size = (100, 100)
 
-    overlay = create_text_overlay_svg(text_regions, svg_size)
+    overlay = create_text_overlay_svg_multilang(text_regions, svg_size)
     if not overlay:
         # No text to add; just copy if paths differ
         if output_path != svg_path:

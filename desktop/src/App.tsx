@@ -58,6 +58,8 @@ function App() {
   const [optimizeLevel, setOptimizeLevel] = useState(1)
   const [previewResult, setPreviewResult] = useState<string | undefined>(undefined)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [ocrLang, setOcrLang] = useState('eng')
+  const [ocrVertical, setOcrVertical] = useState(false)
 
   const { activePreset, selectPreset, getPresetOptions } = usePresets()
   const queue = useQueue()
@@ -243,6 +245,10 @@ function App() {
             onChangeOptimizeLevel={setOptimizeLevel}
             onPreviewResult={setPreviewResult}
             onToast={showToast}
+            ocrLang={ocrLang}
+            onChangeOcrLang={setOcrLang}
+            ocrVertical={ocrVertical}
+            onToggleOcrVertical={() => setOcrVertical((v) => !v)}
           />
         }
         preview={
