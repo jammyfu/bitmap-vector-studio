@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
+import uuid
 import urllib.parse
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from . import __version__
 from .checkpoint import CheckpointManager
 from .cloud_market import (
     CloudMarket,
@@ -65,16 +69,16 @@ from .animation import (
 
 console = Console()
 app = typer.Typer(
-    help="Bitmap Vector Studio: Illustrator-like bitmap to SVG conversion powered by VTracer.",
+    help="Bitmap Vector Studio v3.0.0 — 位图转矢量工具",
     no_args_is_help=True,
 )
 
 # Sub-typer for account commands
-account_app = typer.Typer(help="Cloud account management.")
+account_app = typer.Typer(help="Cloud account management.", hidden=True)
 app.add_typer(account_app, name="account")
 
 # Sub-typer for queue commands
-queue_app = typer.Typer(help="Task queue management.")
+queue_app = typer.Typer(help="Task queue management.", hidden=True)
 app.add_typer(queue_app, name="queue")
 
 # Sub-typer for config commands
@@ -90,71 +94,71 @@ market_app = typer.Typer(help="Preset market management.")
 app.add_typer(market_app, name="market")
 
 # Sub-typer for workspace commands
-workspace_app = typer.Typer(help="Workspace management.")
+workspace_app = typer.Typer(help="Workspace management.", hidden=True)
 app.add_typer(workspace_app, name="workspace")
 
 # Sub-typer for OCR commands
-ocr_app = typer.Typer(help="OCR utilities.")
+ocr_app = typer.Typer(help="OCR utilities.", hidden=True)
 app.add_typer(ocr_app, name="ocr")
 
 # Sub-typer for AI commands
-ai_app = typer.Typer(help="Local ONNX AI processing.")
+ai_app = typer.Typer(help="Local ONNX AI processing.", hidden=True)
 app.add_typer(ai_app, name="ai")
 
 # Sub-typer for generate commands
-generate_app = typer.Typer(help="AI generative vector creation.")
+generate_app = typer.Typer(help="AI generative vector creation.", hidden=True)
 app.add_typer(generate_app, name="generate")
 
 # Sub-typer for engine commands
-engine_app = typer.Typer(help="Vectorization engine management.")
+engine_app = typer.Typer(help="Vectorization engine management.", hidden=True)
 app.add_typer(engine_app, name="engine")
 
 # Sub-typer for validate commands
-validate_app = typer.Typer(help="Validation utilities.")
+validate_app = typer.Typer(help="Validation utilities.", hidden=True)
 app.add_typer(validate_app, name="validate")
 
 # Sub-typer for contrib commands
-contrib_app = typer.Typer(help="Community contributor tools.")
+contrib_app = typer.Typer(help="Community contributor tools.", hidden=True)
 app.add_typer(contrib_app, name="contrib")
 
 # Sub-typer for cloud sync commands
-cloud_app = typer.Typer(help="Cloud sync and sharing.")
+cloud_app = typer.Typer(help="Cloud sync and sharing.", hidden=True)
 app.add_typer(cloud_app, name="cloud")
 
 # Sub-typer for animation commands
-animate_app = typer.Typer(help="Vector animation export.")
+animate_app = typer.Typer(help="Vector animation export.", hidden=True)
 app.add_typer(animate_app, name="animate")
 
 # Sub-typer for design commands
-design_app = typer.Typer(help="Design system integration.")
+design_app = typer.Typer(help="Design system integration.", hidden=True)
 app.add_typer(design_app, name="design")
 
 # Sub-typer for 3d commands
-three_d_app = typer.Typer(help="3D vector effects and AR preview.")
+three_d_app = typer.Typer(help="3D vector effects and AR preview.", hidden=True)
 app.add_typer(three_d_app, name="3d")
 
 # Sub-typer for collaboration commands
-collab_app = typer.Typer(help="Real-time collaboration rooms.")
+collab_app = typer.Typer(help="Real-time collaboration rooms.", hidden=True)
 app.add_typer(collab_app, name="collab")
 
 # Sub-typer for workflow commands
-workflow_app = typer.Typer(help="Visual workflow management.")
+workflow_app = typer.Typer(help="Visual workflow management.", hidden=True)
 app.add_typer(workflow_app, name="workflow")
 
 # Sub-typer for sync commands
-sync_app = typer.Typer(help="Cross-device sync.")
+sync_app = typer.Typer(help="Cross-device sync.", hidden=True)
 app.add_typer(sync_app, name="sync")
 
 # Sub-typer for render-farm commands
-farm_app = typer.Typer(help="Distributed render farm.")
+farm_app = typer.Typer(help="Distributed render farm.", hidden=True)
 app.add_typer(farm_app, name="render-farm")
 
 # Sub-typer for enterprise commands
-enterprise_app = typer.Typer(help="Enterprise team and SSO management.")
+enterprise_app = typer.Typer(help="Enterprise team and SSO management.", hidden=True)
 app.add_typer(enterprise_app, name="enterprise")
 
 # Sub-typer for template market commands
-template_app = typer.Typer(help="Smart template marketplace.")
+template_app = typer.Typer(help="Smart template marketplace.", hidden=True)
 app.add_typer(template_app, name="template")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
@@ -164,7 +168,61 @@ except ImportError:  # pragma: no cover
     uvicorn = None  # type: ignore[assignment]
 
 
-@app.command("api")
+def _print_full_help() -> None:
+    """Print comprehensive help including advanced commands."""
+    console.print("\n[bold]Bitmap Vector Studio v3.0.0[/bold] — 位图转矢量工具\n")
+
+    console.print("[bold cyan]核心命令:[/bold cyan]")
+    console.print("  convert    转换图片为矢量格式 [默认]")
+    console.print("  quick      一键转换（智能默认）")
+    console.print("  config     配置管理")
+    console.print("  plugin     插件管理")
+    console.print("  market     预设/模板市场")
+    console.print("  help       显示帮助信息")
+
+    console.print("\n[bold cyan]高级命令:[/bold cyan]")
+    console.print("  trace      单图转换 (已弃用，请使用 convert)")
+    console.print("  batch      批量转换 (已弃用，请使用 convert --batch)")
+    console.print("  benchmark  性能基准测试")
+    console.print("  search     参数搜索")
+    console.print("  resume     恢复中断的批量转换")
+    console.print("  presets    列出内置预设")
+    console.print("  api        启动API服务器")
+    console.print("  account    云账户管理")
+    console.print("  queue      任务队列管理")
+    console.print("  workspace  工作区管理")
+    console.print("  ocr        OCR工具")
+    console.print("  ai         本地ONNX AI处理")
+    console.print("  generate   AI生成矢量图")
+    console.print("  engine     矢量化引擎管理")
+    console.print("  validate   验证工具")
+    console.print("  contrib    社区贡献工具")
+    console.print("  cloud      云同步和分享")
+    console.print("  animate    矢量动画导出")
+    console.print("  design     设计系统集成")
+    console.print("  3d         3D矢量效果和AR预览")
+    console.print("  collab     实时协作房间")
+    console.print("  workflow   可视工作流管理")
+    console.print("  sync       跨设备同步")
+    console.print("  render-farm 分布式渲染农场")
+    console.print("  enterprise 企业团队和SSO管理")
+    console.print("  template   智能模板市场")
+
+    console.print("\n[bold cyan]常用选项:[/bold cyan]")
+    console.print("  --version   显示版本")
+    console.print("  --help-all  显示所有命令（含高级）")
+    console.print("  --quiet     静默输出")
+    console.print("  --verbose   详细输出")
+
+    console.print("\n[bold cyan]快速开始:[/bold cyan]")
+    console.print("  vector-studio quick input.png           一键转换")
+    console.print("  vector-studio convert input.png -p logo 使用预设转换")
+    console.print("  vector-studio convert input.png -f pdf  导出PDF")
+
+    console.print("\n[dim]文档: https://github.com/jammyfu/bitmap-vector-studio[/dim]\n")
+
+
+@app.command("api", hidden=True)
 def api_command(
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host."),
     port: int = typer.Option(8000, "--port", help="Bind port."),
@@ -186,8 +244,18 @@ def main_callback(
     host: str = typer.Option("0.0.0.0", "--host"),
     port: int = typer.Option(8000, "--port"),
     reload: bool = typer.Option(False, "--reload"),
+    help_all: bool = typer.Option(False, "--help-all", help="Show all commands including advanced ones."),
+    version: bool = typer.Option(False, "--version", help="Show version."),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Global quiet mode."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Global verbose mode."),
 ) -> None:
-    """Global callback that intercepts --api before any sub-command runs."""
+    """Global callback that intercepts --api, --help-all, and --version before any sub-command runs."""
+    if help_all:
+        _print_full_help()
+        raise typer.Exit()
+    if version:
+        console.print(f"Bitmap Vector Studio v{__version__}")
+        raise typer.Exit()
     if api:
         if uvicorn is None:
             console.print("[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'")
@@ -244,7 +312,266 @@ def _active_plugins(config: Config, cli_plugins: list[str]) -> list[Plugin]:
     return manager.get_plugins()
 
 
-@app.command("presets")
+# ------------------------------------------------------------------
+# Output helpers for "Less is More" CLI experience
+# ------------------------------------------------------------------
+
+def _print_analysis(input_path: Path, preset_name: str, confidence: float, features: dict[str, Any], quiet: bool, verbose: bool) -> None:
+    if quiet:
+        return
+    if verbose:
+        console.print(f"[分析] 图片: {input_path.name} ({features.get('width', '?')}x{features.get('height', '?')}, {features.get('color_count', '?')}色, 边缘密度: {features.get('edge_density', 0):.2f})")
+        console.print(f"[推荐] 预设: {preset_name} (置信度 {confidence:.0%})")
+    else:
+        console.print("分析中... ✓")
+        console.print(f"推荐预设: {preset_name} (置信度 {confidence:.0%})")
+
+
+def _print_convert_progress(step: str, quiet: bool, verbose: bool) -> None:
+    if quiet:
+        return
+    if verbose:
+        console.print(f"[转换] {step}")
+    else:
+        console.print(f"{step}...", end=" ")
+
+
+def _print_convert_done(quiet: bool, verbose: bool) -> None:
+    if quiet:
+        return
+    if not verbose:
+        console.print("✓")
+
+
+def _print_result(result: Any, quiet: bool, verbose: bool, score: bool = False) -> None:
+    if quiet:
+        console.print(str(result.svg_path))
+        return
+    size_kb = result.svg_path.stat().st_size / 1024
+    if verbose:
+        console.print(f"[完成] 输出: {result.svg_path} ({size_kb:.1f}KB)")
+        console.print(f"[引擎] {result.engine} | 时间: {result.elapsed_seconds:.2f}s")
+        console.print(f"[统计] {result.stats}")
+        if score:
+            try:
+                qs = svg_quality_score(result.svg_path)
+                console.print(f"[质量] 评分: {qs['overall']}/100")
+            except Exception as exc:
+                console.print(f"[red]评分失败:[/red] {exc}")
+    else:
+        console.print(f"完成! → {result.svg_path} ({size_kb:.1f}KB)")
+
+
+def _run_single_convert(
+    input_path: Path,
+    output: Path | None,
+    preset: str | None,
+    format: str,
+    optimize_level: str,
+    quiet: bool,
+    verbose: bool,
+    config_path: Path | None = None,
+    plugin: list[str] | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Run a single-file conversion with smart preset recommendation."""
+    config = _load_config(config_path)
+    plugins = _active_plugins(config, plugin or [])
+
+    # Auto-recommend preset if not specified
+    if preset is None:
+        from .smart_recommend import recommend_for_image
+        preset_name, confidence, reason, features = recommend_for_image(input_path)
+        _print_analysis(input_path, preset_name, confidence, features, quiet, verbose)
+        preset = preset_name
+    else:
+        if not quiet:
+            if verbose:
+                console.print(f"[参数] 使用预设: {preset}")
+            else:
+                console.print(f"使用预设: {preset}")
+
+    overrides = _option_overrides(**kwargs)
+    opts = options_from_preset(preset, overrides)
+    out = output or input_path.with_suffix(f".{format}")
+
+    _print_convert_progress("转换", quiet, verbose)
+    result = trace_image(
+        input_path,
+        out,
+        opts,
+        optimize_level=optimize_level,
+        plugins=plugins,
+    )
+    _print_convert_done(quiet, verbose)
+    _print_result(result, quiet, verbose)
+    return result
+
+
+# ------------------------------------------------------------------
+# Convert app (unified conversion entry point)
+# ------------------------------------------------------------------
+
+convert_app = typer.Typer(help="转换图片为矢量格式（统一入口）")
+
+
+@convert_app.command("file")
+def convert_file(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
+    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="预设名称，不指定则自动推荐。"),
+    format: str = typer.Option("svg", "--format", "-f", help="输出格式: svg/pdf/png/eps。"),
+    optimize: str = typer.Option("basic", "--optimize", help="优化级别: none/basic/comprehensive/aggressive。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="配置文件路径。"),
+    plugin: list[str] = typer.Option([], "--plugin", help="启用的插件名称（可多次使用）。"),
+) -> None:
+    """转换单张图片为矢量格式。"""
+    _run_single_convert(
+        input_path=input_path,
+        output=output,
+        preset=preset,
+        format=format,
+        optimize_level=optimize,
+        quiet=quiet,
+        verbose=verbose,
+        config_path=config_path,
+        plugin=plugin,
+    )
+
+
+@convert_app.command("batch")
+def convert_batch(
+    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="输入文件夹。"),
+    output_dir: Path = typer.Argument(..., help="输出文件夹。"),
+    preset: str = typer.Option("poster", "--preset", "-p", help="预设名称。"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="递归扫描输入文件夹。"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="覆盖现有文件。"),
+    optimize: str = typer.Option("basic", "--optimize", help="优化级别。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="并发工作数。"),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="配置文件路径。"),
+    plugin: list[str] = typer.Option([], "--plugin", help="启用的插件名称。"),
+) -> None:
+    """批量转换文件夹中的图片。"""
+    config = _load_config(config_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    opts = options_from_preset(preset)
+    iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
+    images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+
+    if not images:
+        if not quiet:
+            console.print("[yellow]未找到支持的图片。[/yellow]")
+        raise typer.Exit(code=0)
+
+    plugins = _active_plugins(config, plugin)
+
+    if not quiet:
+        if verbose:
+            console.print(f"[批量] 发现 {len(images)} 张图片，使用 {workers} 个工作线程")
+        else:
+            console.print(f"批量转换: {len(images)} 张图片")
+
+    failures = 0
+    for idx, image_path in enumerate(images, start=1):
+        rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
+        out_path = (output_dir / rel).with_suffix(".svg")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.exists() and not overwrite:
+            if verbose:
+                console.print(f"[跳过] {out_path} (已存在)")
+            continue
+        try:
+            if not quiet and not verbose:
+                console.print(f"  [{idx}/{len(images)}] {image_path.name} ...", end=" ")
+            result = trace_image(
+                image_path,
+                out_path,
+                opts,
+                optimize_level=optimize,
+                plugins=plugins,
+            )
+            if not quiet:
+                if verbose:
+                    console.print(f"[完成] {result.svg_path}")
+                else:
+                    console.print("✓")
+        except Exception as exc:
+            failures += 1
+            if not quiet:
+                if verbose:
+                    console.print(f"[失败] {image_path}: {exc}")
+                else:
+                    console.print(f"✗ ({exc})")
+
+    if failures:
+        if not quiet:
+            console.print(f"[red]失败 {failures}/{len(images)}[/red]")
+        raise typer.Exit(code=1)
+    if not quiet:
+        console.print(f"[green]完成 {len(images)} 张图片转换[/green]")
+
+
+@convert_app.command("generate")
+def convert_generate(
+    prompt: str = typer.Argument(..., help="AI 生成提示词。"),
+    input_path: Optional[Path] = typer.Option(None, "--input", "-i", exists=True, dir_okay=False, readable=True, help="参考图片（可选）。"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
+    style: str = typer.Option("flat", "--style", "-s", help="风格: flat, line, gradient, 3d, sketch。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+) -> None:
+    """使用 AI 生成矢量风格图片。"""
+    from vector_studio.ai_generation import VectorGenerator
+    from PIL import Image
+
+    generator = VectorGenerator()
+    if input_path is not None:
+        with Image.open(input_path) as img:
+            img = generator.generate_from_image(img, prompt=prompt)
+    else:
+        img = generator.generate_from_text(prompt, style=style)
+
+    out = output or Path(f"generated_{style}.png")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    img.save(out, format="PNG", optimize=True)
+
+    if not quiet:
+        if verbose:
+            console.print(f"[生成] 已保存 {out} ({img.size[0]}x{img.size[1]})")
+        else:
+            console.print(f"生成完成 → {out} ({img.size[0]}x{img.size[1]})")
+    else:
+        console.print(str(out))
+
+
+app.add_typer(convert_app, name="convert")
+
+
+@app.command("quick")
+def quick_command(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+) -> None:
+    """一键转换：自动推荐最佳预设并转换。"""
+    _run_single_convert(
+        input_path=input_path,
+        output=output,
+        preset=None,
+        format="svg",
+        optimize_level="basic",
+        quiet=quiet,
+        verbose=verbose,
+    )
+
+
+@app.command("presets", hidden=True)
 def list_presets() -> None:
     """Show available presets and their core settings."""
     table = Table(title="Built-in presets")
@@ -269,7 +596,7 @@ def list_presets() -> None:
     console.print(table)
 
 
-@app.command("trace")
+@app.command("trace", hidden=True)
 def trace_command(
     input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output SVG path."),
@@ -313,7 +640,8 @@ def trace_command(
     engine: str = typer.Option("vtracer", "--engine", "-e", help="Vectorization engine: vtracer, potrace, autotrace."),
     ai_pipeline: list[str] = typer.Option([], "--ai-pipeline", help="AI pre-processing tasks: segment, style_transfer, upscale, auto_enhance."),
 ) -> None:
-    """Convert one bitmap image to SVG."""
+    """Convert one bitmap image to SVG. (Deprecated: use 'convert' instead)"""
+    console.print("[yellow]警告:[/yellow] `trace` 命令已弃用，请使用 `vector-studio convert <file>`")
     config = _load_config(config_path)
 
     # Apply config defaults when the CLI value matches the hardcoded default
@@ -449,7 +777,7 @@ def trace_command(
             console.print(f"[red]Failed to open editor:[/red] {exc}")
 
 
-@app.command("benchmark")
+@app.command("benchmark", hidden=True)
 def benchmark_command(
     input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
@@ -496,7 +824,7 @@ def benchmark_command(
     console.print(f"[cyan]Bottleneck:[/cyan] {report['bottleneck']} ({report['total_seconds']:.3f}s total)")
 
 
-@app.command("batch")
+@app.command("batch", hidden=True)
 def batch_command(
     input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input folder."),
     output_dir: Path = typer.Argument(..., help="Output folder."),
@@ -515,7 +843,8 @@ def batch_command(
     plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
     checkpoint: bool = typer.Option(False, "--checkpoint", help="Enable checkpoint/resume for this batch."),
 ) -> None:
-    """Batch-convert a folder of images."""
+    """Batch-convert a folder of images. (Deprecated: use 'convert batch' instead)"""
+    console.print("[yellow]警告:[/yellow] `batch` 命令已弃用，请使用 `vector-studio convert batch <input> <output>`")
     config = _load_config(config_path)
 
     if config.default_preset and preset == "poster":
@@ -629,7 +958,7 @@ def batch_command(
         raise typer.Exit(code=1)
 
 
-@app.command("search")
+@app.command("search", hidden=True)
 def search_command(
     input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory to store search results."),
@@ -1703,7 +2032,7 @@ def generate_illustration(
 # Resume command
 # ------------------------------------------------------------------
 
-@app.command("resume")
+@app.command("resume", hidden=True)
 def resume_command(
     checkpoint_id: str = typer.Argument("", help="Checkpoint ID to resume."),
     workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
