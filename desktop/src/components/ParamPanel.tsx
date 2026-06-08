@@ -1,46 +1,98 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useInvoke } from '../hooks/useInvoke';
 import type { TraceOptions, Preset } from '../types';
 
 interface ParamPanelProps {
-  presets: Preset[];
-  activePreset: string;
-  onSelectPreset: (name: string) => void;
+  inputPath?: string;
   options: TraceOptions;
   onChangeOptions: (opts: TraceOptions) => void;
-  onSavePreset: (name: string, options: TraceOptions) => void;
-  onDeletePreset: (name: string) => void;
   livePreview: boolean;
   onToggleLivePreview: () => void;
   outputFormat: 'svg' | 'pdf' | 'png';
   onChangeOutputFormat: (f: 'svg' | 'pdf' | 'png') => void;
   optimizeLevel: number;
   onChangeOptimizeLevel: (v: number) => void;
+  onPreviewResult?: (svgPath: string) => void;
+  onToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const ParamPanel: React.FC<ParamPanelProps> = ({
-  presets,
-  activePreset,
-  onSelectPreset,
+  inputPath,
   options,
   onChangeOptions,
-  onSavePreset,
-  onDeletePreset,
   livePreview,
   onToggleLivePreview,
   outputFormat,
   onChangeOutputFormat,
   optimizeLevel,
   onChangeOptimizeLevel,
+  onPreviewResult,
+  onToast,
 }) => {
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [activePreset, setActivePreset] = useState<string>('default');
   const [presetName, setPresetName] = useState('');
   const [showSave, setShowSave] = useState(false);
+  const [isRecommending, setIsRecommending] = useState(false);
+  const livePreviewTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const { call: callGetPresets, loading: loadingPresets } = useInvoke<Record<string, never>, string>('get_presets');
+  const { call: callSavePreset, loading: savingPreset } = useInvoke<{ name: string; options: string; description: string }, void>('save_preset');
+  const { call: callDeletePreset } = useInvoke<{ name: string }, void>('delete_preset');
+  const { call: callRecommend } = useInvoke<{ inputPath: string }, string>('recommend_preset');
+  const { call: callConvert } = useInvoke<{ inputPath: string; options: string }, string>('convert_image');
+
+  // Load presets from backend on mount
+  useEffect(() => {
+    async function load() {
+      const result = await callGetPresets();
+      if (result) {
+        try {
+          const parsed = JSON.parse(result) as { presets?: Preset[] };
+          if (parsed.presets) {
+            setPresets(parsed.presets);
+          } else if (Array.isArray(parsed)) {
+            setPresets(parsed);
+          }
+        } catch {
+          onToast?.('Failed to parse presets', 'error');
+        }
+      }
+    }
+    load();
+  }, [callGetPresets, onToast]);
+
+  // Apply preset when activePreset changes
   useEffect(() => {
     const preset = presets.find((p) => p.name === activePreset);
     if (preset) {
       onChangeOptions({ ...preset.options });
     }
-  }, [activePreset, presets]);
+  }, [activePreset, presets, onChangeOptions]);
+
+  // Live preview debounce
+  useEffect(() => {
+    if (!livePreview || !inputPath) return;
+    if (livePreviewTimeout.current) {
+      clearTimeout(livePreviewTimeout.current);
+    }
+    livePreviewTimeout.current = setTimeout(async () => {
+      try {
+        const result = await callConvert({ inputPath, options: JSON.stringify(options) });
+        if (result) {
+          const parsed = JSON.parse(result) as { outputPath?: string };
+          if (parsed.outputPath) {
+            onPreviewResult?.(parsed.outputPath);
+          }
+        }
+      } catch (err) {
+        // Silently ignore live preview errors
+      }
+    }, 600);
+    return () => {
+      if (livePreviewTimeout.current) clearTimeout(livePreviewTimeout.current);
+    };
+  }, [options, livePreview, inputPath, callConvert, onPreviewResult]);
 
   const update = useCallback(
     <K extends keyof TraceOptions>(key: K, value: TraceOptions[K]) => {
@@ -49,13 +101,68 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
     [options, onChangeOptions]
   );
 
-  const handleSave = useCallback(() => {
-    if (presetName.trim()) {
-      onSavePreset(presetName.trim(), options);
+  const handleSave = useCallback(async () => {
+    if (!presetName.trim()) return;
+    const result = await callSavePreset({
+      name: presetName.trim(),
+      options: JSON.stringify(options),
+      description: '',
+    });
+    if (result !== null) {
+      onToast?.('Preset saved', 'success');
       setPresetName('');
       setShowSave(false);
+      // Refresh presets
+      const refreshed = await callGetPresets();
+      if (refreshed) {
+        try {
+          const parsed = JSON.parse(refreshed) as { presets?: Preset[] };
+          if (parsed.presets) setPresets(parsed.presets);
+          else if (Array.isArray(parsed)) setPresets(parsed);
+        } catch { /* ignore */ }
+      }
+    } else {
+      onToast?.('Failed to save preset', 'error');
     }
-  }, [presetName, options, onSavePreset]);
+  }, [presetName, options, callSavePreset, callGetPresets, onToast]);
+
+  const handleDelete = useCallback(async (name: string) => {
+    const result = await callDeletePreset({ name });
+    if (result !== null) {
+      onToast?.('Preset deleted', 'success');
+      setPresets((prev) => prev.filter((p) => p.name !== name));
+      if (activePreset === name) setActivePreset('default');
+    } else {
+      onToast?.('Failed to delete preset', 'error');
+    }
+  }, [callDeletePreset, activePreset, onToast]);
+
+  const handleRecommend = useCallback(async () => {
+    if (!inputPath) {
+      onToast?.('Please select an image first', 'error');
+      return;
+    }
+    setIsRecommending(true);
+    const result = await callRecommend({ inputPath });
+    setIsRecommending(false);
+    if (result) {
+      try {
+        const parsed = JSON.parse(result) as { preset?: string; options?: TraceOptions };
+        if (parsed.options) {
+          onChangeOptions(parsed.options);
+          if (parsed.preset) setActivePreset(parsed.preset);
+          onToast?.('Preset recommended applied', 'success');
+        } else if (parsed.preset) {
+          setActivePreset(parsed.preset);
+          onToast?.(`Recommended preset: ${parsed.preset}`, 'success');
+        }
+      } catch {
+        onToast?.('Failed to parse recommendation', 'error');
+      }
+    } else {
+      onToast?.('Recommendation failed', 'error');
+    }
+  }, [inputPath, callRecommend, onChangeOptions, onToast]);
 
   const currentPreset = presets.find((p) => p.name === activePreset);
 
@@ -67,19 +174,20 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
           <select
             className="param-select"
             value={activePreset}
-            onChange={(e) => onSelectPreset(e.target.value)}
+            onChange={(e) => setActivePreset(e.target.value)}
+            disabled={loadingPresets}
           >
             {presets.map((p) => (
               <option key={p.name} value={p.name}>
-                {p.displayName} {p.isBuiltin ? '(Built-in)' : '(Custom)'}
+                {p.displayName || p.name} {p.isBuiltin ? '(Built-in)' : '(Custom)'}
               </option>
             ))}
           </select>
-          <button className="btn btn-sm" onClick={() => setShowSave((s) => !s)}>
+          <button className="btn btn-sm" onClick={() => setShowSave((s) => !s)} disabled={savingPreset}>
             Save
           </button>
           {currentPreset && !currentPreset.isBuiltin && (
-            <button className="btn btn-sm btn-danger" onClick={() => onDeletePreset(currentPreset.name)}>
+            <button className="btn btn-sm btn-danger" onClick={() => handleDelete(currentPreset.name)}>
               Del
             </button>
           )}
@@ -92,11 +200,14 @@ export const ParamPanel: React.FC<ParamPanelProps> = ({
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
             />
-            <button className="btn btn-sm btn-primary" onClick={handleSave}>
+            <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={savingPreset}>
               OK
             </button>
           </div>
         )}
+        <button className="btn btn-sm btn-secondary" onClick={handleRecommend} disabled={isRecommending || !inputPath}>
+          {isRecommending ? 'Analyzing...' : 'Recommend'}
+        </button>
       </div>
 
       <div className="param-section">

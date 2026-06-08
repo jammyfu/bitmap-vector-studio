@@ -74,8 +74,8 @@
     },
     "bundle": {
       "active": true,
-      "targets": "all",
-      "identifier": "com.bitmapvectorstudio.app",
+      "targets": ["msi", "nsis", "dmg", "app", "appimage", "deb", "rpm"],
+      "identifier": "com.jammyfu.bitmap-vector-studio",
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
@@ -84,8 +84,28 @@
         "icons/icon.ico"
       ],
       "category": "DeveloperTool",
-      "shortDescription": "Bitmap to SVG vector conversion studio",
-      "longDescription": "An Illustrator-like desktop application for bitmap/raster to SVG vector conversion powered by VTracer."
+      "shortDescription": "Bitmap Vector Studio - Illustrator-like bitmap to SVG conversion",
+      "longDescription": "An Illustrator-like desktop application for bitmap/raster to SVG vector conversion powered by VTracer. Supports PNG, JPG, WEBP, BMP, TIFF input with real-time preview, AI simplification, OCR, and preset market.",
+      "deb": {
+        "depends": ["python3", "python3-pip", "libcairo2"]
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.13"
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/jammyfu/bitmap-vector-studio/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "YOUR_PUBLIC_KEY_HERE"
     }
   }
 }

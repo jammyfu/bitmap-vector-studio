@@ -1,23 +1,37 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useInvoke } from '../hooks/useInvoke';
 
 interface PreviewPaneProps {
   originalSrc?: string;
   resultSrc?: string;
   fileName?: string;
+  inputPath?: string;
+  options?: string;
+  outputFormat?: 'svg' | 'pdf' | 'png';
   onDownload?: () => void;
+  onToast?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
   originalSrc,
   resultSrc,
   fileName,
+  inputPath,
+  options,
+  outputFormat = 'svg',
   onDownload,
+  onToast,
 }) => {
   const [mode, setMode] = useState<'side-by-side' | 'overlay'>('side-by-side');
   const [overlayPos, setOverlayPos] = useState(50);
   const [scale, setScale] = useState(1);
+  const [localResult, setLocalResult] = useState<string | undefined>(resultSrc);
+  const [converting, setConverting] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+
+  const { call: callConvert } = useInvoke<{ inputPath: string; options: string }, string>('convert_image');
+  const { call: callOpenEditor } = useInvoke<{ svgPath: string; editor?: string }, void>('open_with_editor');
 
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.25, 5)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.25, 0.25)), []);
@@ -42,7 +56,51 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     isDragging.current = false;
   }, []);
 
-  const hasContent = originalSrc || resultSrc;
+  const handleConvert = useCallback(async () => {
+    if (!inputPath || !options) {
+      onToast?.('No input image or options set', 'error');
+      return;
+    }
+    setConverting(true);
+    const result = await callConvert({ inputPath, options });
+    setConverting(false);
+    if (result) {
+      try {
+        const parsed = JSON.parse(result) as { outputPath?: string };
+        if (parsed.outputPath) {
+          setLocalResult(parsed.outputPath);
+          onToast?.('Conversion complete', 'success');
+        } else {
+          onToast?.('Conversion returned no output path', 'error');
+        }
+      } catch {
+        onToast?.('Failed to parse conversion result', 'error');
+      }
+    } else {
+      onToast?.('Conversion failed', 'error');
+    }
+  }, [inputPath, options, callConvert, onToast]);
+
+  const handleOpenEditor = useCallback(async () => {
+    const svgPath = localResult || resultSrc;
+    if (!svgPath) {
+      onToast?.('No result to open', 'error');
+      return;
+    }
+    const result = await callOpenEditor({ svgPath });
+    if (result !== null) {
+      onToast?.('Opened in external editor', 'success');
+    } else {
+      onToast?.('Failed to open external editor', 'error');
+    }
+  }, [localResult, resultSrc, callOpenEditor, onToast]);
+
+  const handleDownload = useCallback(() => {
+    onDownload?.();
+  }, [onDownload]);
+
+  const displayResult = localResult || resultSrc;
+  const hasContent = originalSrc || displayResult;
 
   return (
     <div className="preview-pane">
@@ -73,11 +131,23 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
             ☐
           </button>
         </div>
-        {onDownload && resultSrc && (
-          <button className="btn btn-sm btn-primary" onClick={onDownload}>
-            Download
-          </button>
-        )}
+        <div className="preview-actions">
+          {inputPath && (
+            <button className="btn btn-sm btn-primary" onClick={handleConvert} disabled={converting}>
+              {converting ? 'Converting...' : 'Convert'}
+            </button>
+          )}
+          {displayResult && (
+            <button className="btn btn-sm" onClick={handleOpenEditor}>
+              Open Editor
+            </button>
+          )}
+          {displayResult && (
+            <button className="btn btn-sm btn-secondary" onClick={handleDownload}>
+              Download {outputFormat.toUpperCase()}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="preview-body" ref={containerRef}>
@@ -100,8 +170,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
             </div>
             <div className="preview-panel">
               <div className="preview-panel-label">Result</div>
-              {resultSrc ? (
-                <img className="preview-image" src={resultSrc} alt="Result" draggable={false} />
+              {displayResult ? (
+                <img className="preview-image" src={displayResult} alt="Result" draggable={false} />
               ) : (
                 <div className="preview-panel-empty">No result</div>
               )}
@@ -128,8 +198,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
               className="preview-overlay-top"
               style={{ clipPath: `inset(0 ${100 - overlayPos}% 0 0)` }}
             >
-              {resultSrc ? (
-                <img className="preview-image" src={resultSrc} alt="Result" draggable={false} />
+              {displayResult ? (
+                <img className="preview-image" src={displayResult} alt="Result" draggable={false} />
               ) : (
                 <div className="preview-panel-empty">No result</div>
               )}

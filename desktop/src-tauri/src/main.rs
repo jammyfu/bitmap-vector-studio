@@ -7,6 +7,7 @@
 
 mod commands;
 mod python_bridge;
+mod updater;
 
 use tauri::{CustomMenuItem, Menu, MenuItem, Submenu};
 
@@ -89,12 +90,30 @@ fn main() {
             commands::convert_image,
             commands::batch_convert,
             commands::get_presets,
+            commands::save_preset,
+            commands::delete_preset,
             commands::get_history,
+            commands::recommend_preset,
+            commands::open_with_editor,
+            commands::get_plugins,
+            commands::enable_plugin,
+            commands::disable_plugin,
+            commands::get_config,
+            commands::set_config,
+            commands::market_list,
+            commands::market_install,
+            commands::start_queue,
+            commands::pause_queue,
+            commands::cancel_queue,
+            commands::get_queue_status,
             commands::open_file_dialog,
             commands::open_output_folder,
             commands::start_api,
             commands::stop_api,
             commands::check_env,
+            updater::check_update,
+            updater::download_update,
+            updater::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
