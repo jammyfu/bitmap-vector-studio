@@ -283,3 +283,188 @@ class TestDownloadEndpoint:
 
         assert response.status_code == 400
         assert "Format must be one of" in response.json()["detail"]
+
+
+class TestShareEndpoints:
+    def test_share_svg_success(self, tmp_path: Path):
+        svg = tmp_path / "test.svg"
+        svg.write_text("<svg></svg>")
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.share_svg.return_value = {
+                "url": "http://localhost:8000/share/abc",
+                "file_id": "abc",
+                "expire_at": "2025-01-01T00:00:00",
+                "qr_code": "base64data",
+            }
+            with svg.open("rb") as f:
+                response = client.post("/share", files={"file": ("test.svg", f, "image/svg+xml")})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["file_id"] == "abc"
+
+    def test_share_non_svg_rejected(self, tmp_path: Path):
+        png = tmp_path / "test.png"
+        png.write_bytes(b"fake png")
+        with png.open("rb") as f:
+            response = client.post("/share", files={"file": ("test.png", f, "image/png")})
+        assert response.status_code == 400
+        assert "Only SVG files" in response.json()["detail"]
+
+    def test_get_shared_svg_local(self, tmp_path: Path):
+        from vector_studio.cloud_sync import LocalServerBackend
+        from datetime import datetime, timezone, timedelta
+        backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
+        backend._shares["abc"] = {"filename": "test.svg", "content_type": "image/svg+xml", "expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        (tmp_path / "abc").write_text("<svg></svg>")
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.backend = backend
+            response = client.get("/share/abc")
+        assert response.status_code == 200
+        assert response.content == b"<svg></svg>"
+
+    def test_get_shared_svg_expired(self, tmp_path: Path):
+        from vector_studio.cloud_sync import LocalServerBackend
+        from datetime import datetime, timezone, timedelta
+        backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
+        backend._shares["abc"] = {"filename": "test.svg", "content_type": "image/svg+xml", "expire_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()}
+        (tmp_path / "abc").write_text("<svg></svg>")
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.backend = backend
+            response = client.get("/share/abc")
+        assert response.status_code == 404
+        assert "expired" in response.json()["detail"].lower()
+
+    def test_revoke_share(self, tmp_path: Path):
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.revoke_share.return_value = True
+            response = client.delete("/share/abc")
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+    def test_revoke_share_not_found(self, tmp_path: Path):
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.revoke_share.return_value = False
+            response = client.delete("/share/abc")
+        assert response.status_code == 404
+
+    def test_list_shares(self, tmp_path: Path):
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.get_shared_files.return_value = [{"share_id": "abc", "url": "http://localhost/abc"}]
+            response = client.get("/shares")
+        assert response.status_code == 200
+        assert len(response.json()["shares"]) == 1
+
+    def test_get_share_qr(self, tmp_path: Path):
+        from vector_studio.cloud_sync import LocalServerBackend
+        from datetime import datetime, timezone, timedelta
+        backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
+        backend._shares["abc"] = {"expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        with patch("vector_studio.api._get_share_manager") as mock_mgr:
+            mock_mgr.return_value.backend = backend
+            with patch.object(backend, "get_qr_code", return_value=b"pngdata"):
+                response = client.get("/share/abc/qr")
+        assert response.status_code == 200
+        assert "qr_code" in response.json()
+
+
+class TestDownloadPdfPng:
+    def test_download_pdf(self, tmp_path: Path):
+        svg = tmp_path / "result.svg"
+        svg.write_text("<svg></svg>")
+        pdf = tmp_path / "result.pdf"
+        pdf.write_bytes(b"pdfdata")
+
+        q = _get_queue()
+        with patch.object(
+            q,
+            "get_status",
+            return_value={
+                "task_id": "test-123",
+                "status": "completed",
+                "progress": 100.0,
+                "result": {"svg_path": str(svg), "elapsed_seconds": 1.0, "stats": {}},
+                "error": None,
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "completed_at": None,
+            },
+        ):
+            with patch("vector_studio.api.export_svg_to_pdf", return_value=pdf):
+                response = client.get("/download/test-123/pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+
+    def test_download_png(self, tmp_path: Path):
+        svg = tmp_path / "result.svg"
+        svg.write_text("<svg></svg>")
+        png = tmp_path / "result.png"
+        png.write_bytes(b"pngdata")
+
+        q = _get_queue()
+        with patch.object(
+            q,
+            "get_status",
+            return_value={
+                "task_id": "test-123",
+                "status": "completed",
+                "progress": 100.0,
+                "result": {"svg_path": str(svg), "elapsed_seconds": 1.0, "stats": {}},
+                "error": None,
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "completed_at": None,
+            },
+        ):
+            with patch("vector_studio.api.export_svg_to_png", return_value=png):
+                response = client.get("/download/test-123/png")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+
+    def test_download_pdf_export_failure(self, tmp_path: Path):
+        svg = tmp_path / "result.svg"
+        svg.write_text("<svg></svg>")
+
+        q = _get_queue()
+        with patch.object(
+            q,
+            "get_status",
+            return_value={
+                "task_id": "test-123",
+                "status": "completed",
+                "progress": 100.0,
+                "result": {"svg_path": str(svg), "elapsed_seconds": 1.0, "stats": {}},
+                "error": None,
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "completed_at": None,
+            },
+        ):
+            with patch("vector_studio.api.export_svg_to_pdf", side_effect=RuntimeError("no cairosvg")):
+                response = client.get("/download/test-123/pdf")
+        assert response.status_code == 500
+        assert "PDF export failed" in response.json()["detail"]
+
+
+class TestAsyncConvertMore:
+    def test_convert_async_bad_preset(self, tmp_path: Path):
+        img = tmp_path / "test.png"
+        img.write_bytes(b"fake png data")
+        with img.open("rb") as f:
+            response = client.post(
+                "/convert/async",
+                files={"file": ("test.png", f, "image/png")},
+                data={"preset": "nonexistent"},
+            )
+        assert response.status_code == 400
+        assert "Unknown preset" in response.json()["detail"]
+
+    def test_convert_async_unsupported_format(self, tmp_path: Path):
+        txt = tmp_path / "test.txt"
+        txt.write_text("not an image")
+        with txt.open("rb") as f:
+            response = client.post(
+                "/convert/async",
+                files={"file": ("test.txt", f, "text/plain")},
+            )
+        assert response.status_code == 400
+        assert "Unsupported input format" in response.json()["detail"]

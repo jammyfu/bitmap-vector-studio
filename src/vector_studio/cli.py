@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .checkpoint import CheckpointManager
+from .cloud_sync import CloudSyncManager, GitHubGistBackend, LocalServerBackend
 from .config import Config
 from .external_editors import open_with_default_editor, open_with_editor
 from .ocr_languages import (
@@ -20,6 +21,16 @@ from .ocr_languages import (
 )
 from .param_search import ParamGrid, quick_search, search_best_params
 from .plugin_interface import Plugin
+from .plugin_sdk import (
+    PluginDebugger,
+    PluginDocsGenerator,
+    PluginScaffold,
+    PluginValidator,
+)
+from .community_tools import (
+    ContributionGuideGenerator,
+    PresetValidator,
+)
 from .plugins import PluginManager
 from .presets import PRESETS, options_from_preset
 from .svg_optimizer import svg_quality_score
@@ -57,6 +68,22 @@ app.add_typer(workspace_app, name="workspace")
 # Sub-typer for OCR commands
 ocr_app = typer.Typer(help="OCR utilities.")
 app.add_typer(ocr_app, name="ocr")
+
+# Sub-typer for engine commands
+engine_app = typer.Typer(help="Vectorization engine management.")
+app.add_typer(engine_app, name="engine")
+
+# Sub-typer for validate commands
+validate_app = typer.Typer(help="Validation utilities.")
+app.add_typer(validate_app, name="validate")
+
+# Sub-typer for contrib commands
+contrib_app = typer.Typer(help="Community contributor tools.")
+app.add_typer(contrib_app, name="contrib")
+
+# Sub-typer for cloud sync commands
+cloud_app = typer.Typer(help="Cloud sync and sharing.")
+app.add_typer(cloud_app, name="cloud")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -211,6 +238,7 @@ def trace_command(
     plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
     gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
     stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing for large images."),
+    engine: str = typer.Option("vtracer", "--engine", "-e", help="Vectorization engine: vtracer, potrace, autotrace."),
 ) -> None:
     """Convert one bitmap image to SVG."""
     config = _load_config(config_path)
@@ -269,8 +297,8 @@ def trace_command(
 
     if live_preview:
         from .live_preview import LivePreviewEngine
-        engine = LivePreviewEngine(max_size=400)
-        preview_path, elapsed = engine.generate_preview(input_path, opts)
+        preview_engine = LivePreviewEngine(max_size=400)
+        preview_path, elapsed = preview_engine.generate_preview(input_path, opts)
         if output and Path(preview_path).resolve() != Path(out).resolve():
             import shutil
             shutil.copy2(preview_path, out)
@@ -302,6 +330,7 @@ def trace_command(
         input_path,
         out,
         opts,
+        engine=engine,
         optimize=optimize,
         optimize_level=optimize_level,
         name_layers=name_layers,
@@ -750,6 +779,144 @@ def plugin_install(
         console.print(f"[red]Installation failed:[/red] {exc}")
         raise typer.Exit(code=1)
     console.print(f"[green]Installed plugin to:[/green] {dest}")
+
+
+@plugin_app.command("validate")
+def plugin_validate(
+    path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a plugin .py file or directory."),
+) -> None:
+    """Validate a plugin file or all plugins in a directory."""
+    if path.is_dir():
+        results = PluginValidator.validate_batch(path)
+        table = Table(title=f"Plugin Validation: {path}")
+        table.add_column("File", style="bold")
+        table.add_column("Status")
+        table.add_column("Errors")
+        for res in results:
+            status = "[green]ok[/green]" if res["passed"] else "[red]fail[/red]"
+            errors = "; ".join(res["errors"]) if res["errors"] else "-"
+            table.add_row(Path(res["path"]).name, status, errors)
+        console.print(table)
+        if any(not r["passed"] for r in results):
+            raise typer.Exit(code=1)
+    else:
+        passed, errors = PluginValidator.validate(path)
+        if passed:
+            console.print(f"[green]Plugin is valid:[/green] {path}")
+        else:
+            console.print(f"[red]Plugin validation failed:[/red] {path}")
+            for err in errors:
+                console.print(f"  - {err}")
+            raise typer.Exit(code=1)
+
+
+@plugin_app.command("test")
+def plugin_test(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."),
+) -> None:
+    """Test a plugin in an isolated environment."""
+    result = PluginDebugger.test_plugin(path)
+    table = Table(title=f"Plugin Test: {path.name}")
+    table.add_column("Hook", style="bold")
+    table.add_column("Result")
+    for hook, status in result["hook_results"].items():
+        color = "green" if status == "ok" else ("yellow" if status == "skipped" else "red")
+        table.add_row(hook, f"[{color}]{status}[/{color}]")
+    console.print(table)
+    if result["errors"]:
+        for err in result["errors"]:
+            console.print(f"[red]Error:[/red] {err}")
+    console.print(f"Total time: {result['total_seconds']:.4f}s")
+    if not result["passed"]:
+        raise typer.Exit(code=1)
+
+
+@plugin_app.command("scaffold")
+def plugin_scaffold(
+    name: str = typer.Argument(..., help="Name for the new plugin."),
+    output_dir: Path = typer.Option(Path("."), "--output-dir", "-o", help="Directory to write the plugin."),
+    template: str = typer.Option("", "--template", "-t", help="Built-in template: watermark, resize, filter, annotate."),
+    hooks: str = typer.Option("", "--hooks", help="Comma-separated hooks: preprocess,postprocess,on_complete"),
+) -> None:
+    """Generate a new plugin scaffold."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if template:
+        try:
+            path = PluginScaffold.generate_from_template(template, name, output_dir)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1)
+    else:
+        hook_list = [h.strip() for h in hooks.split(",") if h.strip()] or None
+        path = PluginScaffold.generate(name, output_dir, hooks=hook_list)
+    console.print(f"[green]Created plugin:[/green] {path}")
+    test_file = path.with_name(f"test_{path.stem}.py")
+    if test_file.exists():
+        console.print(f"[green]Created test:[/green] {test_file}")
+
+
+@plugin_app.command("docs")
+def plugin_docs(
+    path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a plugin .py file or directory."),
+    output: Path = typer.Option(None, "--output", "-o", help="Output markdown file."),
+) -> None:
+    """Generate documentation for a plugin or a directory of plugins."""
+    if path.is_dir():
+        md = PluginDocsGenerator.generate_api_docs(path)
+    else:
+        md = PluginDocsGenerator.generate_readme(path)
+    if output:
+        output.write_text(md, encoding="utf-8")
+        console.print(f"[green]Saved docs to:[/green] {output}")
+    else:
+        console.print(md)
+
+
+# ------------------------------------------------------------------
+# Validate sub-commands
+# ------------------------------------------------------------------
+
+@validate_app.command("preset")
+def validate_preset(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a preset .json file."),
+) -> None:
+    """Validate a preset JSON file."""
+    passed, errors = PresetValidator.validate(file)
+    if passed:
+        console.print(f"[green]Preset is valid:[/green] {file}")
+    else:
+        console.print(f"[red]Preset validation failed:[/red] {file}")
+        for err in errors:
+            console.print(f"  - {err}")
+        raise typer.Exit(code=1)
+
+
+@validate_app.command("plugin")
+def validate_plugin(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."),
+) -> None:
+    """Validate a plugin file."""
+    passed, errors = PluginValidator.validate(file)
+    if passed:
+        console.print(f"[green]Plugin is valid:[/green] {file}")
+    else:
+        console.print(f"[red]Plugin validation failed:[/red] {file}")
+        for err in errors:
+            console.print(f"  - {err}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Contrib sub-commands
+# ------------------------------------------------------------------
+
+@contrib_app.command("guide")
+def contrib_guide(
+    output: Path = typer.Option(Path("CONTRIBUTING.md"), "--output", "-o", help="Output path for the guide."),
+) -> None:
+    """Generate a CONTRIBUTING.md template."""
+    ContributionGuideGenerator.generate(output)
+    console.print(f"[green]Generated contribution guide:[/green] {output}")
 
 
 # ------------------------------------------------------------------
@@ -1212,6 +1379,244 @@ def workspace_delete(
     else:
         console.print(f"[red]Workspace not found:[/red] {name}")
         raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Cloud sync sub-commands
+# ------------------------------------------------------------------
+
+def _get_cloud_manager(backend: str | None = None, base_url: str = "http://localhost:8000") -> CloudSyncManager:
+    """Build a CloudSyncManager from CLI options."""
+    if backend == "gist":
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            console.print("[red]GITHUB_TOKEN environment variable is required for Gist backend.[/red]")
+            raise typer.Exit(code=1)
+        gb = GitHubGistBackend(token=token)
+        return CloudSyncManager(backend=gb)
+    # Default local backend
+    import tempfile
+    tmpdir = Path(tempfile.mkdtemp(prefix="vs-cloud-cli-"))
+    lb = LocalServerBackend(storage_dir=tmpdir, base_url=base_url)
+    return CloudSyncManager(backend=lb)
+
+
+@cloud_app.command("share")
+def cloud_share(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to share."),
+    expire_hours: int = typer.Option(24, "--expire", "-e", min=1, max=168, help="Expiration time in hours."),
+    backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+) -> None:
+    """Share an SVG file and display the link and QR code."""
+    manager = _get_cloud_manager(backend=backend, base_url=base_url)
+    try:
+        result = manager.share_svg(svg, expire_hours=expire_hours)
+    except Exception as exc:
+        console.print(f"[red]Share failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Shared[/green] {svg.name}")
+    console.print(f"URL: {result['url']}")
+    console.print(f"Expires: {result['expire_at']}")
+    console.print(f"File ID: {result['file_id']}")
+    # Print a small ASCII hint that QR data is available.
+    console.print(f"QR code (base64, {len(result['qr_code'])} chars)")
+
+
+@cloud_app.command("list")
+def cloud_list(
+    backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+) -> None:
+    """List all shared files."""
+    manager = _get_cloud_manager(backend=backend, base_url=base_url)
+    shares = manager.get_shared_files()
+    if not shares:
+        console.print("[yellow]No active shares.[/yellow]")
+        return
+
+    table = Table(title="Shared Files")
+    table.add_column("File ID", style="bold")
+    table.add_column("URL")
+    table.add_column("Expires")
+    for share in shares:
+        sid = share.get("share_id", share.get("file_id", "-"))
+        url = share.get("url", "-")
+        exp = share.get("expire_at", "-")
+        table.add_row(sid, url, exp)
+    console.print(table)
+
+
+@cloud_app.command("revoke")
+def cloud_revoke(
+    file_id: str = typer.Argument(..., help="File ID to revoke."),
+    backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+) -> None:
+    """Revoke a shared file."""
+    manager = _get_cloud_manager(backend=backend, base_url=base_url)
+    success = manager.revoke_share(file_id)
+    if success:
+        console.print(f"[green]Revoked share[/green] {file_id}")
+    else:
+        console.print(f"[red]Share not found:[/red] {file_id}")
+        raise typer.Exit(code=1)
+
+
+@cloud_app.command("qr")
+def cloud_qr(
+    file_id: str = typer.Argument(..., help="File ID to generate QR for."),
+    backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+) -> None:
+    """Generate a QR code PNG for a shared file."""
+    manager = _get_cloud_manager(backend=backend, base_url=base_url)
+    try:
+        qr_bytes = manager.backend.get_qr_code(file_id)
+    except Exception as exc:
+        console.print(f"[red]QR generation failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    if output:
+        output.write_bytes(qr_bytes)
+        console.print(f"[green]Saved QR code[/green] {output}")
+    else:
+        # Print base64 to stdout so it can be piped.
+        import base64
+        console.print(base64.b64encode(qr_bytes).decode("ascii"))
+
+
+# ------------------------------------------------------------------
+# Engine sub-commands
+# ------------------------------------------------------------------
+
+@engine_app.command("list")
+def engine_list() -> None:
+    """List all registered vectorization engines and their availability."""
+    from .engines import EngineRegistry
+
+    registry = EngineRegistry()
+    engines = registry.list_engines()
+
+    table = Table(title="Vectorization Engines")
+    table.add_column("Name", style="bold")
+    table.add_column("Version")
+    table.add_column("Available")
+    table.add_column("Formats")
+    table.add_column("Outputs")
+
+    for info in engines:
+        table.add_row(
+            info["name"],
+            info["version"],
+            "yes" if info["available"] else "no",
+            ", ".join(info["supported_formats"]) or "-",
+            ", ".join(info["supported_outputs"]) or "-",
+        )
+    console.print(table)
+
+
+@engine_app.command("info")
+def engine_info(
+    name: str = typer.Argument(..., help="Engine name: vtracer, potrace, autotrace."),
+) -> None:
+    """Show detailed information about a specific engine."""
+    from .engines import EngineRegistry
+
+    registry = EngineRegistry()
+    try:
+        instance = registry.get_engine(name)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+
+    info = instance.get_info()
+    table = Table(title=f"Engine: {info['name']}")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    table.add_row("Name", info["name"])
+    table.add_row("Version", info["version"])
+    table.add_row("Available", "yes" if info["available"] else "no")
+    table.add_row("Supported inputs", ", ".join(info["supported_formats"]))
+    table.add_row("Supported outputs", ", ".join(info["supported_outputs"]))
+    console.print(table)
+
+
+@engine_app.command("benchmark")
+def engine_benchmark(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    engines: list[str] = typer.Option([], "--engine", "-e", help="Engine(s) to benchmark. Omit to test all available."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use for VTracer-based engines."),
+) -> None:
+    """Compare multiple engines on the same image."""
+    from .engines import EngineBenchmark, EngineRegistry
+    from .presets import options_from_preset
+
+    opts = options_from_preset(preset)
+    benchmark = EngineBenchmark()
+    engine_list = engines if engines else None
+
+    results = benchmark.compare_engines(input_path, engines=engine_list, options={"trace_options": opts})
+
+    table = Table(title=f"Engine Benchmark: {input_path.name}")
+    table.add_column("Engine", style="bold")
+    table.add_column("Time (s)")
+    table.add_column("Size (bytes)")
+    table.add_column("Paths")
+    table.add_column("Quality")
+    table.add_column("Status")
+
+    for r in results:
+        if "error" in r:
+            table.add_row(
+                r["engine"],
+                "-",
+                "-",
+                "-",
+                "-",
+                f"error: {r['error']}",
+            )
+        else:
+            table.add_row(
+                r["engine"],
+                f"{r.get('elapsed_seconds', 0):.3f}",
+                str(r.get("file_bytes", 0)),
+                str(r.get("paths", 0)),
+                str(r.get("quality_score", "-")),
+                "ok",
+            )
+    console.print(table)
+
+
+@engine_app.command("auto")
+def engine_auto(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output SVG path."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
+) -> None:
+    """Automatically select the best engine for the given image and convert it."""
+    from .engines import EngineRegistry
+    from .presets import options_from_preset
+
+    registry = EngineRegistry()
+    best_engine = registry.get_best_engine(input_path)
+    info = best_engine.get_info()
+    console.print(f"[cyan]Recommended engine:[/cyan] {info['name']} (available={info['available']})")
+
+    opts = options_from_preset(preset)
+    out = output or input_path.with_suffix(".svg")
+
+    result = trace_image(
+        input_path,
+        out,
+        opts,
+        engine=info["name"],
+    )
+    console.print(f"[green]Done[/green] {result.svg_path}")
+    console.print(f"Engine: {result.engine} | Time: {result.elapsed_seconds:.2f}s")
+    console.print(f"Stats: {result.stats}")
 
 
 def main() -> None:

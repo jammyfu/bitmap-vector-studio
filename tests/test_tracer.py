@@ -327,3 +327,161 @@ class TestTraceWithCli:
                 mock_run.return_value = MagicMock(returncode=1, stderr="error msg", stdout="")
                 with pytest.raises(RuntimeError, match="error msg"):
                     _trace_with_cli(tmp_path / "in.png", tmp_path / "out.svg", opts)
+
+
+class TestTraceImageAdvancedOptions:
+    def test_optimize_level_comprehensive(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = tmp_path / "normalized.png"
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_comprehensive") as mock_opt:
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        trace_image(img, out, optimize=True, optimize_level="comprehensive")
+        mock_opt.assert_called_once_with(out, aggressive=False)
+
+    def test_optimize_level_aggressive(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = tmp_path / "normalized.png"
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_comprehensive") as mock_opt:
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        trace_image(img, out, optimize=True, optimize_level="aggressive")
+        mock_opt.assert_called_once_with(out, aggressive=True)
+
+    def test_optimize_level_none(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = tmp_path / "normalized.png"
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file") as mock_opt:
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        trace_image(img, out, optimize=True, optimize_level="none")
+        mock_opt.assert_not_called()
+
+    def test_stream_parameter_forces_streaming(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=True):
+            with patch("vector_studio.performance.StreamingImageProcessor.process_large_image", return_value=out):
+                with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                    with patch("vector_studio.tracer.prepare_input", return_value=normalized):
+                        result = trace_image(img, out, stream=True)
+        assert result.engine == "streaming-vtracer"
+
+    def test_preview_mode_limits_size_and_skips_exports(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = normalized
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        result = trace_image(img, out, preview_mode=True, export_pdf=True, export_png=True)
+        assert result.svg_path == out
+        assert result.pdf_path is None
+        assert result.png_path is None
+
+    def test_use_gpu_with_available_backend(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = normalized
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        with patch("vector_studio.gpu_backend.detect_gpu") as mock_detect:
+                            mock_detect.return_value = MagicMock(value="cuda")
+                            with patch("vector_studio.gpu_backend.gpu_preprocess") as mock_gpu:
+                                mock_gpu.return_value = MagicMock()
+                                result = trace_image(img, out, use_gpu=True)
+        assert result.svg_path == out
+
+    def test_plugins_executed_in_pipeline(self, tmp_path):
+        from vector_studio.plugin_interface import Plugin
+
+        class TestPlugin(Plugin):
+            name = "test"
+
+            def preprocess(self, image, options):
+                return image
+
+            def postprocess(self, svg_path, options):
+                return svg_path
+
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = normalized
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        result = trace_image(img, out, plugins=[TestPlugin()])
+        assert result.svg_path == out
+
+    def test_ai_simplify_in_pipeline(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = normalized
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        with patch("vector_studio.ai_simplify.adaptive_simplify") as mock_simplify:
+                            mock_img = MagicMock()
+                            mock_simplify.return_value = mock_img
+                            result = trace_image(img, out, ai_simplify=True, simplify_type="complex")
+        assert result.svg_path == out
+
+    def test_ai_ocr_in_pipeline(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        normalized = tmp_path / "normalized.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10)).save(normalized)
+
+        with patch("vector_studio.tracer.prepare_input") as mock_prepare:
+            mock_prepare.return_value = normalized
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={}):
+                        with patch("vector_studio.ai_ocr.recognize_text_multilang", return_value=[{"text": "hi", "bbox": [0,0,10,10]}]):
+                            with patch("vector_studio.ai_ocr.integrate_text_to_svg"):
+                                result = trace_image(img, out, ai_ocr=True, ocr_lang="eng")
+        assert result.svg_path == out

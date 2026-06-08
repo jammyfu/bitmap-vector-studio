@@ -23,6 +23,7 @@ from .svg_tools import (
     optimize_svg_file,
     svg_stats,
 )
+from .engines import EngineRegistry, VTracerEngine
 from .gpu_backend import detect_gpu, gpu_preprocess, GPUBackend
 
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
@@ -53,6 +54,7 @@ def trace_image(
     output_path: Path | str,
     options: TraceOptions | None = None,
     *,
+    engine: str = "vtracer",
     optimize: bool = True,
     optimize_level: str = "basic",
     name_layers: bool = False,
@@ -71,13 +73,17 @@ def trace_image(
     use_gpu: bool = False,
     stream: bool = False,
 ) -> TraceResult:
-    """Convert a raster image to SVG using VTracer.
+    """Convert a raster image to SVG using the specified vectorization engine.
 
     The function first tries the official Python binding. If that package is not
     installed, it attempts to call a `vtracer` executable on PATH.
 
     Parameters
     ----------
+    engine:
+        Vectorization engine to use.  ``"vtracer"`` (default), ``"potrace"``,
+        or ``"autotrace"``.  If the requested engine is unavailable the call
+        falls back to VTracer automatically.
     optimize_level:
         ``"none"`` skips post-processing.
         ``"basic"`` runs conservative cleanup.
@@ -213,7 +219,23 @@ def trace_image(
             )
         return result
 
-    engine = "python-vtracer"
+    # Determine engine
+    registry = EngineRegistry()
+    requested = engine.strip().lower()
+    try:
+        engine_instance = registry.get_engine(requested)
+        if not engine_instance.is_available():
+            logger = logging.getLogger(__name__)
+            logger.warning("Engine '%s' is not available, falling back to vtracer.", requested)
+            engine_instance = VTracerEngine()
+            requested = "vtracer"
+    except ValueError:
+        logger = logging.getLogger(__name__)
+        logger.warning("Unknown engine '%s', falling back to vtracer.", requested)
+        engine_instance = VTracerEngine()
+        requested = "vtracer"
+
+    engine_label = requested
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
         prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
@@ -257,18 +279,40 @@ def trace_image(
             except Exception as exc:  # noqa: BLE001
                 logging.getLogger(__name__).warning("AI simplification failed: %s", exc)
 
-        try:
-            _trace_with_python_binding(normalized_input, output_path, options)
-        except Exception as python_error:
-            engine = "vtracer-cli"
+        if requested == "vtracer":
             try:
-                _trace_with_cli(normalized_input, output_path, options)
-            except Exception as cli_error:
-                raise RuntimeError(
-                    "VTracer conversion failed. Install the Python package with "
-                    "`pip install vtracer`, or install the VTracer CLI. "
-                    f"Python binding error: {python_error}. CLI error: {cli_error}."
-                ) from cli_error
+                _trace_with_python_binding(normalized_input, output_path, options)
+                engine_label = "python-vtracer"
+            except Exception as python_error:
+                engine_label = "vtracer-cli"
+                try:
+                    _trace_with_cli(normalized_input, output_path, options)
+                except Exception as cli_error:
+                    raise RuntimeError(
+                        "VTracer conversion failed. Install the Python package with "
+                        "`pip install vtracer`, or install the VTracer CLI. "
+                        f"Python binding error: {python_error}. CLI error: {cli_error}."
+                    ) from cli_error
+        else:
+            engine_options: dict[str, object] = {"trace_options": options}
+            if requested == "potrace":
+                engine_options.update({
+                    k: v for k, v in {
+                        "turdsize": getattr(options, "filter_speckle", None),
+                        "alphamax": getattr(options, "corner_threshold", None),
+                        "opticurve": True,
+                    }.items() if v is not None
+                })
+            elif requested == "autotrace":
+                engine_options.update({
+                    k: v for k, v in {
+                        "color_count": getattr(options, "color_precision", None),
+                        "despeckle_level": getattr(options, "filter_speckle", None),
+                        "corner_threshold": getattr(options, "corner_threshold", None),
+                    }.items() if v is not None
+                })
+            engine_instance.convert(normalized_input, output_path, engine_options)
+            engine_label = requested
 
     if optimize and optimize_level != "none":
         if optimize_level == "basic":
@@ -318,7 +362,7 @@ def trace_image(
     result = TraceResult(
         input_path=input_path,
         svg_path=output_path,
-        engine=engine,
+        engine=engine_label,
         elapsed_seconds=elapsed,
         stats=svg_stats(output_path),
         pdf_path=pdf_path,

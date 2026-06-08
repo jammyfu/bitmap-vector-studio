@@ -270,3 +270,101 @@ class TestBuiltinPlugins:
         result = plugin.postprocess(svg, {})
         assert result == svg
         assert svg.read_text() == original
+
+
+class TestPluginHotReload:
+    def test_safe_reloader_subprocess_validation(self, tmp_path):
+        from vector_studio.plugin_hotreload import SafePluginReloader
+        from vector_studio.plugins import PluginManager
+
+        plugin_file = tmp_path / "reload_plugin.py"
+        plugin_file.write_text(
+            "from vector_studio.plugin_interface import Plugin\n"
+            "class ReloadPlugin(Plugin):\n"
+            "    name = 'reload_plugin'\n"
+        )
+        manager = PluginManager()
+        reloader = SafePluginReloader(manager)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='["reload_plugin"]', stderr="")
+            ok = reloader.reload_plugin(plugin_file)
+        assert ok is True
+        assert "reload_plugin" in manager._plugin_classes
+
+    def test_safe_reloader_subprocess_failure(self, tmp_path):
+        from vector_studio.plugin_hotreload import SafePluginReloader
+        from vector_studio.plugins import PluginManager
+
+        plugin_file = tmp_path / "bad_plugin.py"
+        plugin_file.write_text("invalid python !!!")
+        manager = PluginManager()
+        reloader = SafePluginReloader(manager)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stderr="syntax error", stdout="")
+            ok = reloader.reload_plugin(plugin_file)
+        assert ok is False
+
+    def test_safe_reloader_unload(self, tmp_path):
+        from vector_studio.plugin_hotreload import SafePluginReloader
+        from vector_studio.plugins import PluginManager
+        from vector_studio.plugin_interface import Plugin
+
+        class OldPlugin(Plugin):
+            name = "old_plugin"
+
+        manager = PluginManager()
+        manager.register_plugin(OldPlugin)
+        reloader = SafePluginReloader(manager)
+        ok = reloader.unload_plugin_safely("old_plugin")
+        assert ok is True
+        assert "old_plugin" not in manager._plugin_classes
+
+    def test_plugin_watcher_start_stop(self, tmp_path):
+        from vector_studio.plugin_hotreload import PluginWatcher
+        from vector_studio.plugins import PluginManager
+
+        manager = PluginManager()
+        watcher = PluginWatcher([tmp_path], manager)
+        with patch.object(watcher, "_start_watchdog") as mock_start:
+            with patch("vector_studio.plugin_hotreload._WATCHDOG_AVAILABLE", True):
+                with patch("vector_studio.plugin_hotreload.Observer"):
+                    watcher.start_watching()
+        mock_start.assert_called_once()
+        watcher.stop_watching()
+
+    def test_plugin_watcher_polling(self, tmp_path):
+        from vector_studio.plugin_hotreload import PluginWatcher
+        from vector_studio.plugins import PluginManager
+
+        manager = PluginManager()
+        watcher = PluginWatcher([tmp_path], manager)
+        with patch("vector_studio.plugin_hotreload._WATCHDOG_AVAILABLE", False):
+            with patch.object(watcher, "_start_polling") as mock_start:
+                watcher.start_watching()
+        mock_start.assert_called_once()
+        watcher.stop_watching()
+
+    def test_plugin_watcher_callbacks(self, tmp_path):
+        from vector_studio.plugin_hotreload import PluginWatcher, PluginEvent
+        from vector_studio.plugins import PluginManager
+
+        manager = PluginManager()
+        watcher = PluginWatcher([tmp_path], manager)
+        events: list[PluginEvent] = []
+        watcher.add_listener(events.append)
+        watcher.on_file_added(tmp_path / "new.py")
+        assert len(events) == 1
+        assert events[0].event_type == "added"
+        watcher.remove_listener(events.append)
+        watcher.on_file_changed(tmp_path / "new.py")
+        assert len(events) == 1  # listener removed
+
+    def test_plugin_watcher_on_removed(self, tmp_path):
+        from vector_studio.plugin_hotreload import PluginWatcher
+        from vector_studio.plugins import PluginManager
+
+        manager = PluginManager()
+        watcher = PluginWatcher([tmp_path], manager)
+        with patch("vector_studio.plugin_hotreload.SafePluginReloader.unload_plugin_safely") as mock_unload:
+            watcher.on_file_removed(tmp_path / "gone.py")
+        mock_unload.assert_called_once_with("gone")

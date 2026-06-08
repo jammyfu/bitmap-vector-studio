@@ -631,3 +631,58 @@ pub async fn disable_hotreload() -> Result<(), String> {
     ])
     .map(|_| ())
 }
+
+/// Share an SVG file via the cloud sync backend.
+///
+/// # Arguments
+/// * `svg_path` - Absolute path to the SVG file.
+/// * `expire_hours` - Number of hours before the share expires.
+///
+/// # Returns
+/// JSON string containing share metadata (url, qr_code, expire_at, file_id).
+#[command]
+pub async fn share_svg(svg_path: String, expire_hours: u32) -> Result<String, String> {
+    let args = vec![
+        "cloud".to_string(),
+        "share".to_string(),
+        svg_path,
+        "--expire".to_string(),
+        expire_hours.to_string(),
+        "--backend".to_string(),
+        "local".to_string(),
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// List all active shares.
+///
+/// # Returns
+/// JSON array of share metadata.
+#[command]
+pub async fn list_shares() -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "cloud".to_string(),
+        "list".to_string(),
+        "--backend".to_string(),
+        "local".to_string(),
+    ])
+}
+
+/// Revoke a shared file.
+///
+/// # Arguments
+/// * `file_id` - The share/file ID to revoke.
+///
+/// # Returns
+/// OK on success.
+#[command]
+pub async fn revoke_share(file_id: String) -> Result<(), String> {
+    python_bridge::call_vector_studio(vec![
+        "cloud".to_string(),
+        "revoke".to_string(),
+        file_id,
+        "--backend".to_string(),
+        "local".to_string(),
+    ])
+    .map(|_| ())
+}

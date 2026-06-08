@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import tempfile
@@ -21,6 +22,7 @@ except ImportError as exc:
     ) from exc
 
 from . import __version__
+from .cloud_sync import CloudSyncManager, LocalServerBackend
 from .models import TraceOptions, TraceResult
 from .presets import PRESETS, options_from_preset
 from .smart_recommend import recommend_for_image
@@ -37,6 +39,23 @@ _api_temp_lock = threading.Lock()
 
 _task_queue: TaskQueue | None = None
 _queue_lock = threading.Lock()
+
+_share_manager: CloudSyncManager | None = None
+_share_lock = threading.Lock()
+
+
+def _get_share_manager() -> CloudSyncManager:
+    """Return the global CloudSyncManager singleton (created on first call)."""
+    global _share_manager
+    if _share_manager is None:
+        with _share_lock:
+            if _share_manager is None:
+                backend = LocalServerBackend(
+                    storage_dir=_get_api_temp_dir() / "shares",
+                    base_url="http://localhost:8000",
+                )
+                _share_manager = CloudSyncManager(backend)
+    return _share_manager
 
 
 def _get_api_temp_dir() -> Path:
@@ -62,11 +81,13 @@ def _get_queue() -> TaskQueue:
 
 def _cleanup_api_temp() -> None:
     """Remove the persistent API temporary directory."""
-    global _api_temp_dir
+    global _api_temp_dir, _share_manager
     with _api_temp_lock:
         if _api_temp_dir is not None and _api_temp_dir.exists():
             shutil.rmtree(_api_temp_dir, ignore_errors=True)
             _api_temp_dir = None
+    with _share_lock:
+        _share_manager = None
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +138,25 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class ShareResponse(BaseModel):
+    url: str
+    qr_code: str
+    expire_at: str
+    file_id: str
+
+
+class ShareListResponse(BaseModel):
+    shares: list[dict[str, Any]]
+
+
+class ShareRevokeResponse(BaseModel):
+    success: bool
+
+
+class ShareQrResponse(BaseModel):
+    qr_code: str
 
 
 # ---------------------------------------------------------------------------
@@ -437,3 +477,108 @@ async def batch_convert(
 async def health_check():
     """Health check endpoint."""
     return HealthResponse(status="ok", version=__version__)
+
+
+# ---------------------------------------------------------------------------
+# Share endpoints
+# ---------------------------------------------------------------------------
+
+@app.post(
+    "/share",
+    response_model=ShareResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def share_svg(file: UploadFile, expire_hours: int = 24):
+    """Upload an SVG file and return a share link with QR code."""
+    tmpdir = Path(tempfile.mkdtemp(prefix="vs-share-"))
+    safe_name = file.filename or f"upload_{uuid.uuid4()}.svg"
+    safe_name = Path(safe_name).name
+    input_path = tmpdir / safe_name
+    input_path.write_bytes(file.file.read())
+
+    if input_path.suffix.lower() != ".svg":
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="Only SVG files are supported for sharing.")
+
+    try:
+        manager = _get_share_manager()
+        result = manager.share_svg(input_path, expire_hours=expire_hours)
+    except Exception as exc:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Share failed: {exc}") from exc
+
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    return ShareResponse(**result)
+
+
+@app.get(
+    "/share/{share_id}",
+    responses={
+        404: {"model": ErrorResponse},
+    },
+)
+async def get_shared_svg(share_id: str):
+    """Retrieve a shared SVG by its share ID."""
+    backend = _get_share_manager().backend
+    if isinstance(backend, LocalServerBackend):
+        file_path = backend.storage_dir / share_id
+        meta = backend._shares.get(share_id)
+        if not meta or not file_path.exists():
+            raise HTTPException(status_code=404, detail="Share not found.")
+        if backend._is_expired(share_id):
+            raise HTTPException(status_code=404, detail="Share has expired.")
+        return FileResponse(
+            path=file_path,
+            media_type=meta.get("content_type", "image/svg+xml"),
+            filename=meta.get("filename", share_id),
+        )
+    raise HTTPException(status_code=501, detail="Only LocalServerBackend supports direct download.")
+
+
+@app.delete(
+    "/share/{share_id}",
+    response_model=ShareRevokeResponse,
+    responses={
+        404: {"model": ErrorResponse},
+    },
+)
+async def revoke_share(share_id: str):
+    """Revoke a shared SVG by its share ID."""
+    manager = _get_share_manager()
+    success = manager.revoke_share(share_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Share not found.")
+    return ShareRevokeResponse(success=True)
+
+
+@app.get(
+    "/shares",
+    response_model=ShareListResponse,
+)
+async def list_shares():
+    """List all active shares."""
+    manager = _get_share_manager()
+    shares = manager.get_shared_files()
+    return ShareListResponse(shares=shares)
+
+
+@app.get(
+    "/share/{share_id}/qr",
+    response_model=ShareQrResponse,
+    responses={
+        404: {"model": ErrorResponse},
+    },
+)
+async def get_share_qr(share_id: str):
+    """Get the QR code (base64 PNG) for a share."""
+    manager = _get_share_manager()
+    backend = manager.backend
+    if isinstance(backend, LocalServerBackend):
+        if backend._is_expired(share_id) or share_id not in backend._shares:
+            raise HTTPException(status_code=404, detail="Share not found or expired.")
+    qr_bytes = backend.get_qr_code(share_id)
+    qr_b64 = base64.b64encode(qr_bytes).decode("ascii")
+    return ShareQrResponse(qr_code=qr_b64)

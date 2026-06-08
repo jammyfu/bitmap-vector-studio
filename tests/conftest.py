@@ -43,3 +43,64 @@ def sample_svg(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return svg_path
+
+
+@pytest.fixture
+def sample_svg_complex(tmp_path: Path) -> Path:
+    svg_path = tmp_path / "complex.svg"
+    svg_path.write_text(
+        '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">'
+        '<g id="group1">'
+        '<path d="M0 0 L100 100" fill="#ff0000"/>'
+        '<path d="M10 10 L90 90" fill="#ff0000"/>'
+        '<rect x="50" y="50" width="20" height="20" fill="#00ff00"/>'
+        '</g>'
+        '<circle cx="100" cy="100" r="30" fill="#0000ff"/>'
+        '<polygon points="0,0 50,0 25,50" fill="#ffff00"/>'
+        '</svg>',
+        encoding="utf-8",
+    )
+    return svg_path
+
+
+@pytest.fixture
+def sample_image_large(tmp_path: Path) -> Path:
+    img_path = tmp_path / "large_image.png"
+    img = Image.new("RGB", (6000, 6000), color=(0, 128, 255))
+    img.save(img_path, format="PNG")
+    return img_path
+
+
+@pytest.fixture
+def sample_image_corrupt(tmp_path: Path) -> Path:
+    img_path = tmp_path / "corrupt.png"
+    img_path.write_bytes(b"PNG\r\n\x1a\nnot valid image data")
+    return img_path
+
+
+@pytest.fixture
+def mock_vtracer():
+    from unittest.mock import MagicMock
+    fake = MagicMock()
+    fake.convert_image_to_svg_py = MagicMock()
+    return fake
+
+
+@pytest.fixture
+def mock_potrace():
+    from unittest.mock import MagicMock
+    fake = MagicMock()
+    fake.trace = MagicMock(return_value="<svg><path d=\"M0 0\"/></svg>")
+    return fake
+
+
+@pytest.fixture
+def mock_external_editor(tmp_path: Path):
+    from unittest.mock import MagicMock
+    editor = MagicMock()
+    editor.name = "mock_editor"
+    editor.executable_path = tmp_path / "mock_editor.exe"
+    editor.executable_path.write_text("mock")
+    editor.is_available = True
+    editor.platform = "windows"
+    return editor

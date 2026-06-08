@@ -1,75 +1,67 @@
-# Bitmap Vector Studio 推进计划 v1.1
+# Bitmap Vector Studio 推进计划 v1.2
 
 ## 项目现状
-- v1.0.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
-- 14 个 Git 提交
-- 29 个 Python 源文件 + 26 个测试文件 + 9 篇文档
-- Tauri 桌面应用（React + Rust）完整可用
-- 版本 1.0.0
+- v1.1.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- 16 个 Git 提交
+- 36 个 Python 源文件 + 33 个测试文件 + 9 篇文档
+- Tauri 桌面应用完整可用
+- 版本 1.1.0
 
-## 目标版本: v1.1.0 — 性能优化与体验打磨
+## 目标版本: v1.2.0 — 稳定性与生态扩展
 
-### Stage 1: 性能优化（可并行）
-1. **桌面端启动速度优化**
-   - Rust 端预加载 Python 环境检测和缓存
-   - 延迟加载非核心模块
-   - 启动画面和进度指示
+### Stage 1: 多引擎支持与生态（可并行）
+1. **多矢量化引擎支持**
+   - 文件: `src/vector_studio/engines.py`
+   - 功能: 支持 potrace、autotrace 等作为备选后端
+   - 自动选择最佳引擎（根据图片类型）
+   - 引擎对比和评分
 
-2. **大文件处理内存优化**
-   - 流式读取替代全量加载
-   - 分块处理超大图片
-   - 内存使用监控和限制
+2. **插件 SDK 完善**
+   - 文件: `src/vector_studio/plugin_sdk.py`
+   - 功能: 类型提示、调试工具、示例模板生成
+   - 插件验证器（检查插件是否符合规范）
+   - 插件开发脚手架（一键生成新插件模板）
 
-3. **GPU 加速预览**
-   - CUDA / Metal / OpenCL 后端检测
-   - GPU 加速图像预处理
-   - 可选依赖，未检测到 GPU 时自动降级 CPU
+3. **云端同步预览**
+   - 文件: `src/vector_studio/cloud_sync.py`
+   - 功能: 转换结果上传到临时云存储
+   - 生成分享链接（QR码）
+   - 跨设备查看转换结果
 
-### Stage 2: 体验打磨（可并行）
-4. **插件热重载**
-   - 文件系统监听插件目录变化
-   - 无需重启应用即可加载/卸载插件
-   - 热重载安全隔离（异常插件不崩溃主程序）
+4. **社区贡献者工具链**
+   - 文件: `src/vector_studio/community_tools.py`
+   - 功能: 预设验证器、插件审核工具、文档生成器
+   - 贡献指南生成
 
-5. **批量任务断点续传**
-   - 任务队列持久化到磁盘
-   - 应用崩溃后恢复未完成任务
-   - 支持暂停和恢复批量转换
+### Stage 2: 测试覆盖率提升
+5. **测试覆盖率提升到 90%+**
+   - 补充缺失的测试用例
+   - 集成测试增强
+   - 性能基准测试
+   - 端到端测试
 
-6. **自动保存工作区状态**
-   - 定时保存当前工作区（打开的文件、参数设置、队列状态）
-   - 崩溃后恢复工作区
-   - 手动保存/加载工作区快照
+### Stage 3: GUI 与 CLI 集成
+6. **Streamlit GUI v1.2 升级**
+   - 引擎选择器（VTracer / Potrace / AutoTrace）
+   - 插件开发工具
+   - 云端分享功能
 
-### Stage 3: OCR 增强
-7. **多语言 OCR 增强**
-   - 中文、日文、韩文识别优化
-   - 语言自动检测
-   - 竖排文字支持
+7. **CLI 增强**
+   - `vector-studio engine list` — 列出可用引擎
+   - `vector-studio engine benchmark` — 引擎对比测试
+   - `vector-studio plugin scaffold <name>` — 生成插件模板
+   - `vector-studio cloud share <svg>` — 上传到云端
+   - `vector-studio validate preset <file>` — 验证预设
 
-### Stage 4: GUI 与 CLI 集成
-8. **Streamlit GUI v1.1 升级**
-   - 性能优化后的实时预览
-   - 大文件处理进度指示
-   - 工作区自动保存提示
-
-9. **CLI 增强**
-   - `vector-studio resume` 恢复中断的批量任务
-   - `vector-studio workspace save/load` 工作区管理
-   - `vector-studio benchmark` 性能基准测试
-
-### Stage 5: 测试与文档
-10. **测试增强**
-    - 性能测试基准
-    - 内存使用测试
-11. **文档更新**
-    - README 更新 v1.1 功能
-    - CHANGELOG 更新
-    - ROADMAP 标记完成
+### Stage 4: 测试与文档
+8. **文档更新**
+   - README 更新 v1.2 功能
+   - CHANGELOG 更新
+   - ROADMAP 标记完成
 
 ## 提交策略
 每完成一个 Stage 就提交并推送到 GitHub。
 
 ## 当前时间锚点
-- 开发周期: v1.1.0
-- 目标: 更快、更稳、更智能
+- 开发周期: v1.2.0
+- 目标: 更稳定、更开放、更易扩展
