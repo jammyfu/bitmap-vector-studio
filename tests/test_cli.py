@@ -520,3 +520,35 @@ class TestBatchWorkers:
 
         assert result.exit_code == 1
         assert "failed" in result.output
+
+
+class TestApiCommand:
+    def test_api_command_missing_uvicorn(self):
+        with patch("vector_studio.cli.uvicorn", None):
+            result = runner.invoke(app, ["api"])
+        assert result.exit_code == 1
+        assert "API dependencies are missing" in result.output
+
+    def test_api_command_starts_server(self):
+        with patch("vector_studio.cli.uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["api", "--port", "9999", "--workers", "2"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["port"] == 9999
+        assert call_kwargs["workers"] == 2
+        assert call_kwargs["host"] == "0.0.0.0"
+
+    def test_api_global_flag_starts_server(self):
+        with patch("vector_studio.cli.uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["--api", "--port", "8888"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["port"] == 8888
+
+    def test_api_global_flag_missing_uvicorn(self):
+        with patch("vector_studio.cli.uvicorn", None):
+            result = runner.invoke(app, ["--api"])
+        assert result.exit_code == 1
+        assert "API dependencies are missing" in result.output

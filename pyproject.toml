@@ -40,9 +40,21 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.5",
 ]
+api = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+]
 smart = [
   "numpy>=1.24",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jammyfu/bitmap-vector-studio"
+Repository = "https://github.com/jammyfu/bitmap-vector-studio"
+Documentation = "https://github.com/jammyfu/bitmap-vector-studio#readme"
+Changelog = "https://github.com/jammyfu/bitmap-vector-studio/blob/main/CHANGELOG.md"
+Issues = "https://github.com/jammyfu/bitmap-vector-studio/issues"
 
 [project.scripts]
 vector-studio = "vector_studio.cli:main"

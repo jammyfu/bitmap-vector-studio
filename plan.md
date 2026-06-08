@@ -1,64 +1,74 @@
-# Bitmap Vector Studio 推进计划 v0.3
+# Bitmap Vector Studio 推进计划 v0.4
 
 ## 项目现状
-- v0.2.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
-- 170 个测试全部通过
-- 具备：GUI增强、预设管理、历史记录、外部编辑器、SVG图层命名
+- v0.3.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- 267 个测试全部通过
+- 具备：智能预处理、SVG优化、参数搜索、批量队列、GUI增强
 
-## 目标版本: v0.3.0 — 质量优化与智能处理
+## 目标版本: v0.4.0 — 生态与集成
 
-### Stage 1: 智能预处理（可并行）
-1. **智能背景透明处理**
-   - 文件: `src/vector_studio/smart_background.py`
-   - 功能: 自动检测Logo/图标的主背景色并移除，生成透明PNG
-   - 算法: 四角采样+边缘颜色聚类，判断背景色， flood fill移除
+### Stage 1: 插件系统与配置（可并行）
+1. **插件系统**
+   - 文件: `src/vector_studio/plugins.py` + `src/vector_studio/plugin_interface.py`
+   - 功能: 允许用户编写自定义后处理插件（Python文件放入plugins目录自动加载）
+   - 插件类型: 预处理插件、后处理插件、导出插件、报告插件
+   - 提供Plugin基类和装饰器注册机制
 
-2. **OpenCV增强预处理**
-   - 文件: `src/vector_studio/enhance.py`
-   - 功能: 边缘增强、扫描件去噪、对比度自适应、锐化
-   - 集成到 `preprocess.py` 作为可选增强步骤
+2. **配置文件支持**
+   - 文件: `src/vector_studio/config.py`
+   - 功能: YAML/JSON配置文件解析，支持批量参数模板
+   - CLI集成: `vector-studio trace config.yaml` 支持从配置文件读取参数
+   - 配置项: 默认预设、输出目录、优化级别、插件启用、外部编辑器偏好
 
-3. **智能预设推荐**
-   - 文件: `src/vector_studio/smart_recommend.py`
-   - 功能: 分析图片特征（颜色数、边缘密度、透明度、分辨率）推荐最佳预设
-   - 输出: 推荐预设名 + 置信度 + 理由
+### Stage 2: Web API模式
+3. **FastAPI封装**
+   - 文件: `src/vector_studio/api.py`
+   - 功能: RESTful API提供图片上传、转换、状态查询、结果下载
+   - 端点: /convert, /batch, /status, /download, /presets, /recommend
+   - 支持异步任务（基于TaskQueue）
+   - 自动API文档（/docs）
+   - CLI集成: `vector-studio api --host 0.0.0.0 --port 8000`
 
-### Stage 2: SVG后处理优化
-4. **SVG路径合并与颜色合并**
-   - 文件: `src/vector_studio/svg_optimizer.py`
-   - 功能: 合并相同颜色的相邻路径、简化路径数据、颜色量化
-   - 文件评分: 基于路径数、文件大小、颜色数给出质量评分
+### Stage 3: 容器与发布
+4. **Docker镜像**
+   - 文件: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
+   - 功能: 多阶段构建，包含VTracer和CairoSVG
+   - 支持API模式和CLI模式
+   - 提供docker-compose一键启动
 
-5. **批量参数搜索**
-   - 文件: `src/vector_studio/param_search.py`
-   - 功能: 对单张图片用多组参数批量试跑，按评分自动挑选最优结果
-   - 评分维度: 文件大小、路径数、视觉保真度（SSIM近似）
+5. **包管理器发布准备**
+   - 文件: `scripts/release.py`, `.github/workflows/release.yml`
+   - 功能: 自动化版本发布流程
+   - PyPI发布配置
+   - Homebrew formula模板
+   - Chocolatey包模板
+   - APT deb包构建脚本
 
-### Stage 3: 批量任务队列
-6. **任务队列与进度系统**
-   - 文件: `src/vector_studio/task_queue.py`
-   - 功能: 异步批量转换队列、进度跟踪、失败重试、并发控制
-   - 集成到CLI和GUI
+### Stage 4: GUI与CLI集成
+6. **Streamlit GUI v0.4升级**
+   - 插件管理面板（启用/禁用/配置插件）
+   - 配置文件导入/导出
+   - API模式状态显示
 
-### Stage 4: GUI集成
-7. **Streamlit GUI v0.3升级**
-   - 智能推荐按钮（分析图片后自动推荐预设）
-   - 背景透明自动检测开关
-   - 批量队列进度条
-   - 参数搜索面板（一键多参数试跑）
-   - SVG优化后处理选项
+7. **CLI增强**
+   - `vector-studio config` 命令组（查看/编辑/验证配置）
+   - `vector-studio plugin` 命令组（列表/启用/禁用/安装）
+   - `vector-studio api` 命令启动服务器
 
 ### Stage 5: 测试与文档
 8. **测试增强**
-   - 新增模块的测试覆盖
+   - 插件系统测试
+   - API端点测试（TestClient）
+   - 配置解析测试
 9. **文档更新**
-   - README更新v0.3功能
-   - CHANGELOG更新
-   - ROADMAP标记完成
+   - README更新v0.4功能
+   - API文档
+   - Docker使用指南
+   - 插件开发指南
 
 ## 提交策略
 每完成一个Stage就提交并推送到GitHub。
 
 ## 当前时间锚点
-- 开发周期: v0.3.0
-- 目标: 智能处理、质量优化、批量效率提升
+- 开发周期: v0.4.0
+- 目标: 生态扩展、远程调用、容器化、可插拔架构

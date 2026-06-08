@@ -1,0 +1,51 @@
+# Git
+.git
+.github
+.gitignore
+
+# Python virtual environments
+.venv
+venv
+env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+*.egg
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.dmypy.json
+
+# Build artifacts
+dist
+build
+*.whl
+*.tar.gz
+
+# IDE / editors
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation and examples (optional — keep examples if desired)
+docs
+tests
+examples/*.png
+examples/*.svg
+examples/generate_examples.py
+
+# CI / packaging
+scripts/package.py
+scripts/run_gui.bat
+scripts/run_gui.sh
+
+# Misc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

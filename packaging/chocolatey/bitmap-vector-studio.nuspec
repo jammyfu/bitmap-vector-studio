@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>bitmap-vector-studio</id>
+    <version>0.3.0</version>
+    <title>Bitmap Vector Studio</title>
+    <authors>Bitmap Vector Studio Contributors</authors>
+    <projectUrl>https://github.com/jammyfu/bitmap-vector-studio</projectUrl>
+    <licenseUrl>https://github.com/jammyfu/bitmap-vector-studio/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Illustrator-like bitmap/raster to SVG vector conversion studio powered by VTracer.</description>
+    <summary>Bitmap to SVG vectorization CLI and API</summary>
+    <tags>svg vectorization bitmap raster-to-vector vtracer image-trace</tags>
+    <dependencies>
+      <dependency id="python" version="[3.9, 4.0)" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

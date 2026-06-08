@@ -7,8 +7,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from .config import Config
 from .external_editors import open_with_default_editor, open_with_editor
 from .param_search import ParamGrid, quick_search, search_best_params
+from .plugin_interface import Plugin
+from .plugins import PluginManager
 from .presets import PRESETS, options_from_preset
 from .svg_optimizer import svg_quality_score
 from .svg_tools import svg_stats
@@ -25,9 +28,99 @@ app = typer.Typer(
 queue_app = typer.Typer(help="Task queue management.")
 app.add_typer(queue_app, name="queue")
 
+# Sub-typer for config commands
+config_app = typer.Typer(help="Configuration management.")
+app.add_typer(config_app, name="config")
+
+# Sub-typer for plugin commands
+plugin_app = typer.Typer(help="Plugin management.")
+app.add_typer(plugin_app, name="plugin")
+
+# Conditional import so tests can patch vector_studio.cli.uvicorn.run
+try:
+    import uvicorn
+except ImportError:  # pragma: no cover
+    uvicorn = None  # type: ignore[assignment]
+
+
+@app.command("api")
+def api_command(
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind host."),
+    port: int = typer.Option(8000, "--port", help="Bind port."),
+    workers: int = typer.Option(1, "--workers", help="Number of worker processes."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development."),
+) -> None:
+    """Start the Bitmap Vector Studio API server."""
+    if uvicorn is None:
+        console.print("[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Starting API server at[/green] http://{host}:{port}")
+    uvicorn.run("vector_studio.api:app", host=host, port=port, workers=workers, reload=reload)
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(
+    api: bool = typer.Option(False, "--api", help="Start the API server instead of the CLI."),
+    host: str = typer.Option("0.0.0.0", "--host"),
+    port: int = typer.Option(8000, "--port"),
+    reload: bool = typer.Option(False, "--reload"),
+) -> None:
+    """Global callback that intercepts --api before any sub-command runs."""
+    if api:
+        if uvicorn is None:
+            console.print("[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'")
+            raise typer.Exit(code=1)
+        console.print(f"[green]Starting API server at[/green] http://{host}:{port}")
+        uvicorn.run("vector_studio.api:app", host=host, port=port, workers=1, reload=reload)
+        raise typer.Exit()
+
 
 def _option_overrides(**kwargs):
     return {key: value for key, value in kwargs.items() if value is not None}
+
+
+def _load_config(config_path: Path | None) -> Config:
+    """Load configuration from an explicit path or the default location."""
+    if config_path is not None:
+        return Config.load(config_path)
+    return Config.load()
+
+
+def _active_plugins(config: Config, cli_plugins: list[str]) -> list[Plugin]:
+    """Build the list of plugin instances to pass to ``trace_image``.
+
+    Parameters
+    ----------
+    config:
+        Loaded configuration.
+    cli_plugins:
+        Plugin names explicitly requested via ``--plugin``.
+
+    Returns
+    -------
+    list[Plugin]
+        Enabled plugin instances.
+    """
+    manager = PluginManager()
+    manager.discover_plugins()
+
+    # Apply config enabled_plugins
+    for name in config.enabled_plugins:
+        if name in manager._plugin_classes:
+            manager.enable_plugin(name)
+        else:
+            # Silently ignore unknown plugins from config
+            pass
+
+    # Apply CLI overrides (explicit --plugin always wins)
+    for name in cli_plugins:
+        if name in manager._plugin_classes:
+            manager.enable_plugin(name)
+        else:
+            console.print(f"[yellow]Warning:[/yellow] Unknown plugin '{name}'")
+
+    return manager.get_plugins()
 
 
 @app.command("presets")
@@ -85,8 +178,27 @@ def trace_command(
     smart_remove_bg: bool = typer.Option(False, "--smart-remove-bg", help="Auto-detect and remove background for logo-like images."),
     enhance: Optional[str] = typer.Option(None, "--enhance", help="Enhancement type: scan, photo, logo, auto."),
     recommend: bool = typer.Option(False, "--recommend", help="Only analyze and recommend a preset, do not convert."),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
+    plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
 ) -> None:
     """Convert one bitmap image to SVG."""
+    config = _load_config(config_path)
+
+    # Apply config defaults when the CLI value matches the hardcoded default
+    # and the config provides a different value.
+    if config.default_preset and preset == "poster":
+        preset = config.default_preset
+    if config.default_optimize_level and optimize_level == "basic":
+        optimize_level = config.default_optimize_level
+    if not smart_remove_bg and config.smart_remove_bg:
+        smart_remove_bg = config.smart_remove_bg
+    if enhance is None and config.enhance is not None:
+        enhance = config.enhance
+    if not export_pdf and config.export_pdf:
+        export_pdf = config.export_pdf
+    if not export_png and config.export_png:
+        export_png = config.export_png
+
     if recommend:
         from .smart_recommend import recommend_for_image
         preset_name, confidence, reason, features = recommend_for_image(input_path)
@@ -121,6 +233,9 @@ def trace_command(
     )
     opts = options_from_preset(preset, overrides)
     out = output or input_path.with_suffix(".svg")
+
+    plugins = _active_plugins(config, plugin)
+
     result = trace_image(
         input_path,
         out,
@@ -133,6 +248,7 @@ def trace_command(
         export_eps=export_eps,
         smart_remove_bg=smart_remove_bg,
         enhance=enhance,
+        plugins=plugins,
     )
 
     console.print(f"[green]Done[/green] {result.svg_path}")
@@ -177,8 +293,21 @@ def batch_command(
     open_editor: bool = typer.Option(False, "--open", help="Open each output SVG in the default external editor after conversion."),
     workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
     retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
+    plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
 ) -> None:
     """Batch-convert a folder of images."""
+    config = _load_config(config_path)
+
+    if config.default_preset and preset == "poster":
+        preset = config.default_preset
+    if config.default_optimize_level and optimize_level == "basic":
+        optimize_level = config.default_optimize_level
+    if not export_pdf and config.export_pdf:
+        export_pdf = config.export_pdf
+    if not export_png and config.export_png:
+        export_png = config.export_png
+
     output_dir.mkdir(parents=True, exist_ok=True)
     opts = options_from_preset(preset)
     iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
@@ -187,6 +316,8 @@ def batch_command(
     if not images:
         console.print("[yellow]No supported images found.[/yellow]")
         raise typer.Exit(code=0)
+
+    plugins = _active_plugins(config, plugin)
 
     # When workers == 1 and retry == 0, keep the original sequential behaviour.
     if workers == 1 and retry == 0:
@@ -204,7 +335,16 @@ def batch_command(
                 table.add_row(str(image_path), str(out_path), "skipped")
                 continue
             try:
-                result = trace_image(image_path, out_path, opts, optimize_level=optimize_level, export_pdf=export_pdf, export_png=export_png, name_layers=name_layers)
+                result = trace_image(
+                    image_path,
+                    out_path,
+                    opts,
+                    optimize_level=optimize_level,
+                    export_pdf=export_pdf,
+                    export_png=export_png,
+                    name_layers=name_layers,
+                    plugins=plugins,
+                )
                 table.add_row(str(image_path), str(result.svg_path), "ok")
                 if score:
                     try:
@@ -235,7 +375,7 @@ def batch_command(
         if out_path.exists() and not overwrite:
             console.print(f"[yellow]Skipped[/yellow] {out_path} (exists)")
             continue
-        q.add_task(image_path, out_path, opts, optimize_level=optimize_level)
+        q.add_task(image_path, out_path, opts, optimize_level=optimize_level, plugins=plugins)
 
     q.start()
     results = q.wait_for_all()
@@ -317,6 +457,178 @@ def search_command(
             status,
         )
     console.print(table)
+
+
+# ------------------------------------------------------------------
+# Config sub-commands
+# ------------------------------------------------------------------
+
+@config_app.command("show")
+def config_show(config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file.")) -> None:
+    """Display the current configuration."""
+    cfg = _load_config(config_path)
+    table = Table(title="Bitmap Vector Studio Configuration")
+    table.add_column("Key", style="bold")
+    table.add_column("Value")
+    for key, value in cfg.to_dict().items():
+        table.add_row(key, str(value))
+    console.print(table)
+    errors = cfg.validate()
+    if errors:
+        for err in errors:
+            console.print(f"[red]Validation error:[/red] {err}")
+        raise typer.Exit(code=1)
+    else:
+        console.print("[green]Configuration is valid.[/green]")
+
+
+@config_app.command("init")
+def config_init(
+    path: Optional[Path] = typer.Option(None, "--path", help="Destination path for the config file."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
+) -> None:
+    """Generate a default configuration file."""
+    from .config import _default_config_path
+    dest = path or _default_config_path()
+    if dest.exists() and not force:
+        console.print(f"[yellow]Config file already exists:[/yellow] {dest}")
+        console.print("Use --force to overwrite.")
+        raise typer.Exit(code=1)
+    cfg = Config()
+    cfg.save(dest)
+    console.print(f"[green]Created config file:[/green] {dest}")
+
+
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(..., help="Configuration key to set."),
+    value: str = typer.Argument(..., help="Value to assign."),
+    path: Optional[Path] = typer.Option(None, "--path", help="Path to configuration file."),
+) -> None:
+    """Set a configuration value and save it."""
+    cfg = Config.load(path)
+    data = cfg.to_dict()
+
+    if key not in data:
+        console.print(f"[red]Unknown config key:[/red] {key}")
+        console.print(f"Valid keys: {', '.join(sorted(data.keys()))}")
+        raise typer.Exit(code=1)
+
+    # Attempt type coercion based on the current value type.
+    current = data[key]
+    if isinstance(current, bool):
+        parsed = value.lower() in {"true", "1", "yes", "on"}
+    elif isinstance(current, int):
+        try:
+            parsed = int(value)
+        except ValueError:
+            console.print(f"[red]Invalid integer:[/red] {value}")
+            raise typer.Exit(code=1)
+    elif isinstance(current, list):
+        # Split comma-separated strings into lists.
+        parsed = [v.strip() for v in value.split(",") if v.strip()]
+    else:
+        parsed = value
+
+    data[key] = parsed
+    new_cfg = Config.from_dict(data)
+    new_cfg.save(path)
+    console.print(f"[green]Set[/green] {key} = {parsed}")
+
+
+@config_app.command("validate")
+def config_validate(
+    path: Optional[Path] = typer.Option(None, "--path", help="Path to configuration file."),
+) -> None:
+    """Validate the configuration file."""
+    cfg = Config.load(path)
+    errors = cfg.validate()
+    if errors:
+        for err in errors:
+            console.print(f"[red]Validation error:[/red] {err}")
+        raise typer.Exit(code=1)
+    console.print("[green]Configuration is valid.[/green]")
+
+
+# ------------------------------------------------------------------
+# Plugin sub-commands
+# ------------------------------------------------------------------
+
+@plugin_app.command("list")
+def plugin_list() -> None:
+    """List all discovered plugins."""
+    manager = PluginManager()
+    manager.discover_plugins()
+    plugins = manager.list_plugins()
+
+    if not plugins:
+        console.print("[yellow]No plugins discovered.[/yellow]")
+        return
+
+    table = Table(title="Plugins")
+    table.add_column("Name", style="bold")
+    table.add_column("Version")
+    table.add_column("Description")
+    table.add_column("Author")
+    table.add_column("Enabled")
+    table.add_column("Hooks")
+
+    for info in plugins:
+        table.add_row(
+            info["name"],
+            info["version"],
+            info["description"],
+            info["author"],
+            "yes" if info["enabled"] else "no",
+            ", ".join(info["hooks"]) or "-",
+        )
+    console.print(table)
+
+
+@plugin_app.command("enable")
+def plugin_enable(name: str = typer.Argument(..., help="Plugin name to enable.")) -> None:
+    """Enable a plugin in the user configuration."""
+    manager = PluginManager()
+    manager.discover_plugins()
+    if name not in manager._plugin_classes:
+        console.print(f"[red]Unknown plugin:[/red] {name}")
+        raise typer.Exit(code=1)
+    manager.enable_plugin(name)
+    cfg = Config.load()
+    if name not in cfg.enabled_plugins:
+        cfg.enabled_plugins.append(name)
+        cfg.save()
+    console.print(f"[green]Enabled plugin:[/green] {name}")
+
+
+@plugin_app.command("disable")
+def plugin_disable(name: str = typer.Argument(..., help="Plugin name to disable.")) -> None:
+    """Disable a plugin in the user configuration."""
+    manager = PluginManager()
+    manager.discover_plugins()
+    if name not in manager._plugin_classes:
+        console.print(f"[red]Unknown plugin:[/red] {name}")
+        raise typer.Exit(code=1)
+    manager.disable_plugin(name)
+    cfg = Config.load()
+    if name in cfg.enabled_plugins:
+        cfg.enabled_plugins.remove(name)
+        cfg.save()
+    console.print(f"[green]Disabled plugin:[/green] {name}")
+
+
+@plugin_app.command("install")
+def plugin_install(
+    source: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to the plugin .py file."),
+) -> None:
+    """Install a plugin into the user plugin directory."""
+    manager = PluginManager()
+    try:
+        dest = manager.install_plugin(source)
+    except Exception as exc:
+        console.print(f"[red]Installation failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Installed plugin to:[/green] {dest}")
 
 
 # ------------------------------------------------------------------

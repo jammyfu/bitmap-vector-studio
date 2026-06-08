@@ -98,6 +98,7 @@ class TaskQueue:
         output_path: Path | str,
         options: TraceOptions,
         optimize_level: str = "basic",
+        plugins: list[Any] | None = None,
     ) -> str:
         """Add a single conversion task to the queue.
 
@@ -111,6 +112,8 @@ class TaskQueue:
             options=options,
             optimize_level=optimize_level,
         )
+        # Store plugins on the task instance dynamically.
+        object.__setattr__(task, "_plugins", plugins or [])
         with self._lock:
             self._tasks[task_id] = task
         self._queue.put(task)
@@ -291,11 +294,15 @@ class TaskQueue:
                 task.progress = 10.0
 
             # Perform conversion.
+            plugins = getattr(task, "_plugins", None)
+            kwargs: dict[str, Any] = {"optimize_level": task.optimize_level}
+            if plugins is not None:
+                kwargs["plugins"] = plugins
             result = trace_image(
                 task.input_path,
                 task.output_path,
                 task.options,
-                optimize_level=task.optimize_level,
+                **kwargs,
             )
 
             with self._lock:

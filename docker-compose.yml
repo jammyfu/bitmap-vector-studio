@@ -1,0 +1,30 @@
+services:
+  vector-studio:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./inputs:/app/inputs
+    environment:
+      - VECTOR_STUDIO_WORKERS=4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  vector-studio-cli:
+    build:
+      context: .
+      target: cli
+    volumes:
+      - ./inputs:/app/inputs
+      - ./outputs:/app/outputs
+    stdin_open: true
+    tty: true
+    environment:
+      - VECTOR_STUDIO_WORKERS=4

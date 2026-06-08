@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from .models import TraceOptions, TraceResult
+from .plugin_interface import Plugin
 from .preprocess import prepare_input
 from .svg_optimizer import optimize_svg_comprehensive
 from .svg_tools import (
@@ -55,6 +56,7 @@ def trace_image(
     png_scale: float = 1.0,
     smart_remove_bg: bool = False,
     enhance: str | None = None,
+    plugins: list[Plugin] | None = None,
 ) -> TraceResult:
     """Convert a raster image to SVG using VTracer.
 
@@ -69,11 +71,26 @@ def trace_image(
         ``"comprehensive"`` runs deep optimization (path merge, color merge,
         path simplification).
         ``"aggressive"`` runs comprehensive with more aggressive thresholds.
+    plugins:
+        Optional list of :class:`~vector_studio.plugin_interface.Plugin`
+        instances whose hooks will be executed during the pipeline.
     """
     start = time.perf_counter()
     input_path = Path(input_path)
     output_path = Path(output_path)
     options = (options or TraceOptions()).validate()
+    plugins = plugins or []
+    plugin_options: dict[str, object] = {
+        "optimize": optimize,
+        "optimize_level": optimize_level,
+        "name_layers": name_layers,
+        "export_pdf": export_pdf,
+        "export_png": export_png,
+        "export_eps": export_eps,
+        "png_scale": png_scale,
+        "smart_remove_bg": smart_remove_bg,
+        "enhance": enhance,
+    }
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -89,6 +106,22 @@ def trace_image(
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
         prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
+
+        # Run plugin preprocess hooks
+        if plugins:
+            from PIL import Image
+
+            with Image.open(normalized_input) as img:
+                for plugin in plugins:
+                    try:
+                        img = plugin.preprocess(img, plugin_options)
+                    except Exception as exc:  # noqa: BLE001
+                        import logging
+
+                        logging.getLogger(__name__).warning(
+                            "Plugin %s preprocess hook failed: %s", plugin.name, exc
+                        )
+                img.save(normalized_input, format="PNG", optimize=True)
 
         try:
             _trace_with_python_binding(normalized_input, output_path, options)
@@ -116,6 +149,17 @@ def trace_image(
     if name_layers:
         name_svg_layers(output_path)
 
+    # Run plugin postprocess hooks
+    for plugin in plugins:
+        try:
+            output_path = plugin.postprocess(output_path, plugin_options)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Plugin %s postprocess hook failed: %s", plugin.name, exc
+            )
+
     pdf_path = None
     png_path = None
     eps_path = None
@@ -127,7 +171,7 @@ def trace_image(
         eps_path = export_svg_to_eps_with_inkscape(output_path, output_path.with_suffix(".eps"))
 
     elapsed = time.perf_counter() - start
-    return TraceResult(
+    result = TraceResult(
         input_path=input_path,
         svg_path=output_path,
         engine=engine,
@@ -137,3 +181,16 @@ def trace_image(
         png_path=png_path,
         eps_path=eps_path,
     )
+
+    # Run plugin on_complete hooks
+    for plugin in plugins:
+        try:
+            plugin.on_convert_complete(result, plugin_options)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Plugin %s on_complete hook failed: %s", plugin.name, exc
+            )
+
+    return result
