@@ -355,6 +355,12 @@ def suggest_optimization(svg_path: Path) -> list[str]:
     paths = stats.get("paths", 0)
     groups = stats.get("groups", 0)
 
+    try:
+        sorted_colors, counts = extract_color_palette(svg_path)
+        color_count = len(sorted_colors)
+    except Exception:
+        color_count = 0
+
     if file_bytes > 100_000:
         suggestions.append("文件较大，建议减少 color_precision")
     if paths > 200:
@@ -363,6 +369,12 @@ def suggest_optimization(svg_path: Path) -> list[str]:
         suggestions.append("存在大量单路径图层，建议合并")
     if paths == 0 and groups == 0:
         suggestions.append("SVG 中未检测到可绘制元素")
+    if color_count > 64:
+        suggestions.append("颜色数过多，建议启用颜色合并")
+    if paths > 100:
+        suggestions.append("路径数过多，建议启用路径合并")
+    if file_bytes > 200_000:
+        suggestions.append("文件过大，建议综合优化")
 
     return suggestions
 
@@ -416,3 +428,9 @@ def export_svg_to_eps_with_inkscape(svg_path: Path, output_path: Path) -> Path:
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "Inkscape EPS export failed.")
     return output_path
+
+
+def svg_quality_score(svg_path: Path) -> dict[str, float]:
+    """Lightweight wrapper that lazily imports the real scorer to avoid circular imports."""
+    from .svg_optimizer import svg_quality_score as _real_score
+    return _real_score(svg_path)

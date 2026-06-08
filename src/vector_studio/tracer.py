@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .models import TraceOptions, TraceResult
 from .preprocess import prepare_input
+from .svg_optimizer import optimize_svg_comprehensive
 from .svg_tools import (
     export_svg_to_eps_with_inkscape,
     export_svg_to_pdf,
@@ -46,16 +47,28 @@ def trace_image(
     options: TraceOptions | None = None,
     *,
     optimize: bool = True,
+    optimize_level: str = "basic",
     name_layers: bool = False,
     export_pdf: bool = False,
     export_png: bool = False,
     export_eps: bool = False,
     png_scale: float = 1.0,
+    smart_remove_bg: bool = False,
+    enhance: str | None = None,
 ) -> TraceResult:
     """Convert a raster image to SVG using VTracer.
 
     The function first tries the official Python binding. If that package is not
     installed, it attempts to call a `vtracer` executable on PATH.
+
+    Parameters
+    ----------
+    optimize_level:
+        ``"none"`` skips post-processing.
+        ``"basic"`` runs conservative cleanup.
+        ``"comprehensive"`` runs deep optimization (path merge, color merge,
+        path simplification).
+        ``"aggressive"`` runs comprehensive with more aggressive thresholds.
     """
     start = time.perf_counter()
     input_path = Path(input_path)
@@ -75,7 +88,7 @@ def trace_image(
     engine = "python-vtracer"
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
-        prepare_input(input_path, normalized_input, options)
+        prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
 
         try:
             _trace_with_python_binding(normalized_input, output_path, options)
@@ -90,8 +103,15 @@ def trace_image(
                     f"Python binding error: {python_error}. CLI error: {cli_error}."
                 ) from cli_error
 
-    if optimize:
-        optimize_svg_file(output_path)
+    if optimize and optimize_level != "none":
+        if optimize_level == "basic":
+            optimize_svg_file(output_path)
+        elif optimize_level in {"comprehensive", "aggressive"}:
+            optimize_svg_comprehensive(output_path, aggressive=(optimize_level == "aggressive"))
+        else:
+            raise ValueError(
+                "optimize_level must be one of: none, basic, comprehensive, aggressive."
+            )
 
     if name_layers:
         name_svg_layers(output_path)

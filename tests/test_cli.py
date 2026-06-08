@@ -406,3 +406,117 @@ class TestBatchCommand:
 
         assert result.exit_code == 1
         assert "failed" in result.output
+
+
+class TestSearchCommand:
+    def test_search_quick(self, tmp_path):
+        img = tmp_path / "img.png"
+        img.write_bytes(b"fake image")
+        out_dir = tmp_path / "out"
+
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=out_dir / "quick_logo_001.svg",
+            engine="python-vtracer",
+            elapsed_seconds=1.0,
+            stats={"paths": 5},
+        )
+
+        with patch("vector_studio.cli.quick_search", return_value=("logo", out_dir / "best.svg", 42.0)) as mock_search:
+            with patch("vector_studio.cli.svg_stats", return_value={"paths": 5}):
+                result = runner.invoke(app, ["search", str(img), "--output-dir", str(out_dir), "--quick"])
+
+        assert result.exit_code == 0
+        mock_search.assert_called_once()
+        assert "Best preset" in result.output
+        assert "logo" in result.output
+
+    def test_search_full(self, tmp_path):
+        img = tmp_path / "img.png"
+        img.write_bytes(b"fake image")
+        out_dir = tmp_path / "out"
+
+        best_opts = TraceOptions(color_precision=6, filter_speckle=2)
+
+        with patch("vector_studio.cli.search_best_params", return_value=(best_opts, out_dir / "best.svg", 55.0, [])) as mock_search:
+            with patch("vector_studio.cli.svg_stats", return_value={"paths": 5}):
+                result = runner.invoke(app, ["search", str(img), "--output-dir", str(out_dir), "--max", "10"])
+
+        assert result.exit_code == 0
+        mock_search.assert_called_once()
+        assert "Best score" in result.output
+        assert "55.0" in result.output
+
+
+class TestQueueCommands:
+    def test_queue_add(self, tmp_path):
+        img = tmp_path / "img.png"
+        img.write_bytes(b"fake image")
+        out = tmp_path / "out.svg"
+
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=out,
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
+            with patch("vector_studio.history.record_task") as mock_record:
+                result = runner.invoke(app, ["queue", "add", str(img), "--output", str(out), "--preset", "logo"])
+
+        assert result.exit_code == 0
+        assert "Done" in result.output
+        mock_record.assert_called_once()
+
+    def test_queue_status(self):
+        result = runner.invoke(app, ["queue", "status"])
+        assert result.exit_code == 0
+        assert "No persistent queue" in result.output
+
+    def test_queue_start(self):
+        result = runner.invoke(app, ["queue", "start"])
+        assert result.exit_code == 0
+        assert "Queue start is handled automatically" in result.output
+
+    def test_queue_report(self, tmp_path):
+        report = tmp_path / "report.csv"
+        result = runner.invoke(app, ["queue", "report", "--path", str(report)])
+        assert result.exit_code == 0
+        assert "No persistent queue state" in result.output
+
+
+class TestBatchWorkers:
+    def test_batch_with_workers_uses_task_queue(self, tmp_path):
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        output_dir = tmp_path / "output"
+        (input_dir / "img1.png").write_bytes(b"fake")
+        (input_dir / "img2.png").write_bytes(b"fake")
+
+        mock_result = TraceResult(
+            input_path=input_dir / "img1.png",
+            svg_path=output_dir / "img1.svg",
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
+            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2"])
+
+        assert result.exit_code == 0
+        assert "ok" in result.output
+
+    def test_batch_with_retry(self, tmp_path):
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        output_dir = tmp_path / "output"
+        (input_dir / "img.png").write_bytes(b"fake")
+
+        with patch("vector_studio.cli.trace_image", side_effect=RuntimeError("boom")):
+            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2", "--retry", "1"])
+
+        assert result.exit_code == 1
+        assert "failed" in result.output

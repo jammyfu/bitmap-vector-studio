@@ -16,7 +16,14 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
-def prepare_input(input_path: Path, temp_png_path: Path, options: TraceOptions) -> Path:
+def prepare_input(
+    input_path: Path,
+    temp_png_path: Path,
+    options: TraceOptions,
+    *,
+    smart_remove_bg: bool = False,
+    enhance: str | None = None,
+) -> Path:
     """Normalize a raster image to a PNG that VTracer can read consistently.
 
     This step handles EXIF orientation, transparent backgrounds, optional denoise,
@@ -34,6 +41,24 @@ def prepare_input(input_path: Path, temp_png_path: Path, options: TraceOptions) 
 
         if options.max_input_side and max(img.size) > options.max_input_side:
             img.thumbnail((options.max_input_side, options.max_input_side), Image.Resampling.LANCZOS)
+
+        # Smart background removal for logos
+        if smart_remove_bg:
+            from .smart_background import is_likely_logo, remove_background
+
+            likely_logo, _ = is_likely_logo(img)
+            if likely_logo:
+                # Remove background and continue with the transparent result.
+                bg_removed_path = temp_png_path.with_name(temp_png_path.stem + "_nobg.png")
+                remove_background(input_path, bg_removed_path, tolerance=30)
+                img = Image.open(bg_removed_path)
+                img = ImageOps.exif_transpose(img)
+
+        # Optional enhancement pipeline
+        if enhance:
+            from .enhance import adaptive_enhance
+
+            img = adaptive_enhance(img, image_type=enhance)
 
         if img.mode in {"RGBA", "LA"} or (img.mode == "P" and "transparency" in img.info):
             rgba = img.convert("RGBA")

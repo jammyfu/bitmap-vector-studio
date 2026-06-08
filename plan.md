@@ -1,59 +1,64 @@
-# Bitmap Vector Studio 推进计划
+# Bitmap Vector Studio 推进计划 v0.3
 
 ## 项目现状
-- v0.1.0 MVP 已完成：VTracer封装、Streamlit GUI、Typer CLI、批量转换、SVG清理/统计、PDF/PNG导出
-- 已推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- v0.2.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- 170 个测试全部通过
+- 具备：GUI增强、预设管理、历史记录、外部编辑器、SVG图层命名
 
-## 目标版本: v0.2.0 — Illustrator-like 体验升级
+## 目标版本: v0.3.0 — 质量优化与智能处理
 
-### Stage 1: 基础设施增强（可并行）
-1. **自定义预设管理系统**
-   - 文件: `src/vector_studio/preset_manager.py`
-   - 功能: 保存/加载/删除用户自定义预设到JSON文件
+### Stage 1: 智能预处理（可并行）
+1. **智能背景透明处理**
+   - 文件: `src/vector_studio/smart_background.py`
+   - 功能: 自动检测Logo/图标的主背景色并移除，生成透明PNG
+   - 算法: 四角采样+边缘颜色聚类，判断背景色， flood fill移除
+
+2. **OpenCV增强预处理**
+   - 文件: `src/vector_studio/enhance.py`
+   - 功能: 边缘增强、扫描件去噪、对比度自适应、锐化
+   - 集成到 `preprocess.py` 作为可选增强步骤
+
+3. **智能预设推荐**
+   - 文件: `src/vector_studio/smart_recommend.py`
+   - 功能: 分析图片特征（颜色数、边缘密度、透明度、分辨率）推荐最佳预设
+   - 输出: 推荐预设名 + 置信度 + 理由
+
+### Stage 2: SVG后处理优化
+4. **SVG路径合并与颜色合并**
+   - 文件: `src/vector_studio/svg_optimizer.py`
+   - 功能: 合并相同颜色的相邻路径、简化路径数据、颜色量化
+   - 文件评分: 基于路径数、文件大小、颜色数给出质量评分
+
+5. **批量参数搜索**
+   - 文件: `src/vector_studio/param_search.py`
+   - 功能: 对单张图片用多组参数批量试跑，按评分自动挑选最优结果
+   - 评分维度: 文件大小、路径数、视觉保真度（SSIM近似）
+
+### Stage 3: 批量任务队列
+6. **任务队列与进度系统**
+   - 文件: `src/vector_studio/task_queue.py`
+   - 功能: 异步批量转换队列、进度跟踪、失败重试、并发控制
    - 集成到CLI和GUI
 
-2. **任务历史记录系统**
-   - 文件: `src/vector_studio/history.py`
-   - 功能: 记录最近转换任务，支持查看、重新加载参数、导出报告
+### Stage 4: GUI集成
+7. **Streamlit GUI v0.3升级**
+   - 智能推荐按钮（分析图片后自动推荐预设）
+   - 背景透明自动检测开关
+   - 批量队列进度条
+   - 参数搜索面板（一键多参数试跑）
+   - SVG优化后处理选项
 
-3. **外部编辑器集成**
-   - 文件: `src/vector_studio/external_editors.py`
-   - 功能: 检测并启动Illustrator/Inkscape/Figma等打开SVG
-
-### Stage 2: GUI体验升级
-4. **Streamlit GUI增强**
-   - 对比预览模式（原图/SVG并排+叠加对比滑块）
-   - 自定义预设选择器（内置+用户预设）
-   - 历史记录面板
-   - 一键打开外部编辑器按钮
-   - SVG图层信息展示
-
-### Stage 3: 质量与工程化
-5. **SVG图层命名优化**
-   - 在 `svg_tools.py` 中添加图层命名功能
-   - 按颜色或层级命名SVG group元素
-
-6. **测试增强**
-   - 新增 `test_preset_manager.py`
-   - 新增 `test_history.py`
-   - 新增 `test_external_editors.py`
-   - GUI组件测试
-
-7. **文档完善**
-   - 更新README：新增功能说明、截图占位、更详细的安装指南
-   - 更新ROADMAP：标记v0.2完成项
-   - 新增CHANGELOG.md
-   - 新增CONTRIBUTING.md
-
-### Stage 4: 打包与发布
-8. **打包脚本完善**
-   - 完善 `scripts/package.py`
-   - 添加Windows/macOS/Linux启动脚本
-   - 版本号统一更新
+### Stage 5: 测试与文档
+8. **测试增强**
+   - 新增模块的测试覆盖
+9. **文档更新**
+   - README更新v0.3功能
+   - CHANGELOG更新
+   - ROADMAP标记完成
 
 ## 提交策略
-每完成一个Stage就提交并推送到GitHub，commit message清晰描述变更内容。
+每完成一个Stage就提交并推送到GitHub。
 
 ## 当前时间锚点
-- 开发周期: v0.2.0
-- 目标: 功能完整、文档完善、测试覆盖、可安装使用
+- 开发周期: v0.3.0
+- 目标: 智能处理、质量优化、批量效率提升

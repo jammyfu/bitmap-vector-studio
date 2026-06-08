@@ -8,7 +8,11 @@ from rich.console import Console
 from rich.table import Table
 
 from .external_editors import open_with_default_editor, open_with_editor
+from .param_search import ParamGrid, quick_search, search_best_params
 from .presets import PRESETS, options_from_preset
+from .svg_optimizer import svg_quality_score
+from .svg_tools import svg_stats
+from .task_queue import TaskQueue
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
 
 console = Console()
@@ -16,6 +20,10 @@ app = typer.Typer(
     help="Bitmap Vector Studio: Illustrator-like bitmap to SVG conversion powered by VTracer.",
     no_args_is_help=True,
 )
+
+# Sub-typer for queue commands
+queue_app = typer.Typer(help="Task queue management.")
+app.add_typer(queue_app, name="queue")
 
 
 def _option_overrides(**kwargs):
@@ -67,13 +75,34 @@ def trace_command(
     posterize: Optional[int] = typer.Option(None, "--posterize", min=1, max=8, help="Optional Pillow posterize bits."),
     max_input_side: Optional[int] = typer.Option(None, "--max-input-side", min=64, help="Downscale max side before tracing."),
     optimize: bool = typer.Option(True, "--optimize/--no-optimize", help="Conservative SVG cleanup."),
+    optimize_level: str = typer.Option("basic", "--optimize-level", help="none, basic, comprehensive, aggressive."),
+    score: bool = typer.Option(False, "--score", help="Output quality score after conversion."),
     name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to the output SVG."),
     export_pdf: bool = typer.Option(False, "--export-pdf", help="Also export PDF via CairoSVG."),
     export_png: bool = typer.Option(False, "--export-png", help="Also export PNG preview via CairoSVG."),
     export_eps: bool = typer.Option(False, "--export-eps", help="Also export EPS via Inkscape CLI."),
     open_editor: Optional[str] = typer.Option(None, "--open", help="Open the output SVG in an external editor (inkscape, illustrator, etc.). Use without value for default editor."),
+    smart_remove_bg: bool = typer.Option(False, "--smart-remove-bg", help="Auto-detect and remove background for logo-like images."),
+    enhance: Optional[str] = typer.Option(None, "--enhance", help="Enhancement type: scan, photo, logo, auto."),
+    recommend: bool = typer.Option(False, "--recommend", help="Only analyze and recommend a preset, do not convert."),
 ) -> None:
     """Convert one bitmap image to SVG."""
+    if recommend:
+        from .smart_recommend import recommend_for_image
+        preset_name, confidence, reason, features = recommend_for_image(input_path)
+        table = Table(title="Smart Preset Recommendation")
+        table.add_column("Property", style="bold")
+        table.add_column("Value")
+        table.add_row("Recommended preset", preset_name)
+        table.add_row("Confidence", f"{confidence:.0%}")
+        table.add_row("Reason", reason)
+        table.add_row("Colors", str(features.get("color_count")))
+        table.add_row("Edge density", f"{features.get('edge_density', 0):.3f}")
+        table.add_row("Aspect ratio", str(features.get("aspect_ratio")))
+        table.add_row("Likely logo", str(features.get("is_likely_logo")))
+        console.print(table)
+        return
+
     overrides = _option_overrides(
         colormode=colormode,
         hierarchical=hierarchical,
@@ -97,15 +126,24 @@ def trace_command(
         out,
         opts,
         optimize=optimize,
+        optimize_level=optimize_level,
         name_layers=name_layers,
         export_pdf=export_pdf,
         export_png=export_png,
         export_eps=export_eps,
+        smart_remove_bg=smart_remove_bg,
+        enhance=enhance,
     )
 
     console.print(f"[green]Done[/green] {result.svg_path}")
     console.print(f"Engine: {result.engine} | Time: {result.elapsed_seconds:.2f}s")
     console.print(f"Stats: {result.stats}")
+    if score:
+        try:
+            qs = svg_quality_score(result.svg_path)
+            console.print(f"Quality score: {qs['overall']}/100 (size={qs['file_size_score']}, paths={qs['path_efficiency']}, complexity={qs['complexity_score']}, colors={qs['color_efficiency']})")
+        except Exception as exc:
+            console.print(f"[red]Score failed:[/red] {exc}")
     if result.pdf_path:
         console.print(f"PDF: {result.pdf_path}")
     if result.png_path:
@@ -132,9 +170,13 @@ def batch_command(
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Scan input folder recursively."),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing SVG files."),
     name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to each output SVG."),
+    optimize_level: str = typer.Option("basic", "--optimize-level", help="none, basic, comprehensive, aggressive."),
+    score: bool = typer.Option(False, "--score", help="Output quality score after each conversion."),
     export_pdf: bool = typer.Option(False, "--export-pdf"),
     export_png: bool = typer.Option(False, "--export-png"),
     open_editor: bool = typer.Option(False, "--open", help="Open each output SVG in the default external editor after conversion."),
+    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
+    retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
 ) -> None:
     """Batch-convert a folder of images."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -146,34 +188,187 @@ def batch_command(
         console.print("[yellow]No supported images found.[/yellow]")
         raise typer.Exit(code=0)
 
-    table = Table(title=f"Batch conversion: {len(images)} image(s)")
-    table.add_column("Input")
-    table.add_column("Output")
-    table.add_column("Status")
+    # When workers == 1 and retry == 0, keep the original sequential behaviour.
+    if workers == 1 and retry == 0:
+        table = Table(title=f"Batch conversion: {len(images)} image(s)")
+        table.add_column("Input")
+        table.add_column("Output")
+        table.add_column("Status")
 
-    failures = 0
+        failures = 0
+        for image_path in images:
+            rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
+            out_path = (output_dir / rel).with_suffix(".svg")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if out_path.exists() and not overwrite:
+                table.add_row(str(image_path), str(out_path), "skipped")
+                continue
+            try:
+                result = trace_image(image_path, out_path, opts, optimize_level=optimize_level, export_pdf=export_pdf, export_png=export_png, name_layers=name_layers)
+                table.add_row(str(image_path), str(result.svg_path), "ok")
+                if score:
+                    try:
+                        qs = svg_quality_score(result.svg_path)
+                        console.print(f"  Score {result.svg_path.name}: {qs['overall']}/100")
+                    except Exception:
+                        pass
+                if open_editor:
+                    try:
+                        open_with_default_editor(result.svg_path)
+                    except Exception as open_exc:
+                        console.print(f"[red]Failed to open {result.svg_path}:[/red] {open_exc}")
+            except Exception as exc:  # noqa: BLE001 - CLI should continue batch work.
+                failures += 1
+                table.add_row(str(image_path), str(out_path), f"failed: {exc}")
+
+        console.print(table)
+        if failures:
+            raise typer.Exit(code=1)
+        return
+
+    # Concurrent path via TaskQueue.
+    q = TaskQueue(max_workers=workers, output_dir=output_dir, max_retries=retry)
     for image_path in images:
         rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
         out_path = (output_dir / rel).with_suffix(".svg")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if out_path.exists() and not overwrite:
-            table.add_row(str(image_path), str(out_path), "skipped")
+            console.print(f"[yellow]Skipped[/yellow] {out_path} (exists)")
             continue
-        try:
-            result = trace_image(image_path, out_path, opts, export_pdf=export_pdf, export_png=export_png, name_layers=name_layers)
-            table.add_row(str(image_path), str(result.svg_path), "ok")
+        q.add_task(image_path, out_path, opts, optimize_level=optimize_level)
+
+    q.start()
+    results = q.wait_for_all()
+
+    table = Table(title=f"Batch conversion: {len(results)} image(s)")
+    table.add_column("Input")
+    table.add_column("Output")
+    table.add_column("Status")
+
+    failures = 0
+    for task in results:
+        if task.status == "completed":
+            table.add_row(str(task.input_path), str(task.output_path), "ok")
             if open_editor:
                 try:
-                    open_with_default_editor(result.svg_path)
+                    open_with_default_editor(task.output_path)
                 except Exception as open_exc:
-                    console.print(f"[red]Failed to open {result.svg_path}:[/red] {open_exc}")
-        except Exception as exc:  # noqa: BLE001 - CLI should continue batch work.
+                    console.print(f"[red]Failed to open {task.output_path}:[/red] {open_exc}")
+        elif task.status == "failed":
             failures += 1
-            table.add_row(str(image_path), str(out_path), f"failed: {exc}")
+            table.add_row(str(task.input_path), str(task.output_path), f"failed: {task.error}")
+        else:
+            table.add_row(str(task.input_path), str(task.output_path), task.status)
 
     console.print(table)
     if failures:
         raise typer.Exit(code=1)
+
+
+@app.command("search")
+def search_command(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory to store search results."),
+    max_combinations: int = typer.Option(20, "--max", "-m", min=1, max=100, help="Maximum parameter combinations to try."),
+    quick: bool = typer.Option(False, "--quick", help="Run a quick preset-only search instead of full grid search."),
+) -> None:
+    """Search for the best tracing parameters for a single image."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if quick:
+        best_preset, best_path, best_score = quick_search(input_path, output_dir)
+        console.print(f"[green]Best preset:[/green] {best_preset} (score={best_score:.1f})")
+        console.print(f"Output: {best_path}")
+        stats = svg_stats(best_path)
+        console.print(f"Stats: {stats}")
+        return
+
+    best_options, best_path, best_score, all_results = search_best_params(
+        input_path, output_dir, max_combinations=max_combinations
+    )
+
+    console.print(f"[green]Best score:[/green] {best_score:.1f}")
+    console.print(f"Output: {best_path}")
+    console.print(f"Options: {best_options}")
+    stats = svg_stats(best_path)
+    console.print(f"Stats: {stats}")
+
+    table = Table(title=f"Search results ({len(all_results)} combinations)")
+    table.add_column("#")
+    table.add_column("Preset")
+    table.add_column("Color precision")
+    table.add_column("Speckle")
+    table.add_column("Layer diff")
+    table.add_column("Corner")
+    table.add_column("Score")
+    table.add_column("Status")
+
+    for idx, res in enumerate(all_results, start=1):
+        opts = res["options"]
+        status = "ok" if "error" not in res else f"error: {res['error']}"
+        table.add_row(
+            str(idx),
+            opts.colormode,
+            str(opts.color_precision),
+            str(opts.filter_speckle),
+            str(opts.layer_difference),
+            str(opts.corner_threshold),
+            f"{res['score']:.1f}",
+            status,
+        )
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Queue sub-commands
+# ------------------------------------------------------------------
+
+@queue_app.command("add")
+def queue_add(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Path = typer.Option(..., "--output", help="Output SVG path."),
+    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
+) -> None:
+    """Add a single conversion task to the persistent queue."""
+    from .history import record_task
+
+    opts = options_from_preset(preset)
+    # For the CLI we run immediately in a one-shot queue so the user gets feedback.
+    q = TaskQueue(max_workers=1)
+    task_id = q.add_task(input_path, output, opts)
+    q.start()
+    task = q.wait_for(task_id)
+
+    if task.status == "completed" and task.result:
+        console.print(f"[green]Done[/green] {task.result.svg_path}")
+        console.print(f"Engine: {task.result.engine} | Time: {task.result.elapsed_seconds:.2f}s")
+        console.print(f"Stats: {task.result.stats}")
+        record_task(task.result, preset, opts)
+    elif task.status == "failed":
+        console.print(f"[red]Failed:[/red] {task.error}")
+        raise typer.Exit(code=1)
+
+
+@queue_app.command("status")
+def queue_status() -> None:
+    """Show the status of tasks in the active queue."""
+    console.print("[yellow]No persistent queue is running.[/yellow]")
+    console.print("Use 'vector-studio queue add <file>' to process tasks immediately.")
+
+
+@queue_app.command("start")
+def queue_start() -> None:
+    """Start processing the task queue."""
+    console.print("[yellow]Queue start is handled automatically by 'queue add'.[/yellow]")
+
+
+@queue_app.command("report")
+def queue_report(
+    path: Path = typer.Option(..., "--path", help="Output CSV path for the report."),
+) -> None:
+    """Export a report of queue tasks."""
+    console.print("[yellow]No persistent queue state available.[/yellow]")
+    console.print("Run 'vector-studio queue add' commands first.")
 
 
 def main() -> None:
