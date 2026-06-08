@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from .external_editors import open_with_default_editor, open_with_editor
 from .presets import PRESETS, options_from_preset
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
 
@@ -69,6 +70,7 @@ def trace_command(
     export_pdf: bool = typer.Option(False, "--export-pdf", help="Also export PDF via CairoSVG."),
     export_png: bool = typer.Option(False, "--export-png", help="Also export PNG preview via CairoSVG."),
     export_eps: bool = typer.Option(False, "--export-eps", help="Also export EPS via Inkscape CLI."),
+    open_editor: Optional[str] = typer.Option(None, "--open", help="Open the output SVG in an external editor (inkscape, illustrator, etc.). Use without value for default editor."),
 ) -> None:
     """Convert one bitmap image to SVG."""
     overrides = _option_overrides(
@@ -109,6 +111,16 @@ def trace_command(
     if result.eps_path:
         console.print(f"EPS: {result.eps_path}")
 
+    if open_editor is not None:
+        try:
+            if open_editor:
+                open_with_editor(result.svg_path, open_editor)
+            else:
+                open_with_default_editor(result.svg_path)
+            console.print(f"[cyan]Opened[/cyan] {result.svg_path} in editor")
+        except Exception as exc:
+            console.print(f"[red]Failed to open editor:[/red] {exc}")
+
 
 @app.command("batch")
 def batch_command(
@@ -119,6 +131,7 @@ def batch_command(
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing SVG files."),
     export_pdf: bool = typer.Option(False, "--export-pdf"),
     export_png: bool = typer.Option(False, "--export-png"),
+    open_editor: bool = typer.Option(False, "--open", help="Open each output SVG in the default external editor after conversion."),
 ) -> None:
     """Batch-convert a folder of images."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -146,6 +159,11 @@ def batch_command(
         try:
             result = trace_image(image_path, out_path, opts, export_pdf=export_pdf, export_png=export_png)
             table.add_row(str(image_path), str(result.svg_path), "ok")
+            if open_editor:
+                try:
+                    open_with_default_editor(result.svg_path)
+                except Exception as open_exc:
+                    console.print(f"[red]Failed to open {result.svg_path}:[/red] {open_exc}")
         except Exception as exc:  # noqa: BLE001 - CLI should continue batch work.
             failures += 1
             table.add_row(str(image_path), str(out_path), f"failed: {exc}")
