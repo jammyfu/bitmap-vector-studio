@@ -1,0 +1,91 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "Bitmap Vector Studio",
+    "version": "0.5.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true,
+        "execute": true,
+        "sidecar": false,
+        "scope": [
+          {
+            "name": "vector-studio",
+            "cmd": "vector-studio",
+            "args": true
+          },
+          {
+            "name": "python",
+            "cmd": "python",
+            "args": true
+          },
+          {
+            "name": "python3",
+            "cmd": "python3",
+            "args": true
+          }
+        ]
+      },
+      "dialog": {
+        "all": false,
+        "open": true,
+        "save": false
+      },
+      "fs": {
+        "all": true
+      },
+      "http": {
+        "all": true,
+        "request": true
+      },
+      "notification": {
+        "all": true
+      },
+      "process": {
+        "all": true,
+        "relaunch": true,
+        "exit": true
+      }
+    },
+    "windows": [
+      {
+        "title": "Bitmap Vector Studio",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.bitmapvectorstudio.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "category": "DeveloperTool",
+      "shortDescription": "Bitmap to SVG vector conversion studio",
+      "longDescription": "An Illustrator-like desktop application for bitmap/raster to SVG vector conversion powered by VTracer."
+    }
+  }
+}

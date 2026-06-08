@@ -1,0 +1,22 @@
+[package]
+name = "bitmap-vector-studio-desktop"
+version = "0.5.0"
+description = "Bitmap Vector Studio desktop application"
+authors = ["Bitmap Vector Studio Contributors"]
+license = "MIT"
+repository = "https://github.com/jammyfu/bitmap-vector-studio"
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = ["shell-open", "shell-execute", "dialog-open", "fs-all", "http-all", "notification-all", "process-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
