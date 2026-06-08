@@ -1141,3 +1141,70 @@ class TestCliEngineFlagOnTrace:
         assert result.exit_code == 0
         assert mock_trace.call_args[1]["ai_simplify"] is True
         assert mock_trace.call_args[1]["simplify_type"] == "photo"
+
+
+class TestAICommands:
+    def test_ai_segment_command(self, tmp_path):
+        img = tmp_path / "input.png"
+        from PIL import Image
+        Image.new("RGB", (50, 50)).save(img, format="PNG")
+        result = runner.invoke(app, ["ai", "segment", str(img)])
+        assert result.exit_code == 0
+        assert "Saved mask" in result.output
+        mask_path = tmp_path / "input_mask.png"
+        assert mask_path.exists()
+
+    def test_ai_style_command(self, tmp_path):
+        img = tmp_path / "input.png"
+        from PIL import Image
+        Image.new("RGB", (50, 50)).save(img, format="PNG")
+        result = runner.invoke(app, ["ai", "style", str(img), "--style", "sketch"])
+        assert result.exit_code == 0
+        assert "Saved styled image" in result.output
+        styled_path = tmp_path / "input_sketch.png"
+        assert styled_path.exists()
+
+    def test_ai_upscale_command(self, tmp_path):
+        img = tmp_path / "input.png"
+        from PIL import Image
+        Image.new("RGB", (50, 50)).save(img, format="PNG")
+        result = runner.invoke(app, ["ai", "upscale", str(img), "--scale", "2"])
+        assert result.exit_code == 0
+        assert "Saved upscaled image" in result.output
+        upscaled_path = tmp_path / "input_x2.png"
+        assert upscaled_path.exists()
+
+    def test_ai_models_command(self):
+        result = runner.invoke(app, ["ai", "models"])
+        assert result.exit_code == 0
+        assert "unet-lite" in result.output
+        assert "esrgan-lite" in result.output
+
+    def test_ai_download_command(self, tmp_path):
+        from vector_studio.ai_onnx import ONNXModelManager
+        manager = ONNXModelManager(models_dir=tmp_path)
+        fake_url = "http://example.com/fake.onnx"
+
+        def fake_urlretrieve(url, filename):
+            Path(filename).write_text("fake onnx data")
+
+        with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+            result = runner.invoke(app, ["ai", "download", "unet-lite", "--url", fake_url])
+        assert result.exit_code == 0
+        assert "Downloaded" in result.output
+
+    def test_trace_with_ai_pipeline(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=img.with_suffix(".svg"),
+            engine="python-vtracer",
+            elapsed_seconds=1.0,
+            stats={},
+        )
+        with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
+            result = runner.invoke(app, ["trace", str(img), "--ai-pipeline", "upscale", "--ai-pipeline", "style_transfer"])
+        assert result.exit_code == 0
+        passed_pipeline = mock_trace.call_args[1]["ai_pipeline"]
+        assert passed_pipeline == ["upscale", "style_transfer"]

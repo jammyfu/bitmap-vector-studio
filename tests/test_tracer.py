@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PIL import Image
 
 from vector_studio.models import TraceOptions, TraceResult
 from vector_studio.tracer import trace_image, SUPPORTED_EXTENSIONS
@@ -605,3 +606,88 @@ class TestTraceImageEngineParameter:
                     with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
                         result = trace_image(img, out, engine="VTRACER")
         assert result.engine == "vtracer"
+
+
+class TestTraceImageAIPipeline:
+    def test_ai_pipeline_segment(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        with patch("vector_studio.ai_onnx.AIProcessor.process") as mock_process:
+                            mock_process.return_value = Image.new("RGB", (10, 10))
+                            result = trace_image(img, out, ai_pipeline=["segment"])
+        assert result.svg_path == out
+        mock_process.assert_called_once()
+
+    def test_ai_pipeline_upscale_and_style(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        with patch("vector_studio.ai_onnx.AIProcessor.process") as mock_process:
+                            mock_process.return_value = Image.new("RGB", (10, 10))
+                            result = trace_image(img, out, ai_pipeline=["upscale", "style_transfer"])
+        assert result.svg_path == out
+        assert mock_process.call_count == 2
+
+    def test_ai_pipeline_unknown_task_skipped(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        with patch("vector_studio.ai_onnx.AIProcessor.process") as mock_process:
+                            mock_process.return_value = Image.new("RGB", (10, 10))
+                            result = trace_image(img, out, ai_pipeline=["magic_task"])
+        assert result.svg_path == out
+        mock_process.assert_not_called()
+
+    def test_ai_pipeline_none_does_not_call_ai(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        def _fake_prepare(input_path, normalized_input, options, **kwargs):
+            from PIL import Image
+            Image.new("RGB", (10, 10)).save(normalized_input)
+            return normalized_input
+
+        with patch("vector_studio.tracer.prepare_input", side_effect=_fake_prepare):
+            with patch("vector_studio.tracer._trace_with_python_binding"):
+                with patch("vector_studio.tracer.optimize_svg_file"):
+                    with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
+                        with patch("vector_studio.ai_onnx.AIProcessor.process") as mock_process:
+                            result = trace_image(img, out, ai_pipeline=None)
+        assert result.svg_path == out
+        mock_process.assert_not_called()

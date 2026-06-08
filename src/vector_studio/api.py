@@ -5,12 +5,13 @@ import json
 import shutil
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse
     from pydantic import BaseModel
@@ -23,6 +24,12 @@ except ImportError as exc:
 
 from . import __version__
 from .cloud_sync import CloudSyncManager, LocalServerBackend
+from .collaboration import (
+    CollabManager,
+    CollabRoom,
+    Operation,
+    get_collab_manager,
+)
 from .models import TraceOptions, TraceResult
 from .presets import PRESETS, options_from_preset
 from .smart_recommend import recommend_for_image
@@ -157,6 +164,54 @@ class ShareRevokeResponse(BaseModel):
 
 class ShareQrResponse(BaseModel):
     qr_code: str
+
+
+# ---------------------------------------------------------------------------
+# Collaboration Pydantic models
+# ---------------------------------------------------------------------------
+
+class RoomCreateResponse(BaseModel):
+    room_id: str
+    owner: str
+    created_at: str
+
+
+class RoomStateResponse(BaseModel):
+    room_id: str
+    owner: str
+    created_at: str
+    params: dict[str, Any]
+    preview: Any | None = None
+    files: list[dict[str, Any]]
+    last_convert: dict[str, Any] | None = None
+    client_count: int
+    operation_count: int
+    next_version: int
+
+
+class OperationRequest(BaseModel):
+    op_id: str | None = None
+    client_id: str
+    type: str
+    data: dict[str, Any] = {}
+    version: int | None = None
+
+
+class OperationResponse(BaseModel):
+    op_id: str
+    status: str
+    version: int | None = None
+    state: dict[str, Any] | None = None
+    reason: str | None = None
+    expected_version: int | None = None
+
+
+class HistoryResponse(BaseModel):
+    operations: list[dict[str, Any]]
+
+
+class RoomListResponse(BaseModel):
+    rooms: list[dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -582,3 +637,163 @@ async def get_share_qr(share_id: str):
     qr_bytes = backend.get_qr_code(share_id)
     qr_b64 = base64.b64encode(qr_bytes).decode("ascii")
     return ShareQrResponse(qr_code=qr_b64)
+
+
+# ---------------------------------------------------------------------------
+# Collaboration endpoints
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/collab/{room_id}")
+async def collab_websocket(websocket: WebSocket, room_id: str):
+    """WebSocket endpoint for real-time collaboration in a room.
+
+    Clients must connect with a query parameter ``client_id``.
+    Messages are JSON dictionaries. Supported client events:
+
+    * ``{"event": "join", "client_id": "..."}`` – handshake
+    * ``{"event": "operation", "op": {...}}`` – submit an operation
+    * ``{"event": "ping"}`` – keep-alive
+    """
+    await websocket.accept()
+    client_id: str | None = None
+    manager = await get_collab_manager()
+
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            event = raw.get("event")
+
+            if event == "join":
+                client_id = raw.get("client_id", str(uuid.uuid4())[:8])
+                room = manager.get_room(room_id)
+                if room is None:
+                    await websocket.send_json({"event": "error", "detail": "Room not found."})
+                    await websocket.close()
+                    return
+                await manager.join_room(room_id, client_id, websocket)
+                await websocket.send_json({
+                    "event": "joined",
+                    "room_id": room_id,
+                    "client_id": client_id,
+                    "state": room.get_state_snapshot(),
+                })
+
+            elif event == "operation":
+                if client_id is None:
+                    await websocket.send_json({"event": "error", "detail": "Send 'join' first."})
+                    continue
+                op_raw = raw.get("op", {})
+                op = Operation(
+                    op_id=op_raw.get("op_id", str(uuid.uuid4())[:12]),
+                    client_id=client_id,
+                    timestamp=time.time(),
+                    type=op_raw.get("type", "unknown"),
+                    data=op_raw.get("data", {}),
+                    version=op_raw.get("version", 1),
+                )
+                room = manager.get_room(room_id)
+                if room is None:
+                    await websocket.send_json({"event": "error", "detail": "Room not found."})
+                    continue
+                result = await room.apply_operation(op)
+                await websocket.send_json({"event": "operation_result", "result": result})
+
+            elif event == "ping":
+                await websocket.send_json({"event": "pong", "timestamp": time.time()})
+
+            else:
+                await websocket.send_json({"event": "error", "detail": f"Unknown event: {event}"})
+
+    except WebSocketDisconnect:
+        if client_id:
+            await manager.leave_room(room_id, client_id)
+    except Exception as exc:  # pragma: no cover
+        if client_id:
+            await manager.leave_room(room_id, client_id)
+        raise
+
+
+@app.post("/collab/rooms", response_model=RoomCreateResponse)
+async def create_room(owner: str):
+    """Create a new collaboration room.
+
+    Parameters
+    ----------
+    owner:
+        User identifier that owns the room.
+    """
+    manager = await get_collab_manager()
+    room_id = await manager.create_room(owner)
+    room = manager.get_room(room_id)
+    if room is None:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="Room creation failed.")
+    return RoomCreateResponse(
+        room_id=room_id,
+        owner=room.owner,
+        created_at=room.created_at,
+    )
+
+
+@app.get("/collab/rooms/{room_id}", response_model=RoomStateResponse)
+async def get_room_state(room_id: str):
+    """Get the current state snapshot of a collaboration room.
+
+    Returns 404 if the room does not exist.
+    """
+    manager = await get_collab_manager()
+    room = manager.get_room(room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    snap = room.get_state_snapshot()
+    return RoomStateResponse(**snap)
+
+
+@app.post("/collab/rooms/{room_id}/operations", response_model=OperationResponse)
+async def submit_operation(room_id: str, operation: OperationRequest):
+    """Submit an operation to a room via HTTP (non-WebSocket path).
+
+    Useful for CLI clients or integrations that do not maintain a
+    persistent WebSocket connection.
+    """
+    manager = await get_collab_manager()
+    room = manager.get_room(room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found.")
+
+    op = Operation(
+        op_id=operation.op_id or str(uuid.uuid4())[:12],
+        client_id=operation.client_id,
+        timestamp=time.time(),
+        type=operation.type,
+        data=operation.data,
+        version=operation.version or 1,
+    )
+    result = await room.apply_operation(op)
+    return OperationResponse(**result)
+
+
+@app.get("/collab/rooms/{room_id}/history", response_model=HistoryResponse)
+async def get_operation_history(room_id: str, limit: int = 100):
+    """Retrieve the most recent operations for a room.
+
+    Parameters
+    ----------
+    room_id:
+        Target room identifier.
+    limit:
+        Maximum number of operations to return (default 100).
+    """
+    manager = await get_collab_manager()
+    room = manager.get_room(room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found.")
+    ops = room.get_history(limit=limit)
+    return HistoryResponse(operations=ops)
+
+
+@app.get("/collab/rooms", response_model=RoomListResponse)
+async def list_rooms():
+    """List all active collaboration rooms."""
+    manager = await get_collab_manager()
+    rooms = manager.list_rooms()
+    return RoomListResponse(rooms=rooms)

@@ -23,6 +23,7 @@ from .svg_tools import (
     optimize_svg_file,
     svg_stats,
 )
+from .ai_onnx import AIProcessor
 from .engines import EngineRegistry, VTracerEngine
 from .gpu_backend import detect_gpu, gpu_preprocess, GPUBackend
 
@@ -72,6 +73,7 @@ def trace_image(
     preview_mode: bool = False,
     use_gpu: bool = False,
     stream: bool = False,
+    ai_pipeline: list[str] | None = None,
 ) -> TraceResult:
     """Convert a raster image to SVG using the specified vectorization engine.
 
@@ -112,6 +114,11 @@ def trace_image(
         if no GPU is available or the operation fails.
     stream:
         When ``True``, force chunked/streaming processing for large images.
+    ai_pipeline:
+        Optional list of AI pre-processing task names executed before
+        tracing.  Supported values: ``"segment"``, ``"style_transfer"``,
+        ``"upscale"``, ``"auto_enhance"``.  Each task is run in order via
+        :class:`~vector_studio.ai_onnx.AIProcessor`.
     """
     start = time.perf_counter()
     input_path = Path(input_path)
@@ -134,6 +141,7 @@ def trace_image(
         "simplify_type": simplify_type,
         "use_gpu": use_gpu,
         "stream": stream,
+        "ai_pipeline": ai_pipeline,
     }
 
     # Performance monitoring hook
@@ -239,6 +247,32 @@ def trace_image(
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
         prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
+
+        # AI pipeline preprocessing (optional)
+        if ai_pipeline:
+            try:
+                from PIL import Image
+
+                ai_processor = AIProcessor()
+                with Image.open(normalized_input) as img:
+                    for task in ai_pipeline:
+                        task_lower = task.strip().lower()
+                        if task_lower == "segment":
+                            img = ai_processor.process(img, "segment")
+                        elif task_lower == "style_transfer":
+                            style = "sketch"
+                            img = ai_processor.process(img, "style_transfer", style=style)
+                        elif task_lower == "upscale":
+                            img = ai_processor.process(img, "upscale", scale=2)
+                        elif task_lower == "auto_enhance":
+                            img = ai_processor.process(img, "auto_enhance", scale=2)
+                        else:
+                            logger = logging.getLogger(__name__)
+                            logger.warning("Unknown ai_pipeline task '%s', skipping.", task)
+                    img.save(normalized_input, format="PNG", optimize=True)
+            except Exception as exc:  # noqa: BLE001
+                logger = logging.getLogger(__name__)
+                logger.warning("AI pipeline failed: %s", exc)
 
         # GPU-accelerated preprocessing (optional)
         if use_gpu:

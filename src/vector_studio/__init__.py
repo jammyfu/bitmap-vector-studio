@@ -73,6 +73,14 @@ from .plugins import PluginManager
 from .config import Config
 from .api_client import VectorStudioClient
 
+from .animation import (
+    AnimationBuilder,
+    AnimationPreset,
+    LottieExporter,
+    SVGAnimation,
+    list_presets,
+)
+
 __all__ = [
     # Core
     "TraceOptions",
@@ -175,6 +183,12 @@ __all__ = [
     "GitHubGistBackend",
     "GitHubRepoBackend",
     "MultiBackend",
+    # Animation (v0.7)
+    "SVGAnimation",
+    "LottieExporter",
+    "AnimationPreset",
+    "AnimationBuilder",
+    "list_presets",
 ]
 
 from .ai_simplify import (

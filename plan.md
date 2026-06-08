@@ -1,67 +1,87 @@
-# Bitmap Vector Studio 推进计划 v1.2
+# Bitmap Vector Studio 推进计划 v2.0
 
 ## 项目现状
-- v1.1.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
-- 16 个 Git 提交
-- 36 个 Python 源文件 + 33 个测试文件 + 9 篇文档
+- v1.2.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- 18 个 Git 提交
+- 40 个 Python 源文件 + 42 个测试文件 + 11 篇文档
 - Tauri 桌面应用完整可用
-- 版本 1.1.0
+- 版本 1.2.0
 
-## 目标版本: v1.2.0 — 稳定性与生态扩展
+## 目标版本: v2.0.0 — AI 原生与实时协作
 
-### Stage 1: 多引擎支持与生态（可并行）
-1. **多矢量化引擎支持**
-   - 文件: `src/vector_studio/engines.py`
-   - 功能: 支持 potrace、autotrace 等作为备选后端
-   - 自动选择最佳引擎（根据图片类型）
-   - 引擎对比和评分
+### Stage 1: AI 原生（可并行）
+1. **本地 AI 模型推理**
+   - 文件: `src/vector_studio/ai_onnx.py`
+   - 功能: ONNX Runtime 实时图像分割、风格迁移、超分辨率
+   - 支持模型: UNet分割、StyleTransfer、ESRGAN超分
+   - 模型自动下载和管理
+   - 纯CPU运行，可选GPU加速
 
-2. **插件 SDK 完善**
-   - 文件: `src/vector_studio/plugin_sdk.py`
-   - 功能: 类型提示、调试工具、示例模板生成
-   - 插件验证器（检查插件是否符合规范）
-   - 插件开发脚手架（一键生成新插件模板）
+2. **多引擎智能编排**
+   - 文件: `src/vector_studio/engine_orchestrator.py`
+   - 功能: 根据素材类型自动选择最优引擎组合
+   - AI辅助决策：用轻量级模型分析图片，推荐最佳引擎+参数
+   - 引擎流水线：预处理引擎A -> 转换引擎B -> 后处理引擎C
 
-3. **云端同步预览**
-   - 文件: `src/vector_studio/cloud_sync.py`
-   - 功能: 转换结果上传到临时云存储
-   - 生成分享链接（QR码）
-   - 跨设备查看转换结果
+### Stage 2: 实时协作（可并行）
+3. **实时协作编辑**
+   - 文件: `src/vector_studio/collaboration.py`
+   - 功能: WebSocket 多人同步编辑同一项目
+   - 操作同步：参数调整、预览更新、文件上传
+   - 冲突解决：乐观锁 + 操作日志回放
+   - 权限管理：房主/编辑者/观察者
 
-4. **社区贡献者工具链**
-   - 文件: `src/vector_studio/community_tools.py`
-   - 功能: 预设验证器、插件审核工具、文档生成器
-   - 贡献指南生成
+4. **跨设备同步**
+   - 文件: `src/vector_studio/sync_service.py`
+   - 功能: 桌面端 ↔ 网页端 ↔ API 服务端状态同步
+   - 实时同步：工作区、预设、配置、历史
+   - 离线支持：本地缓存 + 上线后同步
 
-### Stage 2: 测试覆盖率提升
-5. **测试覆盖率提升到 90%+**
-   - 补充缺失的测试用例
-   - 集成测试增强
-   - 性能基准测试
-   - 端到端测试
+### Stage 3: 动画与工作流（可并行）
+5. **矢量动画导出**
+   - 文件: `src/vector_studio/animation.py`
+   - 功能: SVG 动画生成、Lottie 格式导出
+   - 动画类型：路径绘制动画、颜色渐变动画、变形动画
+   - 导出格式：SVG SMIL、Lottie JSON、CSS动画
 
-### Stage 3: GUI 与 CLI 集成
-6. **Streamlit GUI v1.2 升级**
-   - 引擎选择器（VTracer / Potrace / AutoTrace）
-   - 插件开发工具
-   - 云端分享功能
+6. **智能批处理工作流**
+   - 文件: `src/vector_studio/workflow.py`
+   - 功能: 可视化节点编辑器
+   - 节点类型：输入、转换、优化、导出、AI处理
+   - 工作流保存/加载/分享
+   - 条件分支和循环支持
 
-7. **CLI 增强**
-   - `vector-studio engine list` — 列出可用引擎
-   - `vector-studio engine benchmark` — 引擎对比测试
-   - `vector-studio plugin scaffold <name>` — 生成插件模板
-   - `vector-studio cloud share <svg>` — 上传到云端
-   - `vector-studio validate preset <file>` — 验证预设
+### Stage 4: 云端生态
+7. **云端预设与插件市场**
+   - 文件: `src/vector_studio/cloud_market.py`
+   - 功能: 用户账号体系、付费插件支持
+   - 积分/订阅系统
+   - 开发者收益分成
 
-### Stage 4: 测试与文档
-8. **文档更新**
-   - README 更新 v1.2 功能
-   - CHANGELOG 更新
-   - ROADMAP 标记完成
+### Stage 5: GUI 与 CLI 集成
+8. **Streamlit GUI v2.0 升级**
+   - AI模型选择面板
+   - 协作房间管理
+   - 动画预览和导出
+   - 工作流编辑器
+
+9. **CLI 增强**
+   - `vector-studio ai` 命令组
+   - `vector-studio collab` 命令组
+   - `vector-studio animate` 命令组
+   - `vector-studio workflow` 命令组
+
+### Stage 6: 测试与文档
+10. **测试增强**
+    - 新增模块测试覆盖
+11. **文档更新**
+    - README 更新 v2.0 功能
+    - CHANGELOG 更新
+    - ROADMAP 标记完成
 
 ## 提交策略
 每完成一个 Stage 就提交并推送到 GitHub。
 
 ## 当前时间锚点
-- 开发周期: v1.2.0
-- 目标: 更稳定、更开放、更易扩展
+- 开发周期: v2.0.0
+- 目标: AI原生、实时协作、动画、工作流

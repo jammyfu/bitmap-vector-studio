@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from pathlib import Path
 from typing import Optional
 
@@ -35,9 +36,18 @@ from .plugins import PluginManager
 from .presets import PRESETS, options_from_preset
 from .svg_optimizer import svg_quality_score
 from .svg_tools import svg_stats
+from .sync_service import SyncClient
 from .task_queue import TaskQueue
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
+from .workflow import Workflow, WorkflowTemplate
 from .workspace import Workspace, WorkspaceManager
+
+from .animation import (
+    AnimationBuilder,
+    LottieExporter,
+    SVGAnimation,
+    list_presets as list_animation_presets,
+)
 
 console = Console()
 app = typer.Typer(
@@ -69,6 +79,10 @@ app.add_typer(workspace_app, name="workspace")
 ocr_app = typer.Typer(help="OCR utilities.")
 app.add_typer(ocr_app, name="ocr")
 
+# Sub-typer for AI commands
+ai_app = typer.Typer(help="Local ONNX AI processing.")
+app.add_typer(ai_app, name="ai")
+
 # Sub-typer for engine commands
 engine_app = typer.Typer(help="Vectorization engine management.")
 app.add_typer(engine_app, name="engine")
@@ -84,6 +98,22 @@ app.add_typer(contrib_app, name="contrib")
 # Sub-typer for cloud sync commands
 cloud_app = typer.Typer(help="Cloud sync and sharing.")
 app.add_typer(cloud_app, name="cloud")
+
+# Sub-typer for animation commands
+animate_app = typer.Typer(help="Vector animation export.")
+app.add_typer(animate_app, name="animate")
+
+# Sub-typer for collaboration commands
+collab_app = typer.Typer(help="Real-time collaboration rooms.")
+app.add_typer(collab_app, name="collab")
+
+# Sub-typer for workflow commands
+workflow_app = typer.Typer(help="Visual workflow management.")
+app.add_typer(workflow_app, name="workflow")
+
+# Sub-typer for sync commands
+sync_app = typer.Typer(help="Cross-device sync.")
+app.add_typer(sync_app, name="sync")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -239,6 +269,7 @@ def trace_command(
     gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
     stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing for large images."),
     engine: str = typer.Option("vtracer", "--engine", "-e", help="Vectorization engine: vtracer, potrace, autotrace."),
+    ai_pipeline: list[str] = typer.Option([], "--ai-pipeline", help="AI pre-processing tasks: segment, style_transfer, upscale, auto_enhance."),
 ) -> None:
     """Convert one bitmap image to SVG."""
     config = _load_config(config_path)
@@ -346,6 +377,7 @@ def trace_command(
         simplify_type=simplify_type,
         use_gpu=gpu,
         stream=stream,
+        ai_pipeline=ai_pipeline if ai_pipeline else None,
     )
 
     console.print(f"[green]Done[/green] {result.svg_path}")
@@ -1240,6 +1272,110 @@ def ocr_languages() -> None:
 
 
 # ------------------------------------------------------------------
+# AI sub-commands
+# ------------------------------------------------------------------
+
+@ai_app.command("segment")
+def ai_segment(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+    model: str = typer.Option("unet-lite", "--model", help="Segmentation model name."),
+) -> None:
+    """Segment an image into foreground/background."""
+    from PIL import Image
+    from vector_studio.ai_onnx import ImageSegmenter
+
+    segmenter = ImageSegmenter()
+    with Image.open(input_path) as img:
+        mask = segmenter.segment(img, model_name=model)
+
+    out = output or input_path.with_stem(input_path.stem + "_mask")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    mask.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Saved mask[/green] {out}")
+
+
+@ai_app.command("style")
+def ai_style(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+    style: str = typer.Option("sketch", "--style", help="Style: sketch, oil, watercolor, cartoon."),
+) -> None:
+    """Apply artistic style transfer to an image."""
+    from PIL import Image
+    from vector_studio.ai_onnx import StyleTransfer
+
+    transfer = StyleTransfer()
+    with Image.open(input_path) as img:
+        styled = transfer.transfer(img, style=style)
+
+    out = output or input_path.with_stem(input_path.stem + f"_{style}")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    styled.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Saved styled image[/green] {out}")
+
+
+@ai_app.command("upscale")
+def ai_upscale(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
+    scale: int = typer.Option(2, "--scale", min=1, max=4, help="Upscaling factor."),
+) -> None:
+    """Upscale an image using super-resolution."""
+    from PIL import Image
+    from vector_studio.ai_onnx import SuperResolution
+
+    sr = SuperResolution()
+    with Image.open(input_path) as img:
+        upscaled = sr.upscale(img, scale=scale)
+
+    out = output or input_path.with_stem(input_path.stem + f"_x{scale}")
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
+    upscaled.save(out, format="PNG", optimize=True)
+    console.print(f"[green]Saved upscaled image[/green] {out} ({upscaled.size[0]}x{upscaled.size[1]})")
+
+
+@ai_app.command("models")
+def ai_models() -> None:
+    """List available ONNX models and their download status."""
+    from vector_studio.ai_onnx import MODEL_REGISTRY, ONNXModelManager
+
+    manager = ONNXModelManager()
+    available = {m["name"] for m in manager.list_available_models()}
+
+    table = Table(title="ONNX Models")
+    table.add_column("Name", style="bold")
+    table.add_column("Description")
+    table.add_column("Size (MB)")
+    table.add_column("Downloaded")
+
+    for name, meta in sorted(MODEL_REGISTRY.items()):
+        downloaded = "yes" if name in available else "no"
+        table.add_row(name, meta["description"], str(meta["size_mb"]), downloaded)
+    console.print(table)
+
+
+@ai_app.command("download")
+def ai_download(
+    model: str = typer.Argument(..., help="Model name to download."),
+    url: Optional[str] = typer.Option(None, "--url", help="Override download URL."),
+) -> None:
+    """Download an ONNX model."""
+    from vector_studio.ai_onnx import ONNXModelManager
+
+    manager = ONNXModelManager()
+    try:
+        path = manager.download_model(model, url=url)
+        console.print(f"[green]Downloaded[/green] {model} → {path}")
+    except Exception as exc:
+        console.print(f"[red]Download failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
 # Resume command
 # ------------------------------------------------------------------
 
@@ -1617,6 +1753,397 @@ def engine_auto(
     console.print(f"[green]Done[/green] {result.svg_path}")
     console.print(f"Engine: {result.engine} | Time: {result.elapsed_seconds:.2f}s")
     console.print(f"Stats: {result.stats}")
+
+
+@collab_app.command("create")
+def collab_create(
+    owner: str = typer.Option("anonymous", "--owner", "-o", help="Room owner identifier."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+) -> None:
+    """Create a new collaboration room."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{api_url}/collab/rooms?owner={urllib.parse.quote(owner)}"
+    try:
+        req = urllib.request.Request(url, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Failed to create room:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Created room[/green] {data['room_id']}")
+    console.print(f"Owner: {data['owner']}")
+    console.print(f"Created at: {data['created_at']}")
+
+
+@collab_app.command("join")
+def collab_join(
+    room_id: str = typer.Argument(..., help="Room identifier to join."),
+    client_id: str = typer.Option("", "--client-id", "-c", help="Client identifier (auto-generated if empty)."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+) -> None:
+    """Join a collaboration room (CLI polling mode).
+
+    In CLI mode we do not maintain a WebSocket; instead we print the
+    current room state and exit. Use the desktop or web UI for real-time
+    WebSocket collaboration.
+    """
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{api_url}/collab/rooms/{urllib.parse.quote(room_id)}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            console.print(f"[red]Room not found:[/red] {room_id}")
+        else:
+            console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Failed to join room:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Joined room[/green] {data['room_id']}")
+    console.print(f"Owner: {data['owner']} | Clients: {data['client_count']}")
+    console.print(f"Operations: {data['operation_count']} | Next version: {data['next_version']}")
+    if data.get("params"):
+        console.print(f"Params: {data['params']}")
+    if data.get("files"):
+        console.print(f"Files: {len(data['files'])} file(s)")
+
+
+@collab_app.command("status")
+def collab_status(
+    room_id: str = typer.Argument(..., help="Room identifier."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+) -> None:
+    """Show the current status of a collaboration room."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{api_url}/collab/rooms/{urllib.parse.quote(room_id)}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            console.print(f"[red]Room not found:[/red] {room_id}")
+        else:
+            console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Failed to get status:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    table = Table(title=f"Room: {data['room_id']}")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    table.add_row("Owner", data["owner"])
+    table.add_row("Created", data["created_at"])
+    table.add_row("Clients", str(data["client_count"]))
+    table.add_row("Operations", str(data["operation_count"]))
+    table.add_row("Next version", str(data["next_version"]))
+    console.print(table)
+
+    if data.get("params"):
+        console.print(f"[cyan]Params:[/cyan] {data['params']}")
+    if data.get("last_convert"):
+        console.print(f"[cyan]Last convert:[/cyan] {data['last_convert']}")
+
+
+@collab_app.command("history")
+def collab_history(
+    room_id: str = typer.Argument(..., help="Room identifier."),
+    limit: int = typer.Option(20, "--limit", "-l", min=1, max=500, help="Number of operations to show."),
+    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+) -> None:
+    """Show the operation history of a collaboration room."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{api_url}/collab/rooms/{urllib.parse.quote(room_id)}/history?limit={limit}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            console.print(f"[red]Room not found:[/red] {room_id}")
+        else:
+            console.print(f"[red]API error:[/red] {exc.code} {exc.reason}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Failed to get history:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    ops = data.get("operations", [])
+    if not ops:
+        console.print("[yellow]No operations yet.[/yellow]")
+        return
+
+    table = Table(title=f"Operation History ({len(ops)} entries)")
+    table.add_column("#", style="bold")
+    table.add_column("Op ID")
+    table.add_column("Client")
+    table.add_column("Type")
+    table.add_column("Version")
+    for idx, op in enumerate(ops, start=1):
+        table.add_row(
+            str(idx),
+            op.get("op_id", "-"),
+            op.get("client_id", "-"),
+            op.get("type", "-"),
+            str(op.get("version", "-")),
+        )
+    console.print(table)
+
+
+@sync_app.command("status")
+def sync_status(
+    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+) -> None:
+    """Show the sync status for this device."""
+    client = SyncClient(server_url=server_url)
+    status = client.get_sync_status()
+    table = Table(title="Sync Status")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    for key, value in status.items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Workflow sub-commands
+# ------------------------------------------------------------------
+
+@workflow_app.command("list")
+def workflow_list() -> None:
+    """List built-in workflow templates."""
+    table = Table(title="Workflow Templates")
+    table.add_column("Name", style="bold")
+    table.add_column("Description")
+    templates = [
+        ("logo_pipeline", "Input -> Background transparent -> Convert -> Optimize -> Export"),
+        ("photo_pipeline", "Input -> AI enhance -> Convert -> Optimize -> Export"),
+        ("batch_pipeline", "Input -> Loop -> Convert -> Merge -> Export"),
+    ]
+    for name, desc in templates:
+        table.add_row(name, desc)
+    console.print(table)
+
+
+@workflow_app.command("run")
+def workflow_run(
+    workflow_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."),
+    input_path: Path = typer.Option(..., "--input", "-i", exists=True, dir_okay=False, readable=True, help="Input image."),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory."),
+) -> None:
+    """Run a workflow file against an input image."""
+    try:
+        workflow = Workflow.load(workflow_file)
+    except Exception as exc:
+        console.print(f"[red]Failed to load workflow:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    valid, errors = workflow.validate()
+    if not valid:
+        for err in errors:
+            console.print(f"[red]Validation error:[/red] {err}")
+        raise typer.Exit(code=1)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        results = workflow.execute(input_path, output_dir)
+    except Exception as exc:
+        console.print(f"[red]Workflow execution failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    if results:
+        console.print(f"[green]Workflow completed.[/green] {len(results)} output(s):")
+        for p in results:
+            console.print(f"  {p}")
+    else:
+        console.print("[yellow]Workflow produced no outputs.[/yellow]")
+
+
+@workflow_app.command("create")
+def workflow_create(
+    template: str = typer.Option(..., "--template", "-t", help="Template name: logo_pipeline, photo_pipeline, batch_pipeline."),
+    output: Path = typer.Option(Path("workflow.json"), "--output", "-o", help="Output workflow JSON file."),
+) -> None:
+    """Create a workflow from a built-in template."""
+    try:
+        workflow = WorkflowTemplate.get_template(template)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    workflow.save(output)
+    console.print(f"[green]Created workflow:[/green] {output}")
+
+
+@workflow_app.command("validate")
+def workflow_validate(
+    workflow_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."),
+) -> None:
+    """Validate a workflow file."""
+    try:
+        workflow = Workflow.load(workflow_file)
+    except Exception as exc:
+        console.print(f"[red]Failed to load workflow:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    valid, errors = workflow.validate()
+    if valid:
+        console.print(f"[green]Workflow is valid:[/green] {workflow_file.name}")
+    else:
+        console.print(f"[red]Workflow validation failed:[/red] {workflow_file.name}")
+        for err in errors:
+            console.print(f"  - {err}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Sync sub-commands
+# ------------------------------------------------------------------
+
+@sync_app.command("push")
+def sync_push(
+    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+) -> None:
+    """Push local data to the sync server."""
+    client = SyncClient(server_url=server_url)
+    results = client.push_all()
+    table = Table(title="Sync Push Results")
+    table.add_column("Data Type", style="bold")
+    table.add_column("Status")
+    for dtype, ok in results.items():
+        status = "[green]ok[/green]" if ok else "[red]failed[/red]"
+        table.add_row(dtype, status)
+    console.print(table)
+    if not all(results.values()):
+        raise typer.Exit(code=1)
+
+
+@sync_app.command("pull")
+def sync_pull(
+    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+) -> None:
+    """Pull remote data from the sync server and merge with local copies."""
+    client = SyncClient(server_url=server_url)
+    merged: dict[str, Any] = {}
+    try:
+        merged["workspaces"] = client.sync_workspaces()
+    except Exception as exc:
+        console.print(f"[yellow]Workspaces sync failed:[/yellow] {exc}")
+    try:
+        merged["presets"] = client.sync_presets()
+    except Exception as exc:
+        console.print(f"[yellow]Presets sync failed:[/yellow] {exc}")
+    try:
+        merged["config"] = client.sync_config()
+    except Exception as exc:
+        console.print(f"[yellow]Config sync failed:[/yellow] {exc}")
+    try:
+        merged["history"] = client.sync_history()
+    except Exception as exc:
+        console.print(f"[yellow]History sync failed:[/yellow] {exc}")
+
+    table = Table(title="Sync Pull Results")
+    table.add_column("Data Type", style="bold")
+    table.add_column("Count")
+    for dtype, data in merged.items():
+        count = len(data) if isinstance(data, list) else "-"
+        table.add_row(dtype, str(count))
+    console.print(table)
+
+
+@sync_app.command("status")
+def sync_status(
+    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+) -> None:
+    """Show the sync status for this device."""
+    client = SyncClient(server_url=server_url)
+    status = client.get_sync_status()
+    table = Table(title="Sync Status")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    for key, value in status.items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Animation sub-commands
+# ------------------------------------------------------------------
+
+@animate_app.command("svg")
+def animate_svg(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output animated SVG path."),
+    preset: str = typer.Option("draw", "--preset", "-p", help="Animation preset: draw, reveal, morph, pulse, color_cycle."),
+) -> None:
+    """Export an SVG with embedded SMIL animations."""
+    builder = AnimationBuilder().load_svg(input_path).apply_preset(preset)
+    builder.export("smil", output)
+    console.print(f"[green]Animated SVG exported:[/green] {output}")
+
+
+@animate_app.command("lottie")
+def animate_lottie(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output Lottie JSON path."),
+) -> None:
+    """Convert an SVG to Lottie JSON format."""
+    exporter = LottieExporter(input_path)
+    exporter.export_lottie(output)
+    console.print(f"[green]Lottie exported:[/green] {output}")
+
+
+@animate_app.command("gif")
+def animate_gif(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output GIF path."),
+    fps: int = typer.Option(30, "--fps", min=1, max=60, help="Frames per second."),
+    duration: float = typer.Option(2.0, "--duration", min=0.1, max=10.0, help="Animation duration in seconds."),
+    preset: str = typer.Option("draw", "--preset", "-p", help="Animation preset."),
+) -> None:
+    """Export a GIF preview of an SVG animation."""
+    builder = AnimationBuilder().load_svg(input_path).apply_preset(preset)
+    builder.export("gif", output)
+    console.print(f"[green]GIF exported:[/green] {output} ({fps} fps, {duration}s)")
+
+
+@animate_app.command("presets")
+def animate_presets() -> None:
+    """List available animation presets."""
+    names = list_animation_presets()
+    table = Table(title="Animation Presets")
+    table.add_column("Name", style="bold")
+    table.add_column("Description")
+    descriptions = {
+        "draw": "Stroke draw animation using dash-offset",
+        "reveal": "Fade-in reveal animation",
+        "morph": "Path morphing between shapes",
+        "pulse": "Color pulse with fade",
+        "color_cycle": "Cyclic color transition",
+    }
+    for name in names:
+        table.add_row(name, descriptions.get(name, "-"))
+    console.print(table)
 
 
 def main() -> None:

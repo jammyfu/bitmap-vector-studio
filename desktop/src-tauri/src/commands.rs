@@ -9,6 +9,36 @@ use tauri::{command};
 
 use crate::python_bridge;
 
+/// Export an SVG animation in the requested format.
+///
+/// # Arguments
+/// * `svg_path` - Absolute path to the source SVG file.
+/// * `format` - Export format: "smil", "lottie", "css", "gif".
+/// * `preset` - Animation preset name.
+/// * `output_path` - Destination file path.
+///
+/// # Returns
+/// The output file path on success.
+#[command]
+pub async fn export_animation(
+    svg_path: String,
+    format: String,
+    preset: String,
+    output_path: String,
+) -> Result<String, String> {
+    let mut args = vec![
+        "animate".to_string(),
+        format,
+        svg_path,
+        "--output".to_string(),
+        output_path.clone(),
+        "--preset".to_string(),
+        preset,
+    ];
+    python_bridge::call_vector_studio(args)?;
+    Ok(output_path)
+}
+
 /// Convert a single image using the Python CLI.
 ///
 /// Calls `vector-studio trace input_path --output temp.svg [options]`.
@@ -685,4 +715,154 @@ pub async fn revoke_share(file_id: String) -> Result<(), String> {
         "local".to_string(),
     ])
     .map(|_| ())
+}
+
+/// Run a workflow file against an input image.
+///
+/// # Arguments
+/// * `workflow_file` - Absolute path to the workflow JSON file.
+/// * `input_path` - Absolute path to the input bitmap image.
+/// * `output_dir` - Absolute path to the output directory.
+///
+/// # Returns
+/// JSON string containing output file paths.
+#[command]
+pub async fn run_workflow(workflow_file: String, input_path: String, output_dir: String) -> Result<String, String> {
+    let args = vec![
+        "workflow".to_string(),
+        "run".to_string(),
+        workflow_file,
+        "--input".to_string(),
+        input_path,
+        "--output-dir".to_string(),
+        output_dir,
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// List built-in workflow templates.
+///
+/// # Returns
+/// JSON array of template metadata.
+#[command]
+pub async fn list_workflows() -> Result<String, String> {
+    python_bridge::call_vector_studio(vec![
+        "workflow".to_string(),
+        "list".to_string(),
+        "--json".to_string(),
+    ])
+}
+
+/// Save a workflow definition to disk.
+///
+/// # Arguments
+/// * `template` - Template name (logo_pipeline, photo_pipeline, batch_pipeline).
+/// * `output_path` - Absolute path to write the workflow JSON file.
+///
+/// # Returns
+/// OK on success.
+#[command]
+pub async fn save_workflow(template: String, output_path: String) -> Result<(), String> {
+    let args = vec![
+        "workflow".to_string(),
+        "create".to_string(),
+        "--template".to_string(),
+        template,
+        "--output".to_string(),
+        output_path,
+    ];
+    python_bridge::call_vector_studio(args).map(|_| ())
+}
+
+/// Push local data to the sync server.
+///
+/// # Arguments
+/// * `server_url` - Sync server base URL.
+///
+/// # Returns
+/// JSON string containing push results per data type.
+#[command]
+pub async fn sync_data(server_url: String) -> Result<String, String> {
+    let args = vec![
+        "sync".to_string(),
+        "push".to_string(),
+        "--server-url".to_string(),
+        server_url,
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// Get the sync status for this device.
+///
+/// # Arguments
+/// * `server_url` - Sync server base URL.
+///
+/// # Returns
+/// JSON string containing sync status.
+#[command]
+pub async fn get_sync_status(server_url: String) -> Result<String, String> {
+    let args = vec![
+        "sync".to_string(),
+        "status".to_string(),
+        "--server-url".to_string(),
+        server_url,
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// Create a new collaboration room.
+///
+/// # Arguments
+/// * `owner` - User identifier that owns the room.
+///
+/// # Returns
+/// JSON string containing room_id, owner, and created_at.
+#[command]
+pub async fn create_collab_room(owner: String) -> Result<String, String> {
+    let args = vec![
+        "collab".to_string(),
+        "create".to_string(),
+        "--owner".to_string(),
+        owner,
+    ];
+    python_bridge::call_vector_studio(args)
+}
+
+/// Join a collaboration room (CLI polling mode).
+///
+/// # Arguments
+/// * `room_id` - Room identifier to join.
+/// * `client_id` - Optional client identifier.
+///
+/// # Returns
+/// JSON string containing the current room state.
+#[command]
+pub async fn join_collab_room(room_id: String, client_id: Option<String>) -> Result<String, String> {
+    let mut args = vec![
+        "collab".to_string(),
+        "join".to_string(),
+        room_id,
+    ];
+    if let Some(cid) = client_id {
+        args.push("--client-id".to_string());
+        args.push(cid);
+    }
+    python_bridge::call_vector_studio(args)
+}
+
+/// Get the current state of a collaboration room.
+///
+/// # Arguments
+/// * `room_id` - Room identifier.
+///
+/// # Returns
+/// JSON string containing room state snapshot.
+#[command]
+pub async fn get_collab_state(room_id: String) -> Result<String, String> {
+    let args = vec![
+        "collab".to_string(),
+        "status".to_string(),
+        room_id,
+    ];
+    python_bridge::call_vector_studio(args)
 }
