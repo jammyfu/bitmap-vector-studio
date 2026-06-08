@@ -1,74 +1,69 @@
-# Bitmap Vector Studio 推进计划 v0.4
+# Bitmap Vector Studio 推进计划 v0.5
 
 ## 项目现状
-- v0.3.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
-- 267 个测试全部通过
-- 具备：智能预处理、SVG优化、参数搜索、批量队列、GUI增强
+- v0.4.0 已完成并推送到 GitHub: https://github.com/jammyfu/bitmap-vector-studio
+- 331 个测试全部通过
+- 具备：插件系统、Web API、Docker、配置管理、智能预处理、SVG优化
 
-## 目标版本: v0.4.0 — 生态与集成
+## 目标版本: v0.5.0 — AI 辅助与实时交互
 
-### Stage 1: 插件系统与配置（可并行）
-1. **插件系统**
-   - 文件: `src/vector_studio/plugins.py` + `src/vector_studio/plugin_interface.py`
-   - 功能: 允许用户编写自定义后处理插件（Python文件放入plugins目录自动加载）
-   - 插件类型: 预处理插件、后处理插件、导出插件、报告插件
-   - 提供Plugin基类和装饰器注册机制
+### Stage 1: 实时交互（可并行）
+1. **实时预览系统**
+   - 文件: `src/vector_studio/live_preview.py`
+   - 功能: 调整参数时实时生成低分辨率预览SVG，无需点击转换
+   - 技术: 使用缩略图快速转换 + 缓存机制
+   - GUI集成: Streamlit参数变化时自动触发预览更新
 
-2. **配置文件支持**
-   - 文件: `src/vector_studio/config.py`
-   - 功能: YAML/JSON配置文件解析，支持批量参数模板
-   - CLI集成: `vector-studio trace config.yaml` 支持从配置文件读取参数
-   - 配置项: 默认预设、输出目录、优化级别、插件启用、外部编辑器偏好
+2. **局部重描摹**
+   - 文件: `src/vector_studio/region_trace.py`
+   - 功能: 用户圈选区域，仅重新生成某一块SVG
+   - 技术: 裁剪区域 -> 单独转换 -> 合并回原始SVG
+   - GUI集成: 支持矩形/圆形/多边形选区
 
-### Stage 2: Web API模式
-3. **FastAPI封装**
-   - 文件: `src/vector_studio/api.py`
-   - 功能: RESTful API提供图片上传、转换、状态查询、结果下载
-   - 端点: /convert, /batch, /status, /download, /presets, /recommend
-   - 支持异步任务（基于TaskQueue）
-   - 自动API文档（/docs）
-   - CLI集成: `vector-studio api --host 0.0.0.0 --port 8000`
+### Stage 2: AI辅助处理
+3. **AI语义简化**
+   - 文件: `src/vector_studio/ai_simplify.py`
+   - 功能: 对复杂照片先做语义简化（边缘保留平滑、颜色量化、噪声去除）
+   - 技术: 纯Pillow/NumPy实现（无需深度学习框架），可选ONNX模型
+   - 策略: 双边滤波效果模拟、超像素分割、颜色聚类
 
-### Stage 3: 容器与发布
-4. **Docker镜像**
-   - 文件: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
-   - 功能: 多阶段构建，包含VTracer和CairoSVG
-   - 支持API模式和CLI模式
-   - 提供docker-compose一键启动
+4. **OCR文字识别与保留**
+   - 文件: `src/vector_studio/ai_ocr.py`
+   - 功能: 检测图片中的文字区域，保留文字结构
+   - 技术: 可选依赖pytesseract/easyocr，未安装时跳过
+   - 输出: 文字区域坐标 + 识别文本，用于后续SVG中文字层处理
 
-5. **包管理器发布准备**
-   - 文件: `scripts/release.py`, `.github/workflows/release.yml`
-   - 功能: 自动化版本发布流程
-   - PyPI发布配置
-   - Homebrew formula模板
-   - Chocolatey包模板
-   - APT deb包构建脚本
+### Stage 3: 生态扩展
+5. **预设市场**
+   - 文件: `src/vector_studio/market.py`
+   - 功能: 在线预设分享与下载平台（GitHub Gist/Repo作为后端）
+   - 功能: 浏览热门预设、下载、评分、上传自己的预设
+   - CLI: `vector-studio market list/search/install/publish`
 
 ### Stage 4: GUI与CLI集成
-6. **Streamlit GUI v0.4升级**
-   - 插件管理面板（启用/禁用/配置插件）
-   - 配置文件导入/导出
-   - API模式状态显示
+6. **Streamlit GUI v0.5升级**
+   - 实时预览面板（参数变化自动更新）
+   - 局部重描摹工具（选区+转换）
+   - AI增强开关（语义简化、OCR）
+   - 预设市场浏览器
 
 7. **CLI增强**
-   - `vector-studio config` 命令组（查看/编辑/验证配置）
-   - `vector-studio plugin` 命令组（列表/启用/禁用/安装）
-   - `vector-studio api` 命令启动服务器
+   - `vector-studio trace --live-preview` 实时预览模式
+   - `vector-studio trace --region x,y,w,h` 局部转换
+   - `vector-studio trace --ai-simplify` AI语义简化
+   - `vector-studio trace --ocr` OCR文字保留
 
 ### Stage 5: 测试与文档
 8. **测试增强**
-   - 插件系统测试
-   - API端点测试（TestClient）
-   - 配置解析测试
+   - 新增模块测试覆盖
 9. **文档更新**
-   - README更新v0.4功能
-   - API文档
-   - Docker使用指南
-   - 插件开发指南
+   - README更新v0.5功能
+   - CHANGELOG更新
+   - ROADMAP标记完成
 
 ## 提交策略
 每完成一个Stage就提交并推送到GitHub。
 
 ## 当前时间锚点
-- 开发周期: v0.4.0
-- 目标: 生态扩展、远程调用、容器化、可插拔架构
+- 开发周期: v0.5.0
+- 目标: AI辅助、实时交互、生态扩展

@@ -552,3 +552,71 @@ class TestApiCommand:
             result = runner.invoke(app, ["--api"])
         assert result.exit_code == 1
         assert "API dependencies are missing" in result.output
+
+
+class TestLivePreviewOption:
+    def test_trace_live_preview(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=out,
+            engine="python-vtracer",
+            elapsed_seconds=0.2,
+            stats={},
+        )
+
+        with patch("vector_studio.live_preview.LivePreviewEngine") as mock_engine_cls:
+            mock_engine = mock_engine_cls.return_value
+            mock_engine.generate_preview.return_value = (out, 0.2)
+            result = runner.invoke(app, ["trace", str(img), "--output", str(out), "--live-preview"])
+
+        assert result.exit_code == 0
+        assert "Preview" in result.output
+        mock_engine.generate_preview.assert_called_once()
+
+
+class TestRegionOption:
+    def test_trace_region_rect(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        out = tmp_path / "out.svg"
+        out.write_text("<svg></svg>")
+
+        mock_result = TraceResult(
+            input_path=img,
+            svg_path=out,
+            engine="python-vtracer",
+            elapsed_seconds=0.5,
+            stats={"paths": 3},
+        )
+
+        with patch("vector_studio.region_trace.region_trace", return_value=mock_result) as mock_region:
+            result = runner.invoke(app, ["trace", str(img), "--output", str(out), "--region", "10,20,30,40"])
+
+        assert result.exit_code == 0
+        assert "Done" in result.output
+        mock_region.assert_called_once()
+        passed_region = mock_region.call_args[0][1]
+        assert passed_region.x == 10
+        assert passed_region.y == 20
+        assert passed_region.width == 30
+        assert passed_region.height == 40
+        assert passed_region.shape == "rect"
+
+    def test_trace_region_invalid_format(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        result = runner.invoke(app, ["trace", str(img), "--region", "10,20,30"])
+        assert result.exit_code == 1
+        assert "must be x,y,w,h" in result.output or "Error" in result.output
+
+    def test_trace_region_invalid_values(self, tmp_path):
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake image data")
+        result = runner.invoke(app, ["trace", str(img), "--region", "a,b,c,d"])
+        assert result.exit_code == 1
+        assert "must be integers" in result.output or "Error" in result.output

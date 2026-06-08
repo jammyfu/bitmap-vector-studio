@@ -4,8 +4,11 @@ import shutil
 import subprocess
 import tempfile
 import time
+from dataclasses import asdict
 from pathlib import Path
 
+from .ai_ocr import detect_text_regions, integrate_text_to_svg, recognize_text
+from .ai_simplify import adaptive_simplify
 from .models import TraceOptions, TraceResult
 from .plugin_interface import Plugin
 from .preprocess import prepare_input
@@ -57,6 +60,10 @@ def trace_image(
     smart_remove_bg: bool = False,
     enhance: str | None = None,
     plugins: list[Plugin] | None = None,
+    ai_simplify: bool = False,
+    ai_ocr: bool = False,
+    simplify_type: str = "auto",
+    preview_mode: bool = False,
 ) -> TraceResult:
     """Convert a raster image to SVG using VTracer.
 
@@ -74,6 +81,17 @@ def trace_image(
     plugins:
         Optional list of :class:`~vector_studio.plugin_interface.Plugin`
         instances whose hooks will be executed during the pipeline.
+    ai_simplify:
+        If True, apply AI semantic simplification before tracing.
+    ai_ocr:
+        If True, detect and embed recognized text as editable SVG ``<text>``
+        elements after tracing.
+    simplify_type:
+        Strategy for AI simplification: ``"photo"``, ``"complex"``, ``"sketch"``,
+        or ``"auto"``.
+    preview_mode:
+        When ``True``, limits the input size to 400 px and skips PDF/PNG/EPS
+        exports for a fast low-resolution preview.
     """
     start = time.perf_counter()
     input_path = Path(input_path)
@@ -90,7 +108,20 @@ def trace_image(
         "png_scale": png_scale,
         "smart_remove_bg": smart_remove_bg,
         "enhance": enhance,
+        "ai_simplify": ai_simplify,
+        "ai_ocr": ai_ocr,
+        "simplify_type": simplify_type,
     }
+
+    if preview_mode:
+        opts_dict = asdict(options)
+        current_max = opts_dict.get("max_input_side")
+        if current_max is None or current_max > 400:
+            opts_dict["max_input_side"] = 400
+        options = TraceOptions(**opts_dict)
+        export_pdf = False
+        export_png = False
+        export_eps = False
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -123,6 +154,19 @@ def trace_image(
                         )
                 img.save(normalized_input, format="PNG", optimize=True)
 
+        # AI semantic simplification (optional, non-blocking)
+        if ai_simplify:
+            try:
+                from PIL import Image
+
+                with Image.open(normalized_input) as img:
+                    simplified = adaptive_simplify(img, image_type=simplify_type)
+                    simplified.save(normalized_input, format="PNG", optimize=True)
+            except Exception as exc:  # noqa: BLE001
+                import logging
+
+                logging.getLogger(__name__).warning("AI simplification failed: %s", exc)
+
         try:
             _trace_with_python_binding(normalized_input, output_path, options)
         except Exception as python_error:
@@ -148,6 +192,20 @@ def trace_image(
 
     if name_layers:
         name_svg_layers(output_path)
+
+    # AI OCR text integration (optional, non-blocking)
+    if ai_ocr:
+        try:
+            from PIL import Image
+
+            with Image.open(input_path) as img:
+                regions = recognize_text(img)
+                if regions:
+                    integrate_text_to_svg(output_path, regions, output_path)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning("AI OCR failed: %s", exc)
 
     # Run plugin postprocess hooks
     for plugin in plugins:

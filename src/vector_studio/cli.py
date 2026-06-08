@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +36,10 @@ app.add_typer(config_app, name="config")
 # Sub-typer for plugin commands
 plugin_app = typer.Typer(help="Plugin management.")
 app.add_typer(plugin_app, name="plugin")
+
+# Sub-typer for market commands
+market_app = typer.Typer(help="Preset market management.")
+app.add_typer(market_app, name="market")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -177,7 +182,12 @@ def trace_command(
     open_editor: Optional[str] = typer.Option(None, "--open", help="Open the output SVG in an external editor (inkscape, illustrator, etc.). Use without value for default editor."),
     smart_remove_bg: bool = typer.Option(False, "--smart-remove-bg", help="Auto-detect and remove background for logo-like images."),
     enhance: Optional[str] = typer.Option(None, "--enhance", help="Enhancement type: scan, photo, logo, auto."),
+    ai_simplify: bool = typer.Option(False, "--ai-simplify", help="Apply AI semantic simplification before tracing."),
+    ai_ocr: bool = typer.Option(False, "--ai-ocr", help="Detect and embed text as editable SVG text elements."),
+    simplify_type: str = typer.Option("auto", "--simplify-type", help="Simplification strategy: photo, complex, sketch, auto."),
     recommend: bool = typer.Option(False, "--recommend", help="Only analyze and recommend a preset, do not convert."),
+    region: Optional[str] = typer.Option(None, "--region", help="Rectangular region to trace as x,y,w,h."),
+    live_preview: bool = typer.Option(False, "--live-preview", help="Fast low-res preview mode."),
     config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
     plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
 ) -> None:
@@ -236,6 +246,37 @@ def trace_command(
 
     plugins = _active_plugins(config, plugin)
 
+    if live_preview:
+        from .live_preview import LivePreviewEngine
+        engine = LivePreviewEngine(max_size=400)
+        preview_path, elapsed = engine.generate_preview(input_path, opts)
+        if output and Path(preview_path).resolve() != Path(out).resolve():
+            import shutil
+            shutil.copy2(preview_path, out)
+            console.print(f"[green]Preview[/green] {out}")
+        else:
+            console.print(f"[green]Preview[/green] {preview_path}")
+        console.print(f"Time: {elapsed:.2f}s")
+        return
+
+    if region:
+        from .region_trace import RegionSelector, region_trace
+        parts = region.split(",")
+        if len(parts) != 4:
+            console.print("[red]Error:[/red] --region must be x,y,w,h")
+            raise typer.Exit(code=1)
+        try:
+            x, y, w, h = (int(p.strip()) for p in parts)
+        except ValueError:
+            console.print("[red]Error:[/red] --region values must be integers")
+            raise typer.Exit(code=1)
+        region_sel = RegionSelector(x=x, y=y, width=w, height=h, shape="rect")
+        result = region_trace(input_path, region_sel, out, opts)
+        console.print(f"[green]Done[/green] {result.svg_path}")
+        console.print(f"Engine: {result.engine} | Time: {result.elapsed_seconds:.2f}s")
+        console.print(f"Stats: {result.stats}")
+        return
+
     result = trace_image(
         input_path,
         out,
@@ -249,6 +290,9 @@ def trace_command(
         smart_remove_bg=smart_remove_bg,
         enhance=enhance,
         plugins=plugins,
+        ai_simplify=ai_simplify,
+        ai_ocr=ai_ocr,
+        simplify_type=simplify_type,
     )
 
     console.print(f"[green]Done[/green] {result.svg_path}")
@@ -681,6 +725,180 @@ def queue_report(
     """Export a report of queue tasks."""
     console.print("[yellow]No persistent queue state available.[/yellow]")
     console.print("Run 'vector-studio queue add' commands first.")
+
+
+# ------------------------------------------------------------------
+# Market sub-commands
+# ------------------------------------------------------------------
+
+@market_app.command("list")
+def market_list() -> None:
+    """List available presets from the market."""
+    from .market import PresetMarket
+
+    market = PresetMarket()
+    presets = market.discover_presets()
+    if not presets:
+        console.print("[yellow]No presets found in the market.[/yellow]")
+        console.print("Check your network connection or configure market sources.")
+        return
+
+    table = Table(title="Market Presets")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Author")
+    table.add_column("Version")
+    table.add_column("Tags")
+    table.add_column("Rating")
+    table.add_column("Downloads")
+
+    for p in presets:
+        table.add_row(
+            p.get("id", "-"),
+            p.get("display_name", p.get("name", "-")),
+            p.get("author", "-"),
+            p.get("version", "-"),
+            ", ".join(p.get("tags", [])) or "-",
+            str(p.get("rating", "-")),
+            str(p.get("downloads", "-")),
+        )
+    console.print(table)
+
+
+@market_app.command("search")
+def market_search(
+    query: str = typer.Argument(..., help="Search query."),
+) -> None:
+    """Search for presets in the market."""
+    from .market import PresetMarket
+
+    market = PresetMarket()
+    presets = market.search(query)
+    if not presets:
+        console.print(f"[yellow]No presets found for '{query}'.[/yellow]")
+        return
+
+    table = Table(title=f"Search Results: {query}")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Author")
+    table.add_column("Tags")
+
+    for p in presets:
+        table.add_row(
+            p.get("id", "-"),
+            p.get("display_name", p.get("name", "-")),
+            p.get("author", "-"),
+            ", ".join(p.get("tags", [])) or "-",
+        )
+    console.print(table)
+
+
+@market_app.command("install")
+def market_install(
+    preset_id: str = typer.Argument(..., help="Preset ID to install."),
+    name: str | None = typer.Option(None, "--name", "-n", help="Local name override."),
+) -> None:
+    """Install a preset from the market."""
+    from .market import PresetMarket
+
+    market = PresetMarket()
+    try:
+        local_name = market.install(preset_id, name=name)
+        console.print(f"[green]Installed preset:[/green] {local_name}")
+    except Exception as exc:
+        console.print(f"[red]Installation failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@market_app.command("publish")
+def market_publish(
+    preset_name: str = typer.Argument(..., help="Local preset name to publish."),
+    token: str | None = typer.Option(None, "--token", help="GitHub personal access token."),
+) -> None:
+    """Publish a local preset to the market."""
+    from .market import PresetMarket
+
+    auth_token = token or os.environ.get("GITHUB_TOKEN")
+    if not auth_token:
+        console.print(
+            "[red]GitHub token required.[/red] Use --token or set GITHUB_TOKEN environment variable."
+        )
+        raise typer.Exit(code=1)
+
+    market = PresetMarket()
+    try:
+        preset_id = market.publish(preset_name, auth_token)
+        console.print(f"[green]Published preset:[/green] {preset_id}")
+    except Exception as exc:
+        console.print(f"[red]Publish failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@market_app.command("popular")
+def market_popular(
+    limit: int = typer.Option(10, "--limit", "-l", min=1, max=50, help="Number of presets to show."),
+) -> None:
+    """Show popular presets from the market."""
+    from .market import PresetMarket
+
+    market = PresetMarket()
+    presets = market.get_popular(limit=limit)
+    if not presets:
+        console.print("[yellow]No popular presets found.[/yellow]")
+        return
+
+    table = Table(title="Popular Presets")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Rating")
+    table.add_column("Downloads")
+
+    for p in presets:
+        table.add_row(
+            p.get("id", "-"),
+            p.get("display_name", p.get("name", "-")),
+            str(p.get("rating", "-")),
+            str(p.get("downloads", "-")),
+        )
+    console.print(table)
+
+
+@market_app.command("info")
+def market_info(
+    preset_id: str = typer.Argument(..., help="Preset ID to inspect."),
+) -> None:
+    """Show detailed information about a market preset."""
+    from .market import PresetMarket
+
+    market = PresetMarket()
+    try:
+        preset = market.backend.download_preset(preset_id)
+    except Exception as exc:
+        console.print(f"[red]Failed to fetch preset:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    table = Table(title=f"Preset: {preset.get('display_name', preset_id)}")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+
+    for key in [
+        "id",
+        "name",
+        "display_name",
+        "description",
+        "author",
+        "version",
+        "tags",
+        "downloads",
+        "rating",
+        "created_at",
+    ]:
+        value = preset.get(key, "-")
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value)
+        table.add_row(key, str(value))
+    console.print(table)
 
 
 def main() -> None:
