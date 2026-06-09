@@ -4273,6 +4273,214 @@ def search_files(
     console.print(table)
 
 
+# Sub-typer for import/export commands
+export_app = typer.Typer(help="Export data packages.")
+app.add_typer(export_app, name="export")
+
+import_app = typer.Typer(help="Import data packages.")
+app.add_typer(import_app, name="import")
+
+# Sub-typer for tag commands
+tag_app = typer.Typer(help="File tag management.")
+app.add_typer(tag_app, name="tag")
+
+
+# ------------------------------------------------------------------
+# Export sub-commands
+# ------------------------------------------------------------------
+
+@export_app.command("json")
+def export_json(
+    output: Path = typer.Option(..., "--output", "-o", help="Output JSON file path."),
+    presets: bool = typer.Option(True, "--presets/--no-presets", help="Include presets."),
+    config: bool = typer.Option(True, "--config/--no-config", help="Include configuration."),
+    history: bool = typer.Option(True, "--history/--no-history", help="Include history."),
+    templates: bool = typer.Option(True, "--templates/--no-templates", help="Include templates."),
+) -> None:
+    """Export data to a JSON file."""
+    from .import_export import ImportExporter
+
+    include: list[str] = []
+    if presets:
+        include.append("presets")
+    if config:
+        include.append("config")
+    if history:
+        include.append("history")
+    if templates:
+        include.append("templates")
+
+    exporter = ImportExporter()
+    exporter.export_to_json(output, include=include)
+    console.print(f"[green]Exported to[/green] {output}")
+
+
+@export_app.command("zip")
+def export_zip(
+    output: Path = typer.Option(..., "--output", "-o", help="Output ZIP file path."),
+    presets: bool = typer.Option(True, "--presets/--no-presets", help="Include presets."),
+    config: bool = typer.Option(True, "--config/--no-config", help="Include configuration."),
+    history: bool = typer.Option(True, "--history/--no-history", help="Include history."),
+    templates: bool = typer.Option(True, "--templates/--no-templates", help="Include templates."),
+) -> None:
+    """Export data to a ZIP archive."""
+    from .import_export import ImportExporter
+
+    include: list[str] = []
+    if presets:
+        include.append("presets")
+    if config:
+        include.append("config")
+    if history:
+        include.append("history")
+    if templates:
+        include.append("templates")
+
+    exporter = ImportExporter()
+    exporter.export_to_zip(output, include=include)
+    console.print(f"[green]Exported to[/green] {output}")
+
+
+# ------------------------------------------------------------------
+# Import sub-commands
+# ------------------------------------------------------------------
+
+@import_app.command("json")
+def import_json(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input JSON file path."),
+    strategy: str = typer.Option("merge", "--strategy", help="merge / replace / skip."),
+) -> None:
+    """Import data from a JSON file."""
+    from .import_export import ImportExporter
+
+    if strategy not in {"merge", "replace", "skip"}:
+        console.print(f"[red]Invalid strategy:[/red] {strategy}")
+        raise typer.Exit(code=1)
+
+    exporter = ImportExporter()
+    stats = exporter.import_from_json(input_path, merge_strategy=strategy)
+    console.print(f"[green]Import complete[/green]")
+    for category, count in stats.get("imported", {}).items():
+        console.print(f"  {category}: {count} items")
+    for error in stats.get("errors", []):
+        console.print(f"[red]Error:[/red] {error}")
+
+
+@import_app.command("zip")
+def import_zip(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input ZIP file path."),
+    strategy: str = typer.Option("merge", "--strategy", help="merge / replace / skip."),
+) -> None:
+    """Import data from a ZIP archive."""
+    from .import_export import ImportExporter
+
+    if strategy not in {"merge", "replace", "skip"}:
+        console.print(f"[red]Invalid strategy:[/red] {strategy}")
+        raise typer.Exit(code=1)
+
+    exporter = ImportExporter()
+    stats = exporter.import_from_zip(input_path, merge_strategy=strategy)
+    console.print(f"[green]Import complete[/green]")
+    for category, count in stats.get("imported", {}).items():
+        console.print(f"  {category}: {count} items")
+    for error in stats.get("errors", []):
+        console.print(f"[red]Error:[/red] {error}")
+
+
+# ------------------------------------------------------------------
+# Tag sub-commands
+# ------------------------------------------------------------------
+
+@tag_app.command("add")
+def tag_add(
+    file_path: str = typer.Argument(..., help="File path to tag."),
+    tag: str = typer.Argument(..., help="Tag to add."),
+) -> None:
+    """Add a tag to a file."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    manager.add_tag(file_path, tag)
+    console.print(f"[green]Added tag[/green] '{tag}' to {file_path}")
+
+
+@tag_app.command("remove")
+def tag_remove(
+    file_path: str = typer.Argument(..., help="File path."),
+    tag: str = typer.Argument(..., help="Tag to remove."),
+) -> None:
+    """Remove a tag from a file."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    manager.remove_tag(file_path, tag)
+    console.print(f"[green]Removed tag[/green] '{tag}' from {file_path}")
+
+
+@tag_app.command("list")
+def tag_list(
+    file_path: str = typer.Argument(..., help="File path to list tags for."),
+) -> None:
+    """List tags for a file."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    tags = manager.get_tags(file_path)
+    if not tags:
+        console.print(f"[yellow]No tags for[/yellow] {file_path}")
+        return
+    console.print(f"Tags for {file_path}: {', '.join(tags)}")
+
+
+@tag_app.command("search")
+def tag_search(
+    tag: str = typer.Argument(..., help="Tag to search for."),
+) -> None:
+    """Search files by tag."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    results = manager.search_by_tag(tag)
+    if not results:
+        console.print(f"[yellow]No files found with tag[/yellow] '{tag}'")
+        return
+    console.print(f"Files tagged with '{tag}':")
+    for path in results:
+        console.print(f"  {path}")
+
+
+@tag_app.command("suggest")
+def tag_suggest(
+    file_path: str = typer.Argument(..., help="File path."),
+    preset: str | None = typer.Option(None, "--preset", "-p", help="Preset name for context."),
+) -> None:
+    """Suggest tags for a file."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    suggestions = manager.suggest_tags(file_path, preset)
+    if not suggestions:
+        console.print("[yellow]No suggestions.[/yellow]")
+        return
+    console.print(f"Suggested tags: {', '.join(suggestions)}")
+
+
+@tag_app.command("auto")
+def tag_auto(
+    file_path: str = typer.Argument(..., help="File path."),
+    preset: str | None = typer.Option(None, "--preset", "-p", help="Preset name for context."),
+) -> None:
+    """Auto-tag a file based on its features."""
+    from .tag_manager import TagManager
+
+    manager = TagManager()
+    added = manager.auto_tag(file_path, preset)
+    if not added:
+        console.print("[yellow]No new tags added.[/yellow]")
+        return
+    console.print(f"[green]Auto-tagged[/green] {file_path} with: {', '.join(added)}")
+
+
 # ------------------------------------------------------------------
 # Migrate command
 # ------------------------------------------------------------------
