@@ -1,14 +1,13 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, Suspense } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore, useQueueStore, useConvertStore, useSettingsStore } from './stores'
 import TopBar from './components/TopBar'
-import MainCanvas from './components/MainCanvas'
 import CoreParams from './components/CoreParams'
 import SmartRecommend from './components/SmartRecommend'
-import AdvancedDrawer from './components/AdvancedDrawer'
 import ControlBar from './components/ControlBar'
 import QueueBar from './components/QueueBar'
-import CommandPalette from './components/CommandPalette'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { LazyMainCanvas, LazyCommandPalette, LazyAdvancedDrawer } from './utils/lazyLoad'
 import { useTauri } from './hooks/useTauri'
 import { usePresets } from './hooks/usePresets'
 import type { TraceOptions, ConversionTask } from './types'
@@ -151,16 +150,26 @@ function App() {
     <div className="app-container">
       <TopBar onOpenCommandPalette={openCommandPalette} onOpenSettings={() => showToast('设置面板即将上线', 'warning')} theme={effectiveTheme} onToggleTheme={toggleTheme} />
       <div className="app-body">
-        <MainCanvas originalImage={originalImage} resultSvg={convert.previewResult} onDropFiles={handleDropFiles} onClickUpload={handleOpenFileDialog} fileName={selectedItem?.fileName} />
+        <ErrorBoundary>
+          <Suspense fallback={<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6b6b' }}>画布加载中...</div>}>
+            <LazyMainCanvas originalImage={originalImage} resultSvg={convert.previewResult} onDropFiles={handleDropFiles} onClickUpload={handleOpenFileDialog} fileName={selectedItem?.fileName} />
+          </Suspense>
+        </ErrorBoundary>
         <div className="app-controls">
-          <CoreParams preset={convert.preset} onChangePreset={handleSelectPreset} presets={presets} colorMode={convert.colormode} onChangeColorMode={(m) => convert.setCoreParam('colormode', m)} curveMode={convert.mode} onChangeCurveMode={(m) => convert.setCoreParam('mode', m)} optimizeLevel={convert.optimizeLevel} onChangeOptimizeLevel={(l) => convert.setCoreParam('optimizeLevel', l)} />
+          <ErrorBoundary fallback={<div style={{ padding: 16, color: 'var(--error)', textAlign: 'center' }}>参数面板加载失败</div>}>
+            <CoreParams preset={convert.preset} onChangePreset={handleSelectPreset} presets={presets} colorMode={convert.colormode} onChangeColorMode={(m) => convert.setCoreParam('colormode', m)} curveMode={convert.mode} onChangeCurveMode={(m) => convert.setCoreParam('mode', m)} optimizeLevel={convert.optimizeLevel} onChangeOptimizeLevel={(l) => convert.setCoreParam('optimizeLevel', l)} />
+          </ErrorBoundary>
           <SmartRecommend recommendedPreset={convert.recommendedPreset || undefined} confidence={convert.recommendationConfidence} onApply={convert.applyRecommendation} onDismiss={() => convert.setRecommendation('', 0)} />
-          <AdvancedDrawer options={traceOptions} onChangeOptions={handleChangeAdvancedOptions} defaultOptions={getPresetOptions('default')} />
+          <Suspense fallback={null}>
+            <LazyAdvancedDrawer options={traceOptions} onChangeOptions={handleChangeAdvancedOptions} defaultOptions={getPresetOptions('default')} />
+          </Suspense>
         </div>
         <ControlBar onConvert={handleConvert} onDownload={handleDownload} isConverting={convert.isConverting} canDownload={!!convert.previewResult} />
       </div>
       <QueueBar tasks={queueTasks} isExpanded={isExpanded} onToggleExpand={toggleExpanded} onRemoveTask={removeItem} onClearCompleted={clearCompleted} />
-      <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} presets={presets} onSelectPreset={handleSelectPreset} onOpenCommand={(cmd) => { if (cmd === 'cmd-open') handleOpenFileDialog(); if (cmd === 'cmd-convert') handleConvert() }} />
+      <Suspense fallback={null}>
+        <LazyCommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} presets={presets} onSelectPreset={handleSelectPreset} onOpenCommand={(cmd) => { if (cmd === 'cmd-open') handleOpenFileDialog(); if (cmd === 'cmd-convert') handleConvert() }} />
+      </Suspense>
     </div>
   )
 }

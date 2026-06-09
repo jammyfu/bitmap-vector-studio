@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Theme } from '../types';
+import { hasRecoveryState, loadRecoveryState, clearRecoveryState } from '../utils/crashRecovery';
+import type { RecoveryData } from '../utils/crashRecovery';
 
 interface Toast {
   message: string;
@@ -14,6 +16,8 @@ interface AppState {
   envStatus: string;
   toast: Toast | null;
   commandPaletteOpen: boolean;
+  hasCrashRecovery: boolean;
+  crashRecoveryData: RecoveryData | null;
 
   // actions
   setTheme: (t: Theme) => void;
@@ -24,6 +28,8 @@ interface AppState {
   closeCommandPalette: () => void;
   setReady: (ready: boolean) => void;
   setEnvStatus: (status: string) => void;
+  recoverFromCrash: () => void;
+  clearCrashRecovery: () => void;
 }
 
 function getSystemTheme(): 'light' | 'dark' {
@@ -47,6 +53,8 @@ export const useAppStore = create<AppState>()(
       envStatus: 'Checking...',
       toast: null,
       commandPaletteOpen: false,
+      hasCrashRecovery: hasRecoveryState(),
+      crashRecoveryData: loadRecoveryState(),
 
       setTheme: (t) => {
         set({ theme: t });
@@ -81,6 +89,16 @@ export const useAppStore = create<AppState>()(
       closeCommandPalette: () => set({ commandPaletteOpen: false }),
       setReady: (ready) => set({ isReady: ready }),
       setEnvStatus: (status) => set({ envStatus: status }),
+      recoverFromCrash: () => {
+        const data = loadRecoveryState();
+        if (data) {
+          set({ crashRecoveryData: data, hasCrashRecovery: false });
+        }
+      },
+      clearCrashRecovery: () => {
+        clearRecoveryState();
+        set({ hasCrashRecovery: false, crashRecoveryData: null });
+      },
     }),
     {
       name: 'bvs_app_store',

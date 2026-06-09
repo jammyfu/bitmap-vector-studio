@@ -14,6 +14,8 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
+from .batch_template import BatchTemplateApplier
+from .cache_manager import CacheManager
 from .checkpoint import CheckpointManager
 from .cloud_market import (
     CloudMarket,
@@ -160,6 +162,10 @@ app.add_typer(enterprise_app, name="enterprise")
 # Sub-typer for template market commands
 template_app = typer.Typer(help="Smart template marketplace.", hidden=True)
 app.add_typer(template_app, name="template")
+
+# Sub-typer for cache commands
+cache_app = typer.Typer(help="Cache management.", hidden=True)
+app.add_typer(cache_app, name="cache")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -3129,6 +3135,37 @@ def template_apply(
         raise typer.Exit(code=1)
 
 
+@template_app.command("batch-apply")
+def template_batch_apply(
+    template_id: str = typer.Argument(..., help="Template ID to apply."),
+    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input images directory."),
+    output_dir: Path = typer.Argument(..., help="Output directory."),
+    workers: int = typer.Option(4, "--workers", "-w", min=1, max=16, help="Concurrent workers."),
+) -> None:
+    """Batch-apply a template to all images in a directory."""
+    from .batch_template import BatchTemplateApplier
+
+    applier = BatchTemplateApplier(max_workers=workers)
+    try:
+        results = applier.apply_to_directory(
+            template_id,
+            input_dir,
+            output_dir,
+            on_progress=lambda current, total, filename: console.print(
+                f"  [{current}/{total}] {filename} ...", end=" \r"
+            ),
+        )
+        console.print(f"\n[green]Batch apply completed:[/green] {len(results)} file(s)")
+        for p in results:
+            console.print(f"  → {p}")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Batch apply failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
 @template_app.command("publish")
 def template_publish(
     file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Template JSON file to publish."),
@@ -3145,6 +3182,39 @@ def template_publish(
     market = TemplateMarket()
     tid = market.publish_template(template, user_id)
     console.print(f"[green]Published template[/green] {tid}")
+
+
+# ------------------------------------------------------------------
+# Cache sub-commands
+# ------------------------------------------------------------------
+
+@cache_app.command("status")
+def cache_status() -> None:
+    """Show cache status and statistics."""
+    mgr = CacheManager()
+    stats = mgr.stats()
+    table = Table(title="Cache Status")
+    table.add_column("Property", style="bold")
+    table.add_column("Value")
+    table.add_row("Cache directory", stats["cache_dir"])
+    table.add_row("Memory entries", str(stats["memory_entries"]))
+    table.add_row("Disk entries", str(stats["disk_entries"]))
+    table.add_row("Disk size (MB)", str(stats["disk_size_mb"]))
+    table.add_row("Disk max size (MB)", str(stats["disk_max_size_mb"]))
+    console.print(table)
+
+
+@cache_app.command("clear")
+def cache_clear(
+    level: str = typer.Option("all", "--level", "-l", help="Cache level to clear: memory, disk, all."),
+) -> None:
+    """Clear cache at the specified level."""
+    mgr = CacheManager()
+    if level not in ("memory", "disk", "all"):
+        console.print(f"[red]Invalid level:[/red] {level}. Choose from memory, disk, all.")
+        raise typer.Exit(code=1)
+    mgr.clear(level=level)
+    console.print(f"[green]Cleared[/green] {level} cache")
 
 
 # ------------------------------------------------------------------

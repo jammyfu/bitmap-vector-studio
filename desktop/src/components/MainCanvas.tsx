@@ -10,7 +10,7 @@ interface MainCanvasProps {
 
 type ViewMode = 'side-by-side' | 'overlay';
 
-const MainCanvas: React.FC<MainCanvasProps> = ({
+const MainCanvas = React.memo<MainCanvasProps>(({
   originalImage,
   resultSvg,
   onDropFiles,
@@ -215,6 +215,7 @@ const MainCanvas: React.FC<MainCanvasProps> = ({
                   alt="Original"
                   style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   draggable={false}
+                  loading="lazy"
                 />
               ) : (
                 <EmptyPanel>无原图</EmptyPanel>
@@ -234,6 +235,7 @@ const MainCanvas: React.FC<MainCanvasProps> = ({
                   alt="Result"
                   style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   draggable={false}
+                  loading="lazy"
                 />
               ) : (
                 <EmptyPanel>无结果</EmptyPanel>
@@ -361,6 +363,7 @@ const ImagePanel: React.FC<{ label: string; src: string | null | undefined }> = 
           alt={label}
           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
           draggable={false}
+          loading="lazy"
         />
       ) : (
         <span style={{ color: '#a1a1a6', fontSize: 13 }}>无内容</span>
