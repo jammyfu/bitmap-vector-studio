@@ -112,6 +112,17 @@ def _cleanup_api_temp() -> None:
         _share_manager = None
 
 
+from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
+from .metrics import get_metrics
+
+# 初始化健康检查器
+_health_checker = HealthChecker()
+_health_checker.register("disk", lambda: check_disk_space())
+_health_checker.register("memory", lambda: check_memory())
+_health_checker.register("deps", lambda: check_python_deps())
+_health_checker.register("vtracer", lambda: check_vtracer())
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -591,7 +602,29 @@ async def batch_convert(
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return HealthResponse(status="ok", version=__version__)
+    status = _health_checker.check()
+    return status.to_dict()
+
+
+@app.get("/metrics")
+async def get_metrics_endpoint():
+    """Performance metrics endpoint."""
+    return get_metrics().get_snapshot()
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Kubernetes readiness probe."""
+    status = _health_checker.check()
+    if status.status == "unhealthy":
+        raise HTTPException(status_code=503, detail="Service not ready")
+    return {"ready": True}
+
+
+@app.get("/live")
+async def liveness_check():
+    """Kubernetes liveness probe."""
+    return {"alive": True}
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from .models import TraceOptions, TraceResult
 from .plugin_interface import Plugin
 from .performance import PerformanceMonitor, StreamingImageProcessor
 from .preprocess import prepare_input
+from .security import InputValidator, SVGSanitizer, SecurityError
 from .svg_optimizer import optimize_svg_comprehensive
 from .svg_tools import (
     export_svg_to_eps_with_inkscape,
@@ -123,6 +124,20 @@ def trace_image(
     start = time.perf_counter()
     input_path = Path(input_path)
     output_path = Path(output_path)
+
+    # Security validation
+    try:
+        path = InputValidator.validate_file_path(input_path)
+        InputValidator.validate_image_file(path)
+    except SecurityError as exc:
+        msg = str(exc)
+        if "文件不存在" in msg:
+            raise FileNotFoundError(f"Input file not found: {input_path}") from exc
+        if "不支持的文件格式" in msg or "不支持的MIME类型" in msg:
+            valid = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+            raise ValueError(f"Unsupported input format: {input_path.suffix}. Supported: {valid}") from exc
+        raise
+
     options = (options or TraceOptions()).validate()
     plugins = plugins or []
     plugin_options: dict[str, object] = {
@@ -391,6 +406,12 @@ def trace_image(
         png_path = export_svg_to_png(output_path, output_path.with_suffix(".png"), scale=png_scale)
     if export_eps:
         eps_path = export_svg_to_eps_with_inkscape(output_path, output_path.with_suffix(".eps"))
+
+    # Sanitize output SVG for security
+    if optimize and Path(output_path).exists():
+        svg_content = Path(output_path).read_text()
+        clean_svg = SVGSanitizer.sanitize(svg_content)
+        Path(output_path).write_text(clean_svg)
 
     elapsed = time.perf_counter() - start
     result = TraceResult(

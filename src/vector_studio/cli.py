@@ -68,6 +68,10 @@ from .tracer import SUPPORTED_EXTENSIONS, trace_image
 from .workflow import Workflow, WorkflowTemplate
 from .workspace import Workspace, WorkspaceManager
 
+from .security import InputValidator, SVGSanitizer, FileHashChecker, SecurityError
+from .audit_logger import AuditLogger
+from .migration import MigrationManager
+
 from .animation import (
     AnimationBuilder,
     LottieExporter,
@@ -186,6 +190,14 @@ app.add_typer(cache_app, name="cache")
 # Sub-typer for report commands
 report_app = typer.Typer(help="Report generation and management.")
 app.add_typer(report_app, name="report")
+
+# Sub-typer for security commands
+security_app = typer.Typer(help="Security and input validation utilities.")
+app.add_typer(security_app, name="security")
+
+# Sub-typer for audit commands
+audit_app = typer.Typer(help="Audit log management.")
+app.add_typer(audit_app, name="audit")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -3901,6 +3913,200 @@ def stats_command(
         for day in trend:
             ttable.add_row(day["date"], str(day["count"]))
         console.print(ttable)
+
+
+# ------------------------------------------------------------------
+# Health / Metrics / Status commands
+# ------------------------------------------------------------------
+
+@app.command("health")
+def health_command() -> None:
+    """显示系统健康状态."""
+    from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
+
+    checker = HealthChecker()
+    checker.register("disk", lambda: check_disk_space())
+    checker.register("memory", lambda: check_memory())
+    checker.register("deps", lambda: check_python_deps())
+    checker.register("vtracer", lambda: check_vtracer())
+
+    status = checker.check()
+    table = Table(title=f"Health Status — {status.status.upper()}")
+    table.add_column("Check", style="bold")
+    table.add_column("Status")
+    table.add_column("Details")
+
+    for name, result in status.checks.items():
+        if result["status"] == "pass":
+            status_str = "[green]✓[/green]"
+            details = str(result.get("details", ""))
+        else:
+            status_str = "[red]✗[/red]"
+            details = result.get("error", "unknown error")
+        table.add_row(name, status_str, details)
+
+    console.print(table)
+    console.print(f"Version: {status.version} | Uptime: {status.uptime_seconds:.1f}s")
+    if status.status != "healthy":
+        raise typer.Exit(code=1)
+
+
+@app.command("metrics")
+def metrics_command() -> None:
+    """显示性能指标."""
+    from .metrics import get_metrics
+
+    snapshot = get_metrics().get_snapshot()
+    conv = snapshot["conversion"]
+    table = Table(title="Performance Metrics")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Total conversions", str(conv["total"]))
+    table.add_row("Successful", str(conv["successful"]))
+    table.add_row("Failed", str(conv["failed"]))
+    table.add_row("Success rate", f"{conv['success_rate']}%")
+    table.add_row("Average duration", f"{conv['average_duration']}s")
+    table.add_row("P95 duration", f"{conv['p95_duration']}s")
+    table.add_row("Queue length", str(snapshot["queue"]["length"]))
+    table.add_row("Active workers", str(snapshot["workers"]["active"]))
+
+    console.print(table)
+
+
+@app.command("status")
+def status_command() -> None:
+    """综合状态报告（健康 + 指标 + 版本）."""
+    from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
+    from .metrics import get_metrics
+
+    checker = HealthChecker()
+    checker.register("disk", lambda: check_disk_space())
+    checker.register("memory", lambda: check_memory())
+    checker.register("deps", lambda: check_python_deps())
+    checker.register("vtracer", lambda: check_vtracer())
+
+    health = checker.check()
+    metrics = get_metrics().get_snapshot()
+
+    table = Table(title=f"System Status — {health.status.upper()}")
+    table.add_column("Component", style="bold")
+    table.add_column("State")
+
+    table.add_row("Health", health.status)
+    table.add_row("Version", health.version)
+    table.add_row("Uptime", f"{health.uptime_seconds:.1f}s")
+    table.add_row("Conversions", str(metrics["conversion"]["total"]))
+    table.add_row("Success rate", f"{metrics['conversion']['success_rate']}%")
+    table.add_row("Queue", str(metrics["queue"]["length"]))
+    table.add_row("Workers", str(metrics["workers"]["active"]))
+
+    for name, result in health.checks.items():
+        icon = "✓" if result["status"] == "pass" else "✗"
+        table.add_row(f"Check: {name}", icon)
+
+    console.print(table)
+    if health.status != "healthy":
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Security commands
+# ------------------------------------------------------------------
+
+@security_app.command("scan")
+def security_scan(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="File to scan."),
+) -> None:
+    """Scan a file for security issues."""
+    try:
+        path = InputValidator.validate_file_path(file)
+        InputValidator.validate_image_file(path)
+        file_hash = FileHashChecker.compute_hash(path)
+        console.print(f"[green]File is safe:[/green] {path}")
+        console.print(f"SHA256: {file_hash}")
+    except SecurityError as exc:
+        console.print(f"[red]Security check failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@security_app.command("sanitize")
+def security_sanitize(
+    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to sanitize."),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output path for sanitized SVG."),
+) -> None:
+    """Sanitize an SVG file by removing dangerous elements."""
+    svg_content = svg.read_text(encoding="utf-8")
+    if SVGSanitizer.is_safe(svg_content):
+        console.print(f"[green]SVG is already safe:[/green] {svg}")
+        return
+    clean_svg = SVGSanitizer.sanitize(svg_content)
+    out = output or svg.with_suffix(".sanitized.svg")
+    out.write_text(clean_svg, encoding="utf-8")
+    console.print(f"[green]Sanitized SVG saved to:[/green] {out}")
+
+
+# ------------------------------------------------------------------
+# Audit commands
+# ------------------------------------------------------------------
+
+@audit_app.command("log")
+def audit_log(
+    user: str | None = typer.Option(None, "--user", "-u", help="Filter by user."),
+    action: str | None = typer.Option(None, "--action", "-a", help="Filter by action."),
+    limit: int = typer.Option(50, "--limit", "-l", min=1, max=500, help="Maximum number of entries."),
+) -> None:
+    """View audit logs."""
+    logger = AuditLogger()
+    events = logger.query(user=user, action=action, limit=limit)
+    if not events:
+        console.print("[yellow]No audit events found.[/yellow]")
+        return
+
+    table = Table(title="Audit Log")
+    table.add_column("Timestamp", style="bold")
+    table.add_column("Level")
+    table.add_column("Action")
+    table.add_column("User")
+    table.add_column("Resource")
+
+    for event in events:
+        level_color = {
+            "security": "red",
+            "error": "red",
+            "warning": "yellow",
+            "info": "green",
+        }.get(event["level"], "white")
+        table.add_row(
+            event["timestamp"],
+            f"[{level_color}]{event['level']}[/{level_color}]",
+            event["action"],
+            event["user"],
+            event["resource"],
+        )
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Migrate command
+# ------------------------------------------------------------------
+
+@app.command("migrate")
+def migrate_command() -> None:
+    """Run data migration to the latest schema version."""
+    manager = MigrationManager()
+    if not manager.needs_migration():
+        console.print("[green]Already at the latest schema version.[/green]")
+        return
+
+    logs = manager.migrate()
+    for line in logs:
+        if line.startswith("  ✓"):
+            console.print(f"[green]{line}[/green]")
+        elif line.startswith("  ✗"):
+            console.print(f"[red]{line}[/red]")
+        else:
+            console.print(line)
 
 
 def main() -> None:
