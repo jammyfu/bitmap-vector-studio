@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Bitmap Vector Studio — Multi-stage Dockerfile
 # Targets:
-#   runtime (default) : API server on port 8000
+#   runtime (default) : API server + Streamlit on ports 8000/8501
 #   cli               : Interactive CLI
 # =============================================================================
 
@@ -26,13 +26,18 @@ WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Install Python dependencies (api + smart) and build wheel
+# Install Python dependencies (api + smart + streamlit) and build wheel
 RUN pip install --no-cache-dir \
     "cairosvg>=2.7" \
     "fastapi>=0.110" \
     "uvicorn[standard]>=0.29" \
     "python-multipart>=0.0.9" \
     "numpy>=1.24" \
+    "streamlit>=1.35" \
+    "typer>=0.12" \
+    "rich>=13.7" \
+    "Pillow>=10.0" \
+    "vtracer>=0.6.15" \
     && pip wheel --no-cache-dir --wheel-dir /build/wheels \
     -e ".[api,smart]"
 
@@ -59,11 +64,16 @@ RUN pip install --no-cache-dir --find-links /tmp/wheels \
     bitmap-vector-studio[api,smart] \
     && rm -rf /tmp/wheels
 
-# Create directories for mounted volumes
-RUN mkdir -p /app/inputs /app/outputs
+# Copy application code
+COPY app.py ./
+COPY app_pages/ ./app_pages/
 
-# Expose API port
+# Create directories for mounted volumes
+RUN mkdir -p /app/inputs /app/outputs /app/data
+
+# Expose API and Streamlit ports
 EXPOSE 8000
+EXPOSE 8501
 
 # Health check for API mode
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

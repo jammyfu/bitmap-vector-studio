@@ -1,30 +1,61 @@
+version: '3.8'
+
 services:
-  vector-studio:
+  # ---------------------------------------------------------------------------
+  # API + Streamlit 主服务
+  # ---------------------------------------------------------------------------
+  api:
     build:
       context: .
+      dockerfile: Dockerfile
       target: runtime
+    container_name: bvs-api
     ports:
-      - "8000:8000"
+      - "${BVS_API_PORT:-8000}:8000"   # FastAPI
+      - "${BVS_STREAMLIT_PORT:-8501}:8501"  # Streamlit
     volumes:
-      - ./outputs:/app/outputs
-      - ./inputs:/app/inputs
+      - ${BVS_INPUTS_DIR:-./inputs}:/app/inputs
+      - ${BVS_OUTPUTS_DIR:-./outputs}:/app/outputs
+      - ${BVS_DATA_DIR:-./data}:/app/data
     environment:
-      - VECTOR_STUDIO_WORKERS=4
+      - BVS_DATA_DIR=/app/data
+      - BVS_LOG_LEVEL=${BVS_LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    command: >
+      sh -c "vector-studio api --host 0.0.0.0 --port 8000 &
+             streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    restart: unless-stopped
 
-  vector-studio-cli:
+  # ---------------------------------------------------------------------------
+  # 可选: 渲染农场 Worker
+  # ---------------------------------------------------------------------------
+  worker:
     build:
       context: .
-      target: cli
-    volumes:
-      - ./inputs:/app/inputs
-      - ./outputs:/app/outputs
-    stdin_open: true
-    tty: true
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: bvs-worker
     environment:
-      - VECTOR_STUDIO_WORKERS=4
+      - WORKER_ID=${BVS_WORKER_ID:-worker-1}
+      - COORDINATOR_URL=${BVS_FARM_COORDINATOR_URL:-http://api:8000}
+    env_file:
+      - .env
+    depends_on:
+      api:
+        condition: service_healthy
+    command: >
+      sh -c "sleep 5 &&
+             vector-studio render-farm worker
+             --host 0.0.0.0
+             --port ${BVS_WORKER_PORT:-9001}
+             --coordinator ${BVS_FARM_COORDINATOR_URL:-http://api:8000}"
+    restart: unless-stopped
+    deploy:
+      replicas: ${BVS_WORKER_REPLICAS:-1}
