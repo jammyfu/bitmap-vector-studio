@@ -24,6 +24,8 @@ from .cloud_market import (
     load_auth,
     save_auth,
 )
+from .cloud_storage import LocalStorage, StorageConfig, StorageManager
+from .batch_rules import Rule, RuleEngine
 from .config import Config
 from .enterprise import (
     RolePermissions,
@@ -148,6 +150,14 @@ app.add_typer(contrib_app, name="contrib")
 # Sub-typer for cloud sync commands
 cloud_app = typer.Typer(help="Cloud sync and sharing.", hidden=True)
 app.add_typer(cloud_app, name="cloud")
+
+# Sub-typer for cloud storage commands (under cloud)
+storage_app = typer.Typer(help="Cloud storage management.")
+cloud_app.add_typer(storage_app, name="storage")
+
+# Sub-typer for rule commands
+rule_app = typer.Typer(help="Batch rule engine management.")
+app.add_typer(rule_app, name="rule")
 
 # Sub-typer for animation commands
 animate_app = typer.Typer(help="Vector animation export.", hidden=True)
@@ -4479,6 +4489,217 @@ def tag_auto(
         console.print("[yellow]No new tags added.[/yellow]")
         return
     console.print(f"[green]Auto-tagged[/green] {file_path} with: {', '.join(added)}")
+
+
+# ------------------------------------------------------------------
+# Cloud storage sub-commands
+# ------------------------------------------------------------------
+
+@storage_app.command("add")
+def storage_add(
+    name: str = typer.Argument(..., help="Storage configuration name."),
+    provider: str = typer.Option(..., "--provider", "-p", help="Provider: local, s3, oss, cos."),
+    bucket: str = typer.Option(..., "--bucket", "-b", help="Bucket name or local directory path."),
+    region: str | None = typer.Option(None, "--region", "-r", help="Region (for s3, cos)."),
+    endpoint: str | None = typer.Option(None, "--endpoint", "-e", help="Endpoint URL (for oss, cos)."),
+    access_key: str | None = typer.Option(None, "--access-key", "-a", help="Access key."),
+    secret_key: str | None = typer.Option(None, "--secret-key", "-s", help="Secret key."),
+    prefix: str = typer.Option("", "--prefix", help="Key prefix."),
+) -> None:
+    """Add a cloud storage configuration."""
+    manager = StorageManager()
+    config = StorageConfig(
+        provider=provider,
+        bucket=bucket,
+        region=region,
+        endpoint=endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
+        prefix=prefix,
+    )
+    try:
+        manager.add_storage(name, config)
+        console.print(f"[green]Added storage[/green] {name} ({provider})")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+
+
+@storage_app.command("list")
+def storage_list() -> None:
+    """List all configured storage backends."""
+    manager = StorageManager()
+    names = manager.list_storages()
+    if not names:
+        console.print("[yellow]No storage configurations found.[/yellow]")
+        return
+    table = Table(title="Storage Configurations")
+    table.add_column("Name", style="bold")
+    table.add_column("Provider")
+    table.add_column("Bucket")
+    for name in names:
+        try:
+            storage = manager.get_storage(name)
+            if isinstance(storage, LocalStorage):
+                provider = "local"
+                bucket = str(storage.base_dir)
+            else:
+                provider = storage.config.provider
+                bucket = storage.config.bucket
+            table.add_row(name, provider, bucket)
+        except Exception:
+            table.add_row(name, "?", "?")
+    console.print(table)
+
+
+@storage_app.command("upload")
+def storage_upload(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="File to upload."),
+    storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
+    remote_key: str | None = typer.Option(None, "--key", "-k", help="Remote key (defaults to file name)."),
+) -> None:
+    """Upload a file to cloud storage."""
+    manager = StorageManager()
+    try:
+        storage = manager.get_storage(storage_name)
+    except KeyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    key = remote_key or file.name
+    try:
+        url = storage.upload(file, key)
+        console.print(f"[green]Uploaded[/green] {file.name} → {url}")
+    except Exception as exc:
+        console.print(f"[red]Upload failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@storage_app.command("download")
+def storage_download(
+    remote_key: str = typer.Argument(..., help="Remote key to download."),
+    storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
+    output: Path = typer.Option(..., "--output", "-o", help="Local output path."),
+) -> None:
+    """Download a file from cloud storage."""
+    manager = StorageManager()
+    try:
+        storage = manager.get_storage(storage_name)
+    except KeyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    try:
+        storage.download(remote_key, output)
+        console.print(f"[green]Downloaded[/green] {remote_key} → {output}")
+    except Exception as exc:
+        console.print(f"[red]Download failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@storage_app.command("sync")
+def storage_sync(
+    local_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Local directory to sync."),
+    storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
+    direction: str = typer.Option("up", "--direction", "-d", help="Sync direction: up (to cloud) or down (from cloud)."),
+    remote_prefix: str = typer.Option("", "--prefix", "-p", help="Remote prefix."),
+) -> None:
+    """Sync a local directory with cloud storage."""
+    if direction not in {"up", "down"}:
+        console.print("[red]Direction must be 'up' or 'down'.[/red]")
+        raise typer.Exit(code=1)
+    manager = StorageManager()
+    try:
+        if direction == "up":
+            urls = manager.sync_to_cloud(local_dir, storage_name, remote_prefix)
+            console.print(f"[green]Synced {len(urls)} file(s) to cloud.[/green]")
+        else:
+            paths = manager.sync_from_cloud(storage_name, remote_prefix, local_dir)
+            console.print(f"[green]Synced {len(paths)} file(s) from cloud.[/green]")
+    except Exception as exc:
+        console.print(f"[red]Sync failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Rule engine sub-commands
+# ------------------------------------------------------------------
+
+@rule_app.command("add")
+def rule_add(
+    name: str = typer.Argument(..., help="Rule name."),
+    condition: str = typer.Option(..., "--condition", "-c", help="Condition expression."),
+    action: str = typer.Option(..., "--action", "-a", help="Action type: convert, tag, move, copy, rename, delete."),
+    action_params: str = typer.Option("{}", "--params", "-p", help="Action parameters as JSON string."),
+    priority: int = typer.Option(0, "--priority", help="Rule priority (higher runs first)."),
+) -> None:
+    """Add a batch processing rule."""
+    engine = RuleEngine()
+    try:
+        params = json.loads(action_params)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON params:[/red] {exc}")
+        raise typer.Exit(code=1)
+    rule = Rule(
+        name=name,
+        condition=condition,
+        action=action,
+        action_params=params,
+        priority=priority,
+    )
+    engine.add_rule(rule)
+    console.print(f"[green]Added rule[/green] {name}")
+
+
+@rule_app.command("list")
+def rule_list() -> None:
+    """List all batch processing rules."""
+    engine = RuleEngine()
+    rules = engine.list_rules()
+    if not rules:
+        console.print("[yellow]No rules configured.[/yellow]")
+        return
+    table = Table(title="Batch Rules")
+    table.add_column("Name", style="bold")
+    table.add_column("Condition")
+    table.add_column("Action")
+    table.add_column("Priority")
+    table.add_column("Enabled")
+    for rule in rules:
+        table.add_row(
+            rule.name,
+            rule.condition,
+            rule.action,
+            str(rule.priority),
+            "yes" if rule.enabled else "no",
+        )
+    console.print(table)
+
+
+@rule_app.command("run")
+def rule_run(
+    directory: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Directory to process."),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Process subdirectories."),
+) -> None:
+    """Run batch rules against all files in a directory."""
+    engine = RuleEngine()
+    iterator = directory.rglob("*") if recursive else directory.glob("*")
+    files = [p for p in iterator if p.is_file()]
+    if not files:
+        console.print("[yellow]No files found.[/yellow]")
+        raise typer.Exit(code=0)
+    total = 0
+    failures = 0
+    for file_path in files:
+        results = engine.evaluate(file_path)
+        for rule_name, success, message in results:
+            total += 1
+            if not success:
+                failures += 1
+                console.print(f"[red]Rule '{rule_name}' failed for {file_path.name}:[/red] {message}")
+            else:
+                console.print(f"[green]Rule '{rule_name}'[/green] applied to {file_path.name}")
+    console.print(f"Processed {len(files)} file(s), {total} rule execution(s), {failures} failure(s).")
+    if failures:
+        raise typer.Exit(code=1)
 
 
 # ------------------------------------------------------------------
