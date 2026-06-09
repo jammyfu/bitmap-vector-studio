@@ -37,6 +37,8 @@ from .render_farm import RenderFarm, RenderTask, WorkerNode
 from .svg_tools import export_svg_to_pdf, export_svg_to_png
 from .task_queue import TaskQueue
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
+from .notifier import Notifier
+from .search_engine import HistorySearch
 
 # ---------------------------------------------------------------------------
 # Global state
@@ -283,6 +285,38 @@ class FarmStatusResponse(BaseModel):
 
 class FarmHeartbeatResponse(BaseModel):
     ok: bool
+
+
+# ---------------------------------------------------------------------------
+# Webhook Pydantic models
+# ---------------------------------------------------------------------------
+
+class WebhookRegisterRequest(BaseModel):
+    url: str
+    channel: str = "webhook"
+    events: list[str] | None = None
+
+
+class WebhookRegisterResponse(BaseModel):
+    success: bool
+    index: int
+
+
+class WebhookDeleteResponse(BaseModel):
+    success: bool
+
+
+class WebhookListResponse(BaseModel):
+    webhooks: list[dict[str, Any]]
+
+
+# ---------------------------------------------------------------------------
+# Search Pydantic models
+# ---------------------------------------------------------------------------
+
+class SearchHistoryResponse(BaseModel):
+    results: list[dict[str, Any]]
+    total: int
 
 
 # ---------------------------------------------------------------------------
@@ -986,3 +1020,75 @@ async def get_farm_status():
     """Return the overall status of the render farm."""
     farm = _get_render_farm()
     return FarmStatusResponse(**farm.get_farm_status())
+
+
+# ---------------------------------------------------------------------------
+# Webhook endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/webhooks", response_model=WebhookRegisterResponse)
+async def register_webhook(request: WebhookRegisterRequest):
+    """Register a new webhook notification."""
+    notifier = Notifier()
+    if request.channel == "slack":
+        notifier.add_slack(request.url, events=request.events)
+    elif request.channel == "discord":
+        notifier.add_discord(request.url, events=request.events)
+    else:
+        notifier.add_webhook(request.url, events=request.events)
+    return WebhookRegisterResponse(success=True, index=len(notifier.list()) - 1)
+
+
+@app.delete("/webhooks/{webhook_id}", response_model=WebhookDeleteResponse)
+async def delete_webhook(webhook_id: int):
+    """Delete a webhook notification by index."""
+    notifier = Notifier()
+    if notifier.remove(webhook_id):
+        return WebhookDeleteResponse(success=True)
+    raise HTTPException(status_code=404, detail=f"Webhook not found: {webhook_id}")
+
+
+@app.get("/webhooks", response_model=WebhookListResponse)
+async def list_webhooks():
+    """List all registered webhook notifications."""
+    notifier = Notifier()
+    configs = notifier.list()
+    return WebhookListResponse(
+        webhooks=[
+            {
+                "index": i,
+                "channel": c.channel.value,
+                "url": c.url,
+                "enabled": c.enabled,
+                "events": c.events or notifier.EVENTS,
+            }
+            for i, c in enumerate(configs)
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Search endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/search/history", response_model=SearchHistoryResponse)
+async def search_history(
+    q: str = "",
+    status: str | None = None,
+    preset: str | None = None,
+    limit: int = 20,
+):
+    """Search conversion history."""
+    engine = HistorySearch()
+    results = engine.search(q, status=status, preset=preset, limit=limit)
+    return SearchHistoryResponse(
+        results=[
+            {
+                "item": r.item,
+                "score": r.score,
+                "matched_fields": r.matched_fields,
+            }
+            for r in results
+        ],
+        total=len(results),
+    )

@@ -68,6 +68,8 @@ from .tracer import SUPPORTED_EXTENSIONS, trace_image
 from .workflow import Workflow, WorkflowTemplate
 from .workspace import Workspace, WorkspaceManager
 
+from .notifier import Notifier
+from .search_engine import HistorySearch, SearchEngine
 from .security import InputValidator, SVGSanitizer, FileHashChecker, SecurityError
 from .audit_logger import AuditLogger
 from .migration import MigrationManager
@@ -198,6 +200,14 @@ app.add_typer(security_app, name="security")
 # Sub-typer for audit commands
 audit_app = typer.Typer(help="Audit log management.")
 app.add_typer(audit_app, name="audit")
+
+# Sub-typer for notify commands
+notify_app = typer.Typer(help="Notification management.")
+app.add_typer(notify_app, name="notify")
+
+# Sub-typer for search commands
+search_app = typer.Typer(help="Search history and files.")
+app.add_typer(search_app, name="search")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
@@ -4083,6 +4093,182 @@ def audit_log(
             event["action"],
             event["user"],
             event["resource"],
+        )
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Notify sub-commands
+# ------------------------------------------------------------------
+
+@notify_app.command("add-webhook")
+def notify_add_webhook(
+    url: str = typer.Argument(..., help="Webhook URL."),
+    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+) -> None:
+    """Add a Webhook notification."""
+    notifier = Notifier()
+    notifier.add_webhook(url, events=events or None)
+    console.print(f"[green]Added webhook:[/green] {url}")
+
+
+@notify_app.command("add-slack")
+def notify_add_slack(
+    url: str = typer.Argument(..., help="Slack webhook URL."),
+    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+) -> None:
+    """Add a Slack notification."""
+    notifier = Notifier()
+    notifier.add_slack(url, events=events or None)
+    console.print(f"[green]Added Slack webhook:[/green] {url}")
+
+
+@notify_app.command("add-discord")
+def notify_add_discord(
+    url: str = typer.Argument(..., help="Discord webhook URL."),
+    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+) -> None:
+    """Add a Discord notification."""
+    notifier = Notifier()
+    notifier.add_discord(url, events=events or None)
+    console.print(f"[green]Added Discord webhook:[/green] {url}")
+
+
+@notify_app.command("list")
+def notify_list() -> None:
+    """List all notification configurations."""
+    notifier = Notifier()
+    configs = notifier.list()
+    if not configs:
+        console.print("[yellow]No notifications configured.[/yellow]")
+        return
+
+    table = Table(title="Notification Configurations")
+    table.add_column("#", style="bold")
+    table.add_column("Channel")
+    table.add_column("URL")
+    table.add_column("Enabled")
+    table.add_column("Events")
+
+    for idx, cfg in enumerate(configs, start=1):
+        table.add_row(
+            str(idx),
+            cfg.channel.value,
+            cfg.url or "-",
+            "yes" if cfg.enabled else "no",
+            ", ".join(cfg.events or notifier.EVENTS),
+        )
+    console.print(table)
+
+
+@notify_app.command("remove")
+def notify_remove(
+    index: int = typer.Argument(..., min=0, help="Index of the notification to remove (from list)."),
+) -> None:
+    """Remove a notification configuration."""
+    notifier = Notifier()
+    if notifier.remove(index):
+        console.print(f"[green]Removed notification at index {index}.[/green]")
+    else:
+        console.print(f"[red]Invalid index:[/red] {index}")
+        raise typer.Exit(code=1)
+
+
+@notify_app.command("test")
+def notify_test(
+    event: str = typer.Option("convert.complete", "--event", help="Event type to test."),
+) -> None:
+    """Test notifications by sending a sample payload."""
+    notifier = Notifier()
+    results = notifier.notify(
+        event,
+        {"file": "test.png", "preset": "poster", "duration": 1.23},
+    )
+    if not results:
+        console.print("[yellow]No active notifications to test.[/yellow]")
+        return
+
+    table = Table(title="Test Results")
+    table.add_column("Channel", style="bold")
+    table.add_column("Success")
+    table.add_column("Message")
+    for channel, success, message in results:
+        status = "[green]yes[/green]" if success else "[red]no[/red]"
+        table.add_row(channel, status, message)
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Search sub-commands
+# ------------------------------------------------------------------
+
+@search_app.command("history")
+def search_history(
+    query: str = typer.Argument("", help="Search query."),
+    status: str | None = typer.Option(None, "--status", help="Filter by status: completed, failed."),
+    preset: str | None = typer.Option(None, "--preset", "-p", help="Filter by preset name."),
+    limit: int = typer.Option(20, "--limit", "-l", min=1, max=100, help="Maximum results."),
+) -> None:
+    """Search conversion history."""
+    engine = HistorySearch()
+    results = engine.search(query, status=status, preset=preset, limit=limit)
+    if not results:
+        console.print("[yellow]No history records found.[/yellow]")
+        return
+
+    table = Table(title=f"History Search Results ({len(results)})")
+    table.add_column("Score", style="bold")
+    table.add_column("File")
+    table.add_column("Preset")
+    table.add_column("Status")
+    table.add_column("Timestamp")
+    for r in results:
+        item = r.item
+        table.add_row(
+            f"{r.score:.1f}",
+            Path(item.get("input_path", "")).name,
+            item.get("preset_name", "-"),
+            "completed" if item.get("output_path") else "failed",
+            item.get("timestamp", "-"),
+        )
+    console.print(table)
+
+
+@search_app.command("files")
+def search_files(
+    query: str = typer.Argument(..., help="Search query."),
+    directory: Path = typer.Option(Path("."), "--dir", "-d", help="Directory to search."),
+    limit: int = typer.Option(20, "--limit", "-l", min=1, max=100, help="Maximum results."),
+) -> None:
+    """Search files in a directory."""
+    engine = SearchEngine()
+    for path in directory.rglob("*"):
+        if path.is_file():
+            engine.add(
+                path,
+                {
+                    "name": path.name,
+                    "stem": path.stem,
+                    "suffix": path.suffix,
+                    "parent": str(path.parent),
+                },
+            )
+
+    results = engine.search(query, limit=limit)
+    if not results:
+        console.print("[yellow]No files found.[/yellow]")
+        return
+
+    table = Table(title=f"File Search Results ({len(results)})")
+    table.add_column("Score", style="bold")
+    table.add_column("Path")
+    table.add_column("Matched")
+    for r in results:
+        path = r.item
+        table.add_row(
+            f"{r.score:.1f}",
+            str(path),
+            ", ".join(r.matched_fields),
         )
     console.print(table)
 

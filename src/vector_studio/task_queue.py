@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import threading
 import time
 import uuid
@@ -13,7 +14,11 @@ from typing import Any
 
 from .checkpoint import CheckpointManager
 from .models import TraceOptions, TraceResult
+from .notifier import Notifier
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,6 +82,7 @@ class TaskQueue:
         max_retries: int = 2,
         checkpoint_manager: CheckpointManager | None = None,
         queue_id: str | None = None,
+        notifier: Notifier | None = None,
     ) -> None:
         self.max_workers = max_workers
         self.output_dir = output_dir
@@ -92,6 +98,7 @@ class TaskQueue:
         self._active_threads_lock = threading.Lock()
         self.checkpoint_manager = checkpoint_manager
         self.queue_id = queue_id or str(uuid.uuid4())
+        self._notifier = notifier
 
     # ------------------------------------------------------------------
     # Public API
@@ -338,6 +345,21 @@ class TaskQueue:
                 task.status = "completed"
                 task.completed_at = datetime.now(timezone.utc).isoformat()
 
+            # Notify on completion.
+            if self._notifier is not None:
+                try:
+                    self._notifier.notify(
+                        "convert.complete",
+                        {
+                            "file": task.input_path.name,
+                            "output": str(task.output_path),
+                            "elapsed_seconds": result.elapsed_seconds,
+                            "engine": result.engine,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
         except Exception as exc:
             with self._lock:
                 task._retry_count += 1
@@ -349,6 +371,20 @@ class TaskQueue:
                     task.error = str(exc)
                     task.status = "failed"
                     task.completed_at = datetime.now(timezone.utc).isoformat()
+
+            # Notify on final failure (no more retries).
+            if task.status == "failed" and self._notifier is not None:
+                try:
+                    self._notifier.notify(
+                        "convert.error",
+                        {
+                            "file": task.input_path.name,
+                            "output": str(task.output_path),
+                            "error": str(exc),
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
             if task.status == "pending":
                 # Re-queue for retry.
