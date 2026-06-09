@@ -44,8 +44,11 @@ from .plugin_sdk import (
     PluginDebugger,
     PluginDocsGenerator,
     PluginScaffold,
+    PluginSDK,
     PluginValidator,
 )
+from .plugin_market import PluginMarket
+from .api_docs import APIDocsGenerator
 from .community_tools import (
     ContributionGuideGenerator,
     PresetValidator,
@@ -95,6 +98,14 @@ app.add_typer(config_app, name="config")
 # Sub-typer for plugin commands
 plugin_app = typer.Typer(help="Plugin management.")
 app.add_typer(plugin_app, name="plugin")
+
+# Sub-typer for plugin market commands
+plugin_market_app = typer.Typer(help="Plugin marketplace.")
+plugin_app.add_typer(plugin_market_app, name="market")
+
+# Sub-typer for docs commands
+docs_app = typer.Typer(help="Documentation generation.")
+app.add_typer(docs_app, name="docs")
 
 # Sub-typer for market commands
 market_app = typer.Typer(help="Preset market management.")
@@ -1293,6 +1304,135 @@ def plugin_docs(
         console.print(f"[green]Saved docs to:[/green] {output}")
     else:
         console.print(md)
+
+
+# ------------------------------------------------------------------
+# Plugin market sub-commands
+# ------------------------------------------------------------------
+
+@plugin_market_app.command("list")
+def plugin_market_list(
+    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
+    sort_by: str = typer.Option("rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."),
+) -> None:
+    """List available plugins from the marketplace."""
+    market = PluginMarket()
+    plugins = market.discover_plugins(category=category, sort_by=sort_by)
+    if not plugins:
+        console.print("[yellow]No plugins found in the market.[/yellow]")
+        return
+
+    table = Table(title="Plugin Market")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Category")
+    table.add_column("Version")
+    table.add_column("Rating")
+    table.add_column("Downloads")
+    table.add_column("Installed")
+
+    for p in plugins:
+        table.add_row(
+            p.package_id,
+            p.name,
+            market.CATEGORIES.get(p.category, p.category),
+            p.version,
+            f"{p.rating:.1f}",
+            str(p.downloads),
+            "yes" if p.installed else "no",
+        )
+    console.print(table)
+
+
+@plugin_market_app.command("search")
+def plugin_market_search(
+    query: str = typer.Argument(..., help="Search query."),
+    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
+    sort_by: str = typer.Option("rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."),
+) -> None:
+    """Search for plugins in the marketplace."""
+    market = PluginMarket()
+    plugins = market.discover_plugins(query=query, category=category, sort_by=sort_by)
+    if not plugins:
+        console.print(f"[yellow]No plugins found for '{query}'.[/yellow]")
+        return
+
+    table = Table(title=f"Plugin Search: {query}")
+    table.add_column("ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Category")
+    table.add_column("Rating")
+    table.add_column("Downloads")
+
+    for p in plugins:
+        table.add_row(
+            p.package_id,
+            p.name,
+            market.CATEGORIES.get(p.category, p.category),
+            f"{p.rating:.1f}",
+            str(p.downloads),
+        )
+    console.print(table)
+
+
+@plugin_market_app.command("install")
+def plugin_market_install(
+    package_id: str = typer.Argument(..., help="Plugin package ID to install."),
+    source: Path = typer.Option(..., "--source", "-s", exists=True, dir_okay=False, readable=True, help="Path to the plugin .py file."),
+) -> None:
+    """Install a plugin from the marketplace."""
+    market = PluginMarket()
+    plugin = market.get_plugin(package_id)
+    if plugin is None:
+        console.print(f"[red]Unknown plugin:[/red] {package_id}")
+        raise typer.Exit(code=1)
+
+    try:
+        market.install_plugin(package_id, source)
+    except Exception as exc:
+        console.print(f"[red]Installation failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Installed plugin:[/green] {package_id}")
+
+
+@plugin_market_app.command("rate")
+def plugin_market_rate(
+    package_id: str = typer.Argument(..., help="Plugin package ID to rate."),
+    stars: int = typer.Option(..., "--stars", min=1, max=5, help="Rating from 1 to 5."),
+    user_id: str = typer.Option("cli_user", "--user", "-u", help="User identifier."),
+) -> None:
+    """Rate a plugin in the marketplace."""
+    market = PluginMarket()
+    plugin = market.get_plugin(package_id)
+    if plugin is None:
+        console.print(f"[red]Unknown plugin:[/red] {package_id}")
+        raise typer.Exit(code=1)
+
+    success = market.rate_plugin(package_id, user_id, stars)
+    if success:
+        console.print(f"[green]Rated[/green] {package_id} {stars} stars")
+    else:
+        console.print(f"[red]Rating failed:[/red] must be 1-5 stars")
+        raise typer.Exit(code=1)
+
+
+# ------------------------------------------------------------------
+# Docs sub-commands
+# ------------------------------------------------------------------
+
+@docs_app.command("generate")
+def docs_generate(
+    output_dir: Path = typer.Option(Path("docs"), "--output", "-o", help="Output directory for generated docs."),
+) -> None:
+    """Generate API documentation."""
+    generator = APIDocsGenerator(output_dir=output_dir)
+    cli_path = generator.generate_cli_docs()
+    python_path = generator.generate_python_api_docs()
+    plugin_path = generator.generate_plugin_docs()
+    console.print(f"[green]Generated docs:[/green]")
+    console.print(f"  CLI: {cli_path}")
+    console.print(f"  Python API: {python_path}")
+    console.print(f"  Plugin Dev: {plugin_path}")
 
 
 # ------------------------------------------------------------------

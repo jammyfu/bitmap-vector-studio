@@ -13,11 +13,18 @@
 - [提交规范](#提交规范)
 - [测试要求](#测试要求)
 - [PR 流程](#pr-流程)
+- [发布流程](#发布流程)
 - [行为准则](#行为准则)
 
 ---
 
 ## 开发环境搭建
+
+### 必需
+
+- Python 3.9+
+- Node.js 18+（桌面端）
+- Rust 1.70+（桌面端）
 
 ### 1. 克隆仓库
 
@@ -38,14 +45,20 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 ```
 
-### 3. 安装开发依赖
+### 3. 安装依赖
 
 ```bash
+# Python依赖
 pip install -U pip
-pip install -e ".[dev]"
-```
+pip install -e ".[dev,smart,ai,api]"
 
-这会同时安装运行时依赖（VTracer、Pillow、Streamlit 等）和开发依赖（pytest、ruff）。
+# 桌面端依赖
+cd desktop
+npm install
+
+# 启动开发服务器
+npm run tauri:dev
+```
 
 ### 4. 验证环境
 
@@ -228,6 +241,45 @@ git checkout -b fix/issue-description
 - 维护者会在 3 个工作日内进行审查
 - 根据反馈进行修改并推送更新
 - 审查通过后由维护者合并
+
+---
+
+## 发布流程
+
+1. **更新版本号**
+   ```bash
+   python scripts/bump-version.py 3.x.x
+   ```
+   该脚本会自动同步以下文件的版本号：
+   - `pyproject.toml`
+   - `src/vector_studio/__init__.py`
+   - `desktop/src-tauri/Cargo.toml`
+   - `desktop/package.json`
+   - `desktop/src-tauri/tauri.conf.json`
+
+2. **更新 CHANGELOG.md**
+   - 在 `[Unreleased]` 下方新增版本章节
+   - 按 `Added` / `Changed` / `Fixed` / `Deprecated` / `Removed` / `Security` 分类记录变更
+
+3. **提交并打标签**
+   ```bash
+   git add -A
+   git commit -m "chore(release): bump version to 3.x.x"
+   git tag v3.x.x
+   ```
+
+4. **推送触发自动发布**
+   ```bash
+   git push origin main --tags
+   ```
+
+5. **GitHub Actions 自动构建和发布**
+   - `release-python`：构建 Python wheel/sdist 并上传到 PyPI
+   - `release-desktop`：在 Ubuntu / Windows / macOS (x86_64 + aarch64) 上构建 Tauri 安装包
+   - `create-release`：收集所有产物并创建 GitHub Release，自动生成 Release Notes
+
+6. **Docker 镜像**
+   - 推送 tag 后 `docker.yml` 会自动构建并推送 `jammyfu/bitmap-vector-studio:latest` 和对应 tag 的镜像到 Docker Hub
 
 ---
 

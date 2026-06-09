@@ -12,6 +12,7 @@ from vector_studio.plugin_sdk import (
     PluginDebugger,
     PluginDocsGenerator,
     PluginScaffold,
+    PluginSDK,
     PluginValidator,
 )
 
@@ -210,3 +211,76 @@ class TestPluginDocsGenerator:
         assert "api" in docs
         assert "postprocess" in docs
         assert "Clean SVG" in docs
+
+
+class TestPluginSDK:
+    def test_sdk_scaffold_creates_files(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        plugin_dir = sdk.scaffold("My Plugin", "Author Name", "A test plugin", version="1.2.0")
+        assert plugin_dir.exists()
+        assert plugin_dir.is_dir()
+
+        main_file = plugin_dir / "my_plugin.py"
+        assert main_file.exists()
+        content = main_file.read_text(encoding="utf-8")
+        assert "class MyPlugin" in content
+        assert 'name = \"my_plugin\"' in content
+        assert 'version = \"1.2.0\"' in content
+        assert "Author Name" in content
+        assert "A test plugin" in content
+
+        test_file = plugin_dir / "test_my_plugin.py"
+        assert test_file.exists()
+
+        readme = plugin_dir / "README.md"
+        assert readme.exists()
+        assert "My Plugin Plugin" in readme.read_text(encoding="utf-8")
+
+        manifest = plugin_dir / "manifest.json"
+        assert manifest.exists()
+        assert "my_plugin" in manifest.read_text(encoding="utf-8")
+
+    def test_sdk_validate_valid_plugin(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        plugin_dir = sdk.scaffold("Valid", "A", "Desc")
+        main_file = plugin_dir / "valid.py"
+        result = sdk.validate(main_file)
+        assert result["valid"] is True
+        assert result["errors"] == []
+        assert result["warnings"] == []  # manifest exists in scaffold
+
+    def test_sdk_validate_missing_manifest_warning(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        plugin_file = tmp_path / "lonely.py"
+        plugin_file.write_text(
+            "from vector_studio.plugin_interface import Plugin\n"
+            "class Lonely(Plugin):\n"
+            "    name = 'lonely'\n"
+            "    version = '1.0.0'\n"
+            "    description = 'lonely'\n"
+        )
+        result = sdk.validate(plugin_file)
+        assert result["valid"] is True
+        assert "缺少 manifest.json" in result["warnings"]
+
+    def test_sdk_validate_nonexistent_file(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        result = sdk.validate(tmp_path / "does_not_exist.py")
+        assert result["valid"] is False
+        assert "文件不存在" in result["errors"]
+
+    def test_sdk_validate_missing_class(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        bad = tmp_path / "bad.py"
+        bad.write_text("# no definition here")
+        result = sdk.validate(bad)
+        assert result["valid"] is False
+        assert any("未找到类定义" in e for e in result["errors"])
+
+    def test_sdk_validate_missing_plugin_base(self, tmp_path: Path):
+        sdk = PluginSDK(output_dir=tmp_path)
+        bad = tmp_path / "bad.py"
+        bad.write_text("class Foo:\n    pass")
+        result = sdk.validate(bad)
+        assert result["valid"] is False
+        assert any("未继承 Plugin 基类" in e for e in result["errors"])

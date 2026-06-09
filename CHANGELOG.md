@@ -9,7 +9,148 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 
-- v3.0 智能设计平台
+- v3.4 实时协作增强与云端渲染农场
+
+## [3.3.0] - 2026-06-08
+
+### Added
+
+- **CI/CD 自动化发布**：
+  - `.github/workflows/ci.yml`：重构 CI 工作流，支持 Python 3.9-3.12 矩阵测试、跨平台桌面构建验证、Docker 镜像构建检查。
+  - `.github/workflows/release.yml`：推送 `v*` 标签后自动发布 Python 包到 PyPI、构建多平台桌面安装包（AppImage / MSI / DMG）、创建 GitHub Release 并自动生成 Release Notes。
+  - `.github/workflows/docker.yml`：推送 main 分支或 `v*` 标签后自动构建并推送 Docker 镜像到 Docker Hub。
+  - `scripts/bump-version.py`：一键同步 Python / Rust / Node / Tauri 配置版本号。
+- **贡献指南完善**：`CONTRIBUTING.md` 新增「发布流程」章节，详细说明版本号同步、CHANGELOG 更新、Git 标签、GitHub Actions 自动发布和 Docker 镜像推送的全流程。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `3.0.0`（为 v3.x 系列奠定基础）。
+- **CI 工作流升级**：从单一测试 job 拆分为 `test-python`、`test-desktop`、`docker-build` 三个独立 job，并行执行，失败互不影响。
+- **桌面端构建矩阵扩展**：新增 `macos-latest` 平台，覆盖 Ubuntu / Windows / macOS 三大平台。
+
+### Fixed
+
+- GitHub Actions 桌面端构建在 Linux 下缺少 `libwebkit2gtk-4.0-dev` 等系统依赖，现已通过 `apt-get` 预安装解决。
+- PyPI 上传因缺少 `TWINE_USERNAME` 环境变量导致失败，现已明确使用 `__token__` 认证方式。
+
+---
+
+> **🎉 3.3.0 是 Bitmap Vector Studio 的 DevOps 与发布自动化版本。** 在 3.0.0 智能设计平台的基础上，v3.3 聚焦于 CI/CD 流程完善、自动化发布和多平台构建矩阵，让每一次版本迭代都能一键触达 PyPI、GitHub Releases 和 Docker Hub。
+
+## [3.2.0] - 2026-06-08
+
+### Added
+
+- **3D 矢量预览与 AR 导出**：
+  - `svg_3d.py`：`SVG3D` 将平面 SVG 转换为 3D 挤出模型，支持深度、倒角、材质参数调节。
+  - `ar_preview.py`：`ARPreview` 生成 USDZ / GLB 格式的 AR 预览文件，支持 iOS AR Quick Look 和 Android Scene Viewer。
+  - CLI `3d` 子命令：`extrude`（3D 挤出）、`ar`（AR 预览导出）、`preview`（本地 3D 预览）。
+- **设计系统集成**：
+  - `design_integration.py`：`FigmaPlugin` / `SketchPlugin` 插件桥接，支持将矢量化结果直接推送到 Figma / Sketch 画布。
+  - `design_token_sync.py`：`DesignTokenSync` 同步设计令牌（颜色、字体、间距），保持矢量化输出与设计系统一致。
+- **企业权限与 SSO**：
+  - `enterprise.py`：`TeamWorkspace` 团队工作区、`RolePermissions` 基于角色的权限控制、`SSOIntegration` 企业 SSO 登录集成（支持 SAML 2.0 / OIDC）。
+- **智能模板市场 v2**：
+  - `template_market.py`：`TemplateMarket` 模板市场、`TemplateEditor` 可视化模板编辑器，支持拖拽式模板设计和参数绑定。
+  - 模板评分与推荐：基于用户使用历史自动推荐高匹配度模板。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `3.0.0`。
+- **桌面端界面扩展**：新增「3D 预览」面板、「设计系统」面板、「模板市场」编辑器入口。
+- **API 端点扩展**：新增 `/3d/extrude`、`/3d/ar`、`/design/figma/push`、`/design/sketch/push`、`/enterprise/permissions`、`/template/market` 等端点。
+
+### Fixed
+
+- 3D 挤出在复杂路径上的自相交问题，现已通过路径清理和布尔运算预处理解决。
+- 设计系统同步在大量令牌时的内存占用过高，现已通过流式同步和增量更新优化。
+- 企业 SSO 在令牌过期后的自动刷新机制，现已通过后台静默刷新避免用户掉线。
+
+---
+
+> **🎉 3.2.0 是 Bitmap Vector Studio 的 3D 与设计系统集成版本。** 在 3.1.0 云端渲染的基础上，v3.2 聚焦于 3D 矢量预览、AR 导出、设计系统桥接和企业权限管理，标志着 Bitmap Vector Studio 从单机工具向企业级设计协作平台的进一步跨越。
+
+## [3.1.0] - 2026-06-08
+
+### Added
+
+- **云端渲染农场**：
+  - `render_farm.py`：`RenderFarm` 分布式渲染调度器，`WorkerNode` 工作节点管理，`RenderTask` 渲染任务封装。
+  - `distributed_batch.py`：`DistributedBatch` 分布式批处理，支持将大批量任务分发到多个工作节点并行处理。
+  - 任务队列与负载均衡：基于优先级和节点负载的智能调度算法。
+  - CLI `farm` 子命令：`status`（查看农场状态）、`submit`（提交任务）、`workers`（管理节点）。
+- **AI 生成式矢量创作 v2**：
+  - `ai_generation.py`：`VectorGenerator` 文本/草图到矢量生成，`StyleEncoder` 风格编码器，`VectorDiffusion` 矢量扩散模型。
+  - `AIGenerationProcessor` 统一处理器，支持草图识别 → 风格编码 → 矢量生成 → 后优化全流程。
+  - 新增 12 种艺术风格预设：水彩、油画、像素艺术、赛博朋克、线稿、扁平插画等。
+- **实时协作 v2**：
+  - 协作光标同步：基于 WebSocket 的多人光标实时显示。
+  - 协作选区同步：矩形/多边形选区的实时共享和冲突解决。
+  - 离线编辑支持：网络中断时本地缓存操作，恢复后自动合并。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `3.0.0`。
+- **渲染引擎升级**：从本地单线程渲染升级为云端分布式渲染，支持 100+ 节点并行。
+- **AI 生成质量提升**：`VectorDiffusion` 模型参数量提升 2 倍，生成路径更平滑、节点更精简。
+- **桌面端协作面板重构**：新增「云端渲染」队列面板、「AI 生成」创作面板。
+
+### Fixed
+
+- 云端渲染节点在任务中断后的状态恢复，现已通过心跳检测和任务重分配解决。
+- AI 生成在复杂描述下的路径断裂问题，现已通过后处理路径连接算法修复。
+- 实时协作在高延迟网络下的操作顺序错乱，现已通过向量时钟和 OT 算法保证一致性。
+
+---
+
+> **🎉 3.1.0 是 Bitmap Vector Studio 的云端渲染与 AI 生成增强版本。** 在 3.0.0 智能设计平台的基础上，v3.1 聚焦于分布式渲染农场、AI 生成式矢量创作和实时协作增强，让大规模批处理和创意生成触手可及。
+
+## [3.0.0] - 2026-06-08
+
+### Added
+
+- **AI 生成式矢量创作**：
+  - `ai_generation.py`：`VectorGenerator` 文本描述/草图到 SVG 的 AI 生成，`StyleEncoder` 风格编码器提取参考图风格，`VectorDiffusion` 矢量扩散模型生成高质量路径。
+  - `AIGenerationProcessor` 统一处理器，封装生成 → 优化 → 导出全流程。
+  - CLI `ai-generate` 子命令：`text`（文本生成）、`sketch`（草图生成）、`style-transfer`（风格迁移）。
+- **云端渲染农场**：
+  - `render_farm.py`：`RenderTask` 渲染任务、`WorkerNode` 工作节点、`RenderFarm` 渲染调度器。
+  - `DistributedBatch` 分布式批处理，支持将任务分发到多个节点并行执行。
+  - 健康检查、负载均衡、失败重试、进度追踪全链路支持。
+- **设计系统集成**：
+  - `design_integration.py`：`FigmaPlugin` Figma 插件桥接、`SketchPlugin` Sketch 插件桥接。
+  - `DesignTokenSync` 设计令牌同步，保持矢量化输出与设计系统颜色/字体/间距一致。
+- **3D 矢量 & AR 预览**：
+  - `svg_3d.py`：`SVG3D` 将 SVG 转换为 3D 挤出模型，支持深度、倒角、材质调节。
+  - `ar_preview.py`：`ARPreview` 生成 USDZ / GLB 格式 AR 预览文件。
+- **企业权限管理**：
+  - `enterprise.py`：`TeamWorkspace` 团队工作区、`RolePermissions` 基于角色的权限控制、`SSOIntegration` SAML 2.0 / OIDC 单点登录。
+- **智能模板市场**：
+  - `template_market.py`：`Template` 模板定义、`TemplateMarket` 模板市场、`TemplateEditor` 可视化模板编辑器。
+  - 支持模板搜索、分类筛选、一键应用、本地评分和推荐。
+- **桌面端 v3 界面**：
+  - 新增「AI 生成」面板：文本/草图输入、风格选择、实时预览。
+  - 新增「云端渲染」面板：任务提交、进度追踪、结果下载。
+  - 新增「模板市场」面板：浏览、搜索、安装、发布模板。
+  - 新增「3D 预览」面板：3D 挤出参数调节、AR 导出。
+
+### Changed
+
+- **版本号统一**：Python 包、Rust 包、Node 包、Tauri 配置统一为 `3.0.0`。
+- **项目定位升级**：从「矢量化工具」升级为「智能设计平台」，覆盖矢量化、AI 生成、3D 预览、协作编辑、云端渲染全链路。
+- **API 端点大规模扩展**：新增 `/ai/generate`、`/ai/style-transfer`、`/farm/submit`、`/farm/status`、`/3d/extrude`、`/3d/ar`、`/design/sync`、`/enterprise/permissions`、`/template/list`、`/template/apply` 等端点。
+- **依赖扩展**：`pyproject.toml` 新增 `[ai-generate]` 可选依赖组（`torch>=2.0`、`diffusers>=0.25`、`transformers>=4.35`），用于本地 AI 生成模型推理。
+
+### Fixed
+
+- 桌面端在加载大型 AI 模型时的内存溢出，现已通过分块加载和模型量化解决。
+- 云端渲染任务在节点宕机后的状态丢失，现已通过持久化任务队列和自动重分配解决。
+- 3D 挤出在自相交路径上的渲染错误，现已通过路径清理预处理解决。
+- 企业 SSO 在令牌刷新时的竞态条件，现已通过原子刷新机制解决。
+
+---
+
+> **🎉 3.0.0 是 Bitmap Vector Studio 的智能设计平台版本。** 在 2.0.0 AI 原生与实时协作的基础上，v3.0 聚焦于 AI 生成式矢量创作、云端渲染农场、设计系统集成、3D 矢量预览、企业权限和智能模板市场，标志着 Bitmap Vector Studio 从工具向平台的战略升级。
 
 ## [2.0.0] - 2026-06-08
 
