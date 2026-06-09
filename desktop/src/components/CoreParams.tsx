@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../i18n';
 import type { Preset } from '../types';
 
 interface CoreParamsProps {
@@ -24,6 +25,8 @@ const CoreParams: React.FC<CoreParamsProps> = ({
   optimizeLevel,
   onChangeOptimizeLevel,
 }) => {
+  const { t } = useI18n();
+
   const selectStyle: React.CSSProperties = {
     height: 40,
     borderRadius: 8,
@@ -46,7 +49,7 @@ const CoreParams: React.FC<CoreParamsProps> = ({
         {/* Preset */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b6b6b' }}>
-            预设
+            {t('params.preset')}
           </label>
           <select
             value={preset}
@@ -71,7 +74,7 @@ const CoreParams: React.FC<CoreParamsProps> = ({
         {/* Color Mode */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b6b6b' }}>
-            颜色模式
+            {t('params.colormode')}
           </label>
           <select
             value={colorMode}
@@ -84,15 +87,15 @@ const CoreParams: React.FC<CoreParamsProps> = ({
               (e.currentTarget as HTMLSelectElement).style.borderColor = '#e5e3df';
             }}
           >
-            <option value="color">🎨 彩色 (color)</option>
-            <option value="binary">⬛ 黑白 (binary)</option>
+            <option value="color">🎨 {t('params.color')} (color)</option>
+            <option value="binary">⬛ {t('params.binary')} (binary)</option>
           </select>
         </div>
 
         {/* Curve Mode */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b6b6b' }}>
-            曲线模式
+            {t('params.curvemode')}
           </label>
           <select
             value={curveMode}
@@ -105,17 +108,17 @@ const CoreParams: React.FC<CoreParamsProps> = ({
               (e.currentTarget as HTMLSelectElement).style.borderColor = '#e5e3df';
             }}
           >
-            <option value="spline">〰 样条 (spline)</option>
-            <option value="polygon">⬡ 多边形 (polygon)</option>
-            <option value="pixel">▣ 像素 (pixel)</option>
-            <option value="none">✕ 无 (none)</option>
+            <option value="spline">〰 {t('params.spline')} (spline)</option>
+            <option value="polygon">⬡ {t('params.polygon')} (polygon)</option>
+            <option value="pixel">▣ {t('params.pixel')} (pixel)</option>
+            <option value="none">✕ {t('params.none')} (none)</option>
           </select>
         </div>
 
         {/* Optimize Level */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b6b6b' }}>
-            优化
+            {t('params.optimize')}
           </label>
           <select
             value={optimizeLevel}
@@ -130,10 +133,10 @@ const CoreParams: React.FC<CoreParamsProps> = ({
               (e.currentTarget as HTMLSelectElement).style.borderColor = '#e5e3df';
             }}
           >
-            <option value="none">✕ 无优化</option>
-            <option value="basic">⚡ 基础</option>
-            <option value="comprehensive">🔧 全面</option>
-            <option value="aggressive">🚀 激进</option>
+            <option value="none">✕ {t('params.no_optimize')}</option>
+            <option value="basic">⚡ {t('params.basic')}</option>
+            <option value="comprehensive">🔧 {t('params.comprehensive')}</option>
+            <option value="aggressive">🚀 {t('params.aggressive')}</option>
           </select>
         </div>
       </div>

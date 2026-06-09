@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Locale } from '../i18n';
 
 export interface SettingsState {
-  language: string;
+  language: Locale;
   defaultOutputDir: string | null;
   defaultFormat: string;
   externalEditor: string | null;
@@ -24,7 +25,7 @@ export interface SettingsState {
 }
 
 const DEFAULT_SETTINGS: Omit<SettingsState, 'updateSetting' | 'loadSettings' | 'saveSettings'> = {
-  language: 'en',
+  language: 'zh-CN',
   defaultOutputDir: null,
   defaultFormat: 'svg',
   externalEditor: null,
@@ -38,6 +39,8 @@ const DEFAULT_SETTINGS: Omit<SettingsState, 'updateSetting' | 'loadSettings' | '
   smartDefaultsEnabled: true,
   compactMode: false,
 };
+
+const VALID_LOCALES: Locale[] = ['zh-CN', 'en-US', 'ja-JP'];
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -58,6 +61,10 @@ export const useSettingsStore = create<SettingsState>()(
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed && typeof parsed === 'object') {
+              // Backward compatibility: normalize old language values
+              if (parsed.language && !VALID_LOCALES.includes(parsed.language)) {
+                parsed.language = 'zh-CN';
+              }
               set((state) => ({
                 ...state,
                 ...parsed,

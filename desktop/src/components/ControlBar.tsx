@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useI18n } from '../i18n';
 
 interface ControlBarProps {
   isConverting: boolean;
@@ -22,6 +23,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
   onAddToQueue,
 }) => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div
@@ -86,7 +88,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
             }}
           />
         )}
-        {isConverting ? '转换中...' : '开始转换'}
+        {isConverting ? t('control.converting') : t('control.convert')}
       </button>
 
       {/* Center: Download */}
@@ -116,7 +118,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
           }}
         >
           <span>⬇</span>
-          <span>下载 {downloadFormat.toUpperCase()}</span>
+          <span>{t('control.download')} {downloadFormat.toUpperCase()}</span>
           <span
             style={{ fontSize: 10, marginLeft: 2 }}
             onClick={(e) => {
@@ -174,13 +176,13 @@ const ControlBar: React.FC<ControlBarProps> = ({
       {/* Right: More Actions */}
       <div style={{ display: 'flex', gap: 8 }}>
         <GhostButton onClick={onOpenExternal} disabled={!canDownload}>
-          🖊 外部编辑器
+          🖊 {t('control.external_editor')}
         </GhostButton>
         <GhostButton onClick={onShare} disabled={!canDownload}>
-          🔗 分享
+          🔗 {t('control.share')}
         </GhostButton>
         <GhostButton onClick={onAddToQueue}>
-          ➕ 添加到队列
+          ➕ {t('control.add_to_queue')}
         </GhostButton>
       </div>
     </div>

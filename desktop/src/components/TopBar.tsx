@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useI18n } from '../i18n';
 
 interface TopBarProps {
   onOpenCommandPalette?: () => void;
@@ -16,13 +17,8 @@ const TopBar: React.FC<TopBarProps> = ({
   onToggleTheme,
 }) => {
   const isDark = theme === 'dark';
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      onOpenCommandPalette?.();
-    }
-  };
+  const { locale, setLocale, t } = useI18n();
+  const [showLangMenu, setShowLangMenu] = useState(false);
 
   React.useEffect(() => {
     const listener = (e: KeyboardEvent) => {
@@ -34,6 +30,12 @@ const TopBar: React.FC<TopBarProps> = ({
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
   }, [onOpenCommandPalette]);
+
+  const langOptions: { value: typeof locale; label: string }[] = [
+    { value: 'zh-CN', label: '简体中文' },
+    { value: 'en-US', label: 'English' },
+    { value: 'ja-JP', label: '日本語' },
+  ];
 
   return (
     <header
@@ -76,7 +78,7 @@ const TopBar: React.FC<TopBarProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          Bitmap Vector Studio
+          {t('app.title')}
         </span>
       </div>
 
@@ -109,7 +111,7 @@ const TopBar: React.FC<TopBarProps> = ({
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 14 }}>🔍</span>
-          <span>搜索预设、命令、文件...</span>
+          <span>{t('topbar.search')}</span>
         </span>
         <kbd
           style={{
@@ -128,23 +130,74 @@ const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        {/* Language Switcher */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowLangMenu((v) => !v)}
+            title={t('topbar.language')}
+            style={iconBtnStyle(isDark)}
+          >
+            🌐
+          </button>
+          {showLangMenu && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                right: 0,
+                background: '#ffffff',
+                border: '1px solid #e5e3df',
+                borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                padding: 4,
+                minWidth: 120,
+                zIndex: 50,
+              }}
+            >
+              {langOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setLocale(opt.value);
+                    setShowLangMenu(false);
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: locale === opt.value ? 'rgba(196,92,38,0.08)' : 'transparent',
+                    color: locale === opt.value ? '#c45c26' : '#1a1a1a',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           onClick={onToggleTheme}
-          title={isDark ? '切换亮色主题' : '切换暗色主题'}
+          title={isDark ? t('topbar.theme_light') : t('topbar.theme_dark')}
           style={iconBtnStyle(isDark)}
         >
           {isDark ? '☀' : '☾'}
         </button>
         <button
           onClick={onOpenSettings}
-          title="设置"
+          title={t('topbar.settings')}
           style={iconBtnStyle(isDark)}
         >
           ⚙
         </button>
         <button
           onClick={onOpenUserMenu}
-          title="用户"
+          title={t('topbar.user')}
           style={iconBtnStyle(isDark)}
         >
           👤

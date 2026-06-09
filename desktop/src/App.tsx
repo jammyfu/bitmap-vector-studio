@@ -10,6 +10,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { LazyMainCanvas, LazyCommandPalette, LazyAdvancedDrawer } from './utils/lazyLoad'
 import { useTauri } from './hooks/useTauri'
 import { usePresets } from './hooks/usePresets'
+import { useI18n } from './i18n'
 import type { TraceOptions, ConversionTask } from './types'
 import './App.css'
 
@@ -52,8 +53,9 @@ function App() {
   const { loadSettings } = useSettingsStore()
   const tauri = useTauri()
   const { presets, getPresetOptions, selectPreset } = usePresets()
+  const { t } = useI18n()
 
-  const selectedItem = items.find((i) => i.id === selectedId)
+  const selectedItem = items.find((i: typeof items[0]) => i.id === selectedId)
   const originalImage = selectedItem?.filePath || null
   const queueTasks = toQueueTasks(items)
   const traceOptions = buildTraceOptions(convert)
@@ -79,9 +81,9 @@ function App() {
   const handleDropFiles = useCallback((files: string[]) => {
     const fileList = files.map((f) => ({ name: f.split(/[/\\]/).pop() || f, path: f }))
     addFiles(fileList)
-    showToast(`已添加 ${fileList.length} 个文件`, 'success')
+    showToast(t('toast.files_added', '已添加 {count} 个文件').replace('{count}', String(fileList.length)), 'success')
     if (fileList.length > 0) analyzeAndRecommend(fileList[0].path)
-  }, [addFiles, showToast])
+  }, [addFiles, showToast, t])
 
   async function analyzeAndRecommend(filePath: string) {
     try {
@@ -96,8 +98,8 @@ function App() {
   async function checkEnvironment() {
     try {
       const result = await tauri.checkEnv()
-      if (!result.includes('ready') && !result.includes('OK')) showToast(`环境检测: ${result}`, 'warning')
-    } catch (error) { showToast(`环境错误: ${error}`, 'error') }
+      if (!result.includes('ready') && !result.includes('OK')) showToast(t('toast.env_check', '环境检测: {result}').replace('{result}', result), 'warning')
+    } catch (error) { showToast(t('toast.env_error', '环境错误: {error}').replace('{error}', String(error)), 'error') }
   }
 
   async function handleOpenFileDialog() {
@@ -106,14 +108,14 @@ function App() {
       if (files.length > 0) {
         const fileList = files.map((f) => ({ name: f.split(/[/\\]/).pop() || f, path: f }))
         addFiles(fileList)
-        showToast(`已添加 ${files.length} 个文件`, 'success')
+        showToast(t('toast.files_added', '已添加 {count} 个文件').replace('{count}', String(files.length)), 'success')
         if (fileList.length > 0) analyzeAndRecommend(fileList[0].path)
       }
     } catch { /* ignore */ }
   }
 
   async function handleConvert() {
-    if (!selectedItem) { showToast('请先选择或上传图片', 'warning'); return }
+    if (!selectedItem) { showToast(t('toast.no_file'), 'warning'); return }
     convert.startConvert()
     try {
       const options = getPresetOptions(convert.preset)
@@ -122,18 +124,18 @@ function App() {
         const parsed = JSON.parse(result)
         convert.setPreviewResult(parsed.svgPath)
         convert.finishConvert(parsed.svgPath)
-        showToast('转换完成！', 'success')
+        showToast(t('toast.convert_success'), 'success')
       }
     } catch (error) {
-      showToast(`转换失败: ${error}`, 'error')
+      showToast(t('toast.convert_error', '转换失败: {error}').replace('{error}', String(error)), 'error')
       convert.finishConvert('')
     }
   }
 
   const handleDownload = useCallback((format: 'svg' | 'pdf' | 'png') => {
     if (!convert.previewResult) return
-    showToast(`下载 ${format.toUpperCase()} 已开始`, 'success')
-  }, [convert.previewResult, showToast])
+    showToast(t('toast.download_started', '下载 {format} 已开始').replace('{format}', format.toUpperCase()), 'success')
+  }, [convert.previewResult, showToast, t])
 
   const handleSelectPreset = useCallback((name: string) => { convert.setPreset(name); selectPreset(name) }, [convert.setPreset, selectPreset])
 
@@ -148,15 +150,15 @@ function App() {
 
   return (
     <div className="app-container">
-      <TopBar onOpenCommandPalette={openCommandPalette} onOpenSettings={() => showToast('设置面板即将上线', 'warning')} theme={effectiveTheme} onToggleTheme={toggleTheme} />
+      <TopBar onOpenCommandPalette={openCommandPalette} onOpenSettings={() => showToast(t('toast.settings_coming'), 'warning')} theme={effectiveTheme} onToggleTheme={toggleTheme} />
       <div className="app-body">
         <ErrorBoundary>
-          <Suspense fallback={<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6b6b' }}>画布加载中...</div>}>
+          <Suspense fallback={<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6b6b' }}>{t('app.loading_canvas')}</div>}>
             <LazyMainCanvas originalImage={originalImage} resultSvg={convert.previewResult} onDropFiles={handleDropFiles} onClickUpload={handleOpenFileDialog} fileName={selectedItem?.fileName} />
           </Suspense>
         </ErrorBoundary>
         <div className="app-controls">
-          <ErrorBoundary fallback={<div style={{ padding: 16, color: 'var(--error)', textAlign: 'center' }}>参数面板加载失败</div>}>
+          <ErrorBoundary fallback={<div style={{ padding: 16, color: 'var(--error)', textAlign: 'center' }}>{t('app.param_panel_error')}</div>}>
             <CoreParams preset={convert.preset} onChangePreset={handleSelectPreset} presets={presets} colorMode={convert.colormode} onChangeColorMode={(m) => convert.setCoreParam('colormode', m)} curveMode={convert.mode} onChangeCurveMode={(m) => convert.setCoreParam('mode', m)} optimizeLevel={convert.optimizeLevel} onChangeOptimizeLevel={(l) => convert.setCoreParam('optimizeLevel', l)} />
           </ErrorBoundary>
           <SmartRecommend recommendedPreset={convert.recommendedPreset || undefined} confidence={convert.recommendationConfidence} onApply={convert.applyRecommendation} onDismiss={() => convert.setRecommendation('', 0)} />

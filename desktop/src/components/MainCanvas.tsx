@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useI18n } from '../i18n';
 
 interface MainCanvasProps {
   originalImage: string | null;
@@ -20,10 +21,10 @@ const MainCanvas = React.memo<MainCanvasProps>(({
   const [mode, setMode] = useState<ViewMode>('side-by-side');
   const [scale, setScale] = useState(1);
   const [overlayPos, setOverlayPos] = useState(50);
-  const [isDragging, setIsDragging] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingSlider = useRef(false);
+  const { t } = useI18n();
 
   const hasImage = !!originalImage || !!resultSvg;
 
@@ -67,7 +68,6 @@ const MainCanvas = React.memo<MainCanvasProps>(({
   useEffect(() => {
     const onUp = () => {
       isDraggingSlider.current = false;
-      setIsDragging(false);
     };
     window.addEventListener('mouseup', onUp);
     return () => window.removeEventListener('mouseup', onUp);
@@ -135,10 +135,10 @@ const MainCanvas = React.memo<MainCanvasProps>(({
         >
           <div style={{ display: 'flex', gap: 4 }}>
             <ModeButton active={mode === 'side-by-side'} onClick={() => setMode('side-by-side')}>
-              并排
+              {t('canvas.side_by_side')}
             </ModeButton>
             <ModeButton active={mode === 'overlay'} onClick={() => setMode('overlay')}>
-              叠加
+              {t('canvas.overlay')}
             </ModeButton>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -172,7 +172,7 @@ const MainCanvas = React.memo<MainCanvasProps>(({
         }}
       >
         {!hasImage && (
-          <DropZone dragOver={dragOver} onClick={onClickUpload} />
+          <DropZone dragOver={dragOver} onClick={onClickUpload} t={t} />
         )}
 
         {hasImage && mode === 'side-by-side' && (
@@ -189,8 +189,8 @@ const MainCanvas = React.memo<MainCanvasProps>(({
               transformOrigin: 'center center',
             }}
           >
-            <ImagePanel label="原图" src={originalImage} />
-            <ImagePanel label="矢量结果" src={resultSvg} />
+            <ImagePanel label={t('canvas.original')} src={originalImage} />
+            <ImagePanel label={t('canvas.result')} src={resultSvg} />
           </div>
         )}
 
@@ -212,13 +212,13 @@ const MainCanvas = React.memo<MainCanvasProps>(({
               {originalImage ? (
                 <img
                   src={originalImage}
-                  alt="Original"
+                  alt={t('canvas.original')}
                   style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   draggable={false}
                   loading="lazy"
                 />
               ) : (
-                <EmptyPanel>无原图</EmptyPanel>
+                <EmptyPanel>{t('canvas.no_original')}</EmptyPanel>
               )}
             </div>
             {/* Top image with clip */}
@@ -232,13 +232,13 @@ const MainCanvas = React.memo<MainCanvasProps>(({
               {resultSvg ? (
                 <img
                   src={resultSvg}
-                  alt="Result"
+                  alt={t('canvas.result')}
                   style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   draggable={false}
                   loading="lazy"
                 />
               ) : (
-                <EmptyPanel>无结果</EmptyPanel>
+                <EmptyPanel>{t('canvas.no_result')}</EmptyPanel>
               )}
             </div>
             {/* Slider */}
@@ -301,9 +301,9 @@ const MainCanvas = React.memo<MainCanvasProps>(({
       )}
     </div>
   );
-};
+});
 
-const DropZone: React.FC<{ dragOver: boolean; onClick?: () => void }> = ({ dragOver, onClick }) => (
+const DropZone: React.FC<{ dragOver: boolean; onClick?: () => void; t: (key: string) => string }> = ({ dragOver, onClick, t }) => (
   <button
     onClick={onClick}
     style={{
@@ -323,8 +323,8 @@ const DropZone: React.FC<{ dragOver: boolean; onClick?: () => void }> = ({ dragO
     }}
   >
     <span style={{ fontSize: 48, opacity: 0.6 }}>🖼️</span>
-    <div style={{ fontSize: 16, fontWeight: 600, color: '#1a1a1a' }}>拖拽图片到此处</div>
-    <div style={{ fontSize: 13, color: '#6b6b6b' }}>或 点击上传</div>
+    <div style={{ fontSize: 16, fontWeight: 600, color: '#1a1a1a' }}>{t('canvas.drop')}</div>
+    <div style={{ fontSize: 13, color: '#6b6b6b' }}>{t('canvas.upload')}</div>
   </button>
 );
 

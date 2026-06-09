@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 import urllib.parse
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -51,6 +52,8 @@ from .community_tools import (
 )
 from .plugins import PluginManager
 from .presets import PRESETS, options_from_preset
+from .report_generator import BatchReport, ConversionReport, ReportGenerator
+from .stats_dashboard import StatsDashboard
 from .svg_optimizer import svg_quality_score
 from .svg_tools import svg_stats
 from .design_integration import FigmaPlugin, SketchPlugin, DesignTokenSync
@@ -68,6 +71,8 @@ from .animation import (
     SVGAnimation,
     list_presets as list_animation_presets,
 )
+
+from .i18n import t
 
 console = Console()
 app = typer.Typer(
@@ -167,6 +172,10 @@ app.add_typer(template_app, name="template")
 cache_app = typer.Typer(help="Cache management.", hidden=True)
 app.add_typer(cache_app, name="cache")
 
+# Sub-typer for report commands
+report_app = typer.Typer(help="Report generation and management.")
+app.add_typer(report_app, name="report")
+
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
 try:
     import uvicorn
@@ -213,6 +222,9 @@ def _print_full_help() -> None:
     console.print("  render-farm 分布式渲染农场")
     console.print("  enterprise 企业团队和SSO管理")
     console.print("  template   智能模板市场")
+    console.print("  cache      缓存管理")
+    console.print("  report     报告生成与管理")
+    console.print("  stats      统计仪表盘")
 
     console.print("\n[bold cyan]常用选项:[/bold cyan]")
     console.print("  --version   显示版本")
@@ -224,6 +236,8 @@ def _print_full_help() -> None:
     console.print("  vector-studio quick input.png           一键转换")
     console.print("  vector-studio convert input.png -p logo 使用预设转换")
     console.print("  vector-studio convert input.png -f pdf  导出PDF")
+    console.print("  vector-studio report convert input.png  生成转换报告")
+    console.print("  vector-studio stats                     显示统计仪表盘")
 
     console.print("\n[dim]文档: https://github.com/jammyfu/bitmap-vector-studio[/dim]\n")
 
@@ -327,10 +341,10 @@ def _print_analysis(input_path: Path, preset_name: str, confidence: float, featu
         return
     if verbose:
         console.print(f"[分析] 图片: {input_path.name} ({features.get('width', '?')}x{features.get('height', '?')}, {features.get('color_count', '?')}色, 边缘密度: {features.get('edge_density', 0):.2f})")
-        console.print(f"[推荐] 预设: {preset_name} (置信度 {confidence:.0%})")
+        console.print(f"[推荐] {t('convert.recommending', preset=preset_name, confidence=round(confidence*100))}")
     else:
-        console.print("分析中... ✓")
-        console.print(f"推荐预设: {preset_name} (置信度 {confidence:.0%})")
+        console.print(f"{t('convert.analyzing')} ✓")
+        console.print(t('convert.recommending', preset=preset_name, confidence=round(confidence*100)))
 
 
 def _print_convert_progress(step: str, quiet: bool, verbose: bool) -> None:
@@ -365,7 +379,7 @@ def _print_result(result: Any, quiet: bool, verbose: bool, score: bool = False) 
             except Exception as exc:
                 console.print(f"[red]评分失败:[/red] {exc}")
     else:
-        console.print(f"完成! → {result.svg_path} ({size_kb:.1f}KB)")
+        console.print(f"{t('convert.success', path=result.svg_path)} ({size_kb:.1f}KB)")
 
 
 def _run_single_convert(
@@ -470,7 +484,7 @@ def convert_batch(
 
     if not images:
         if not quiet:
-            console.print("[yellow]未找到支持的图片。[/yellow]")
+            console.print(f"[yellow]{t('no_images')}[/yellow]")
         raise typer.Exit(code=0)
 
     plugins = _active_plugins(config, plugin)
@@ -492,7 +506,7 @@ def convert_batch(
             continue
         try:
             if not quiet and not verbose:
-                console.print(f"  [{idx}/{len(images)}] {image_path.name} ...", end=" ")
+                console.print(t('batch.progress', current=idx, total=len(images), filename=image_path.name, status=''), end=" ")
             result = trace_image(
                 image_path,
                 out_path,
@@ -515,10 +529,10 @@ def convert_batch(
 
     if failures:
         if not quiet:
-            console.print(f"[red]失败 {failures}/{len(images)}[/red]")
+            console.print(f"[red]{t('batch.failures', failures=failures, total=len(images))}[/red]")
         raise typer.Exit(code=1)
     if not quiet:
-        console.print(f"[green]完成 {len(images)} 张图片转换[/green]")
+        console.print(f"[green]{t('batch.summary', total=len(images))}[/green]")
 
 
 @convert_app.command("generate")
@@ -647,7 +661,7 @@ def trace_command(
     ai_pipeline: list[str] = typer.Option([], "--ai-pipeline", help="AI pre-processing tasks: segment, style_transfer, upscale, auto_enhance."),
 ) -> None:
     """Convert one bitmap image to SVG. (Deprecated: use 'convert' instead)"""
-    console.print("[yellow]警告:[/yellow] `trace` 命令已弃用，请使用 `vector-studio convert <file>`")
+    console.print(f"[yellow]{t('deprecated.trace')}[/yellow]")
     config = _load_config(config_path)
 
     # Apply config defaults when the CLI value matches the hardcoded default
@@ -850,7 +864,7 @@ def batch_command(
     checkpoint: bool = typer.Option(False, "--checkpoint", help="Enable checkpoint/resume for this batch."),
 ) -> None:
     """Batch-convert a folder of images. (Deprecated: use 'convert batch' instead)"""
-    console.print("[yellow]警告:[/yellow] `batch` 命令已弃用，请使用 `vector-studio convert batch <input> <output>`")
+    console.print(f"[yellow]{t('deprecated.batch')}[/yellow]")
     config = _load_config(config_path)
 
     if config.default_preset and preset == "poster":
@@ -868,7 +882,7 @@ def batch_command(
     images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
 
     if not images:
-        console.print("[yellow]No supported images found.[/yellow]")
+        console.print(f"[yellow]{t('no_images')}[/yellow]")
         raise typer.Exit(code=0)
 
     plugins = _active_plugins(config, plugin)
@@ -3463,6 +3477,290 @@ def farm_worker(
         console.print("[yellow]Shutting down worker...[/yellow]")
     finally:
         server.shutdown_server()
+
+
+# ------------------------------------------------------------------
+# Report sub-commands
+# ------------------------------------------------------------------
+
+@report_app.command("convert")
+def report_convert(
+    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
+    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="预设名称，不指定则自动推荐。"),
+    format: str = typer.Option("json", "--format", "-f", help="报告格式: json/md/csv。"),
+    optimize: str = typer.Option("basic", "--optimize", help="优化级别。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="配置文件路径。"),
+    plugin: list[str] = typer.Option([], "--plugin", help="启用的插件名称。"),
+) -> None:
+    """转换单张图片并生成报告。"""
+    from .svg_optimizer import svg_quality_score
+    from .svg_tools import svg_stats
+
+    result = _run_single_convert(
+        input_path=input_path,
+        output=output,
+        preset=preset,
+        format="svg",
+        optimize_level=optimize,
+        quiet=quiet,
+        verbose=verbose,
+        config_path=config_path,
+        plugin=plugin,
+    )
+
+    input_size = input_path.stat().st_size
+    output_size = result.svg_path.stat().st_size if result.svg_path.exists() else 0
+    compression = input_size / output_size if output_size > 0 else 0.0
+
+    quality = None
+    paths = None
+    colors = None
+    try:
+        qs = svg_quality_score(result.svg_path)
+        quality = qs.get("overall")
+    except Exception:
+        pass
+    try:
+        st = svg_stats(result.svg_path)
+        paths = st.get("paths")
+        colors = st.get("colors")
+    except Exception:
+        pass
+
+    report = ConversionReport(
+        input_file=str(input_path),
+        output_file=str(result.svg_path),
+        input_size_bytes=input_size,
+        output_size_bytes=output_size,
+        compression_ratio=compression,
+        preset_used=result.engine,
+        parameters=result.stats or {},
+        quality_score=quality,
+        path_count=paths,
+        color_count=colors,
+        duration_seconds=result.elapsed_seconds,
+        timestamp=datetime.now().isoformat(),
+    )
+
+    gen = ReportGenerator()
+    path = gen.save_report(report, format=format)
+    console.print(f"[green]报告已保存[/green] {path}")
+
+
+@report_app.command("batch")
+def report_batch(
+    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="输入文件夹。"),
+    output_dir: Path = typer.Argument(..., help="输出文件夹。"),
+    preset: str = typer.Option("poster", "--preset", "-p", help="预设名称。"),
+    format: str = typer.Option("json", "--format", "-f", help="报告格式: json/md/csv。"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="递归扫描输入文件夹。"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="覆盖现有文件。"),
+    optimize: str = typer.Option("basic", "--optimize", help="优化级别。"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
+    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="并发工作数。"),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="配置文件路径。"),
+    plugin: list[str] = typer.Option([], "--plugin", help="启用的插件名称。"),
+) -> None:
+    """批量转换文件夹中的图片并生成报告。"""
+    from .svg_optimizer import svg_quality_score
+    from .svg_tools import svg_stats
+
+    config = _load_config(config_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    opts = options_from_preset(preset)
+    iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
+    images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+
+    if not images:
+        if not quiet:
+            console.print("[yellow]未找到支持的图片。[/yellow]")
+        raise typer.Exit(code=0)
+
+    plugins = _active_plugins(config, plugin)
+
+    if not quiet:
+        if verbose:
+            console.print(f"[批量] 发现 {len(images)} 张图片，使用 {workers} 个工作线程")
+        else:
+            console.print(f"批量转换: {len(images)} 张图片")
+
+    items: list[ConversionReport] = []
+    failures = 0
+    total_input = 0
+    total_output = 0
+    total_duration = 0.0
+
+    for idx, image_path in enumerate(images, start=1):
+        rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
+        out_path = (output_dir / rel).with_suffix(".svg")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.exists() and not overwrite:
+            if verbose:
+                console.print(f"[跳过] {out_path} (已存在)")
+            continue
+        try:
+            if not quiet and not verbose:
+                console.print(f"  [{idx}/{len(images)}] {image_path.name} ...", end=" ")
+            result = trace_image(
+                image_path,
+                out_path,
+                opts,
+                optimize_level=optimize,
+                plugins=plugins,
+            )
+            if not quiet:
+                if verbose:
+                    console.print(f"[完成] {result.svg_path}")
+                else:
+                    console.print("✓")
+
+            input_size = image_path.stat().st_size
+            output_size = result.svg_path.stat().st_size if result.svg_path.exists() else 0
+            total_input += input_size
+            total_output += output_size
+            total_duration += result.elapsed_seconds
+
+            quality = None
+            paths = None
+            colors = None
+            try:
+                qs = svg_quality_score(result.svg_path)
+                quality = qs.get("overall")
+            except Exception:
+                pass
+            try:
+                st = svg_stats(result.svg_path)
+                paths = st.get("paths")
+                colors = st.get("colors")
+            except Exception:
+                pass
+
+            items.append(
+                ConversionReport(
+                    input_file=str(image_path),
+                    output_file=str(result.svg_path),
+                    input_size_bytes=input_size,
+                    output_size_bytes=output_size,
+                    compression_ratio=input_size / output_size if output_size > 0 else 0.0,
+                    preset_used=preset,
+                    parameters=result.stats or {},
+                    quality_score=quality,
+                    path_count=paths,
+                    color_count=colors,
+                    duration_seconds=result.elapsed_seconds,
+                    timestamp=datetime.now().isoformat(),
+                )
+            )
+        except Exception as exc:
+            failures += 1
+            total_input += image_path.stat().st_size
+            items.append(
+                ConversionReport(
+                    input_file=str(image_path),
+                    output_file="",
+                    input_size_bytes=image_path.stat().st_size,
+                    output_size_bytes=0,
+                    compression_ratio=0.0,
+                    preset_used=preset,
+                    parameters={},
+                    quality_score=None,
+                    path_count=None,
+                    color_count=None,
+                    duration_seconds=0.0,
+                    timestamp=datetime.now().isoformat(),
+                )
+            )
+            if not quiet:
+                if verbose:
+                    console.print(f"[失败] {image_path}: {exc}")
+                else:
+                    console.print(f"✗ ({exc})")
+
+    batch_report = BatchReport(
+        total_files=len(images),
+        successful=len(items) - failures,
+        failed=failures,
+        total_input_size=total_input,
+        total_output_size=total_output,
+        average_duration=total_duration / len(items) if items else 0.0,
+        preset_used=preset,
+        items=items,
+        timestamp=datetime.now().isoformat(),
+    )
+
+    gen = ReportGenerator()
+    path = gen.save_report(batch_report, format=format)
+    console.print(f"[green]批量报告已保存[/green] {path}")
+    if failures:
+        console.print(f"[red]失败 {failures}/{len(images)}[/red]")
+        raise typer.Exit(code=1)
+    if not quiet:
+        console.print(f"[green]完成 {len(images)} 张图片转换[/green]")
+
+
+@report_app.command("list")
+def report_list() -> None:
+    """列出所有历史报告。"""
+    gen = ReportGenerator()
+    reports = gen.list_reports()
+    if not reports:
+        console.print("[yellow]暂无报告。[/yellow]")
+        return
+
+    table = Table(title="历史报告")
+    table.add_column("#", style="bold")
+    table.add_column("文件名")
+    table.add_column("格式")
+    table.add_column("修改时间")
+    for idx, r in enumerate(reports, start=1):
+        suffix = r.suffix.lstrip(".")
+        mtime = datetime.fromtimestamp(r.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        table.add_row(str(idx), r.name, suffix, mtime)
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# Stats command
+# ------------------------------------------------------------------
+
+@app.command("stats")
+def stats_command(
+    days: int = typer.Option(30, "--days", "-d", min=1, max=365, help="统计天数。"),
+) -> None:
+    """显示统计仪表盘。"""
+    dashboard = StatsDashboard()
+    summary = dashboard.get_summary(days=days)
+    trend = dashboard.get_daily_trend(days=min(days, 14))
+
+    table = Table(title=f"统计仪表盘 (最近 {days} 天)")
+    table.add_column("指标", style="bold")
+    table.add_column("数值")
+    table.add_row("总转换数", str(summary["total_conversions"]))
+    table.add_row("成功", str(summary["successful"]))
+    table.add_row("失败", str(summary["failed"]))
+    table.add_row("成功率", f"{summary['success_rate']:.1f}%")
+    table.add_row("平均耗时", f"{summary['average_duration']:.2f}s")
+    console.print(table)
+
+    if summary["top_presets"]:
+        ptable = Table(title="常用预设")
+        ptable.add_column("预设", style="bold")
+        ptable.add_column("使用次数")
+        for preset_name, count in summary["top_presets"]:
+            ptable.add_row(preset_name, str(count))
+        console.print(ptable)
+
+    if trend:
+        ttable = Table(title="每日趋势 (最近14天)")
+        ttable.add_column("日期", style="bold")
+        ttable.add_column("转换数")
+        for day in trend:
+            ttable.add_row(day["date"], str(day["count"]))
+        console.print(ttable)
 
 
 def main() -> None:

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useI18n } from '../i18n';
 import type { ConversionTask } from '../types';
 
 interface QueueBarProps {
@@ -9,14 +10,6 @@ interface QueueBarProps {
   onClearCompleted?: () => void;
   onStartAll?: () => void;
 }
-
-const statusMap: Record<ConversionTask['status'], { label: string; color: string; bg: string }> = {
-  pending: { label: '待处理', color: '#6b6b6b', bg: '#f5f5f7' },
-  running: { label: '转换中', color: '#c45c26', bg: 'rgba(196, 92, 38, 0.08)' },
-  completed: { label: '完成', color: '#34c759', bg: 'rgba(52, 199, 89, 0.08)' },
-  failed: { label: '失败', color: '#ff3b30', bg: 'rgba(255, 59, 48, 0.08)' },
-  cancelled: { label: '已取消', color: '#a1a1a6', bg: '#f5f5f7' },
-};
 
 const QueueBar: React.FC<QueueBarProps> = ({
   tasks,
@@ -29,12 +22,21 @@ const QueueBar: React.FC<QueueBarProps> = ({
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggle = onToggleExpand || (() => setInternalExpanded((v) => !v));
+  const { t } = useI18n();
 
   const pendingCount = tasks.filter((t) => t.status === 'pending').length;
   const runningCount = tasks.filter((t) => t.status === 'running').length;
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
 
   const activeCount = pendingCount + runningCount;
+
+  const statusMap: Record<ConversionTask['status'], { label: string; color: string; bg: string }> = {
+    pending: { label: t('queue.empty', '待处理'), color: '#6b6b6b', bg: '#f5f5f7' },
+    running: { label: t('control.converting', '转换中'), color: '#c45c26', bg: 'rgba(196, 92, 38, 0.08)' },
+    completed: { label: t('toast.convert_success', '完成').replace('！', ''), color: '#34c759', bg: 'rgba(52, 199, 89, 0.08)' },
+    failed: { label: t('toast.convert_error', '失败').replace(': {error}', ''), color: '#ff3b30', bg: 'rgba(255, 59, 48, 0.08)' },
+    cancelled: { label: t('recommend.dismiss', '已取消'), color: '#a1a1a6', bg: '#f5f5f7' },
+  };
 
   return (
     <div
@@ -69,8 +71,10 @@ const QueueBar: React.FC<QueueBarProps> = ({
           <span>📁</span>
           <span>
             {tasks.length === 0
-              ? '队列为空'
-              : `${activeCount > 0 ? `${activeCount}个文件待处理` : `${completedCount}个文件已完成`}`}
+              ? t('queue.empty')
+              : activeCount > 0
+                ? t('queue.pending_files', '{count}个文件待处理').replace('{count}', String(activeCount))
+                : t('queue.completed_files', '{count}个文件已完成').replace('{count}', String(completedCount))}
           </span>
         </span>
         <span
@@ -103,7 +107,7 @@ const QueueBar: React.FC<QueueBarProps> = ({
               fontSize: 13,
             }}
           >
-            暂无文件，拖拽图片到画布添加
+            {t('queue.drag_hint')}
           </div>
         ) : (
           <>
@@ -121,10 +125,10 @@ const QueueBar: React.FC<QueueBarProps> = ({
                 borderBottom: '1px solid #e5e3df',
               }}
             >
-              <span>文件名</span>
-              <span>状态</span>
-              <span>进度</span>
-              <span style={{ textAlign: 'right' }}>操作</span>
+              <span>{t('queue.filename')}</span>
+              <span>{t('queue.status')}</span>
+              <span>{t('queue.progress')}</span>
+              <span style={{ textAlign: 'right' }}>{t('queue.action')}</span>
             </div>
             {tasks.map((task) => {
               const status = statusMap[task.status];
@@ -208,7 +212,7 @@ const QueueBar: React.FC<QueueBarProps> = ({
                         cursor: 'pointer',
                         fontFamily: 'inherit',
                       }}
-                      title="删除"
+                      title={t('recommend.dismiss')}
                     >
                       🗑
                     </button>
@@ -241,7 +245,7 @@ const QueueBar: React.FC<QueueBarProps> = ({
                   fontFamily: 'inherit',
                 }}
               >
-                清空已完成
+                {t('queue.clear_completed')}
               </button>
               <button
                 onClick={onStartAll}
@@ -257,7 +261,7 @@ const QueueBar: React.FC<QueueBarProps> = ({
                   fontFamily: 'inherit',
                 }}
               >
-                全部开始
+                {t('queue.start_all')}
               </button>
             </div>
           </>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../i18n';
 
 interface SmartRecommendProps {
   recommendedPreset?: string;
@@ -13,6 +14,8 @@ const SmartRecommend: React.FC<SmartRecommendProps> = ({
   onApply,
   onDismiss,
 }) => {
+  const { t } = useI18n();
+
   if (!recommendedPreset || confidence <= 0.7) {
     return null;
   }
@@ -45,7 +48,7 @@ const SmartRecommend: React.FC<SmartRecommendProps> = ({
             textOverflow: 'ellipsis',
           }}
         >
-          智能推荐：{recommendedPreset}预设（置信度 {percent}%）
+          {t('recommend.title')}：{recommendedPreset}{t('params.preset')}（{t('recommend.confidence')} {percent}%）
         </span>
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -70,7 +73,7 @@ const SmartRecommend: React.FC<SmartRecommendProps> = ({
             (e.currentTarget as HTMLButtonElement).style.opacity = '1';
           }}
         >
-          应用推荐
+          {t('recommend.apply')}
         </button>
         <button
           onClick={onDismiss}
@@ -92,7 +95,7 @@ const SmartRecommend: React.FC<SmartRecommendProps> = ({
             (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
           }}
         >
-          忽略
+          {t('recommend.dismiss')}
         </button>
       </div>
     </div>
