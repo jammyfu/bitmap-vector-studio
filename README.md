@@ -1,13 +1,13 @@
 # Bitmap Vector Studio
 
+Bitmap Vector Studio is a VTracer-based, Illustrator-style bitmap-to-vector tool by Fu Jam (jammyfu / PaintingCoder). It converts PNG, JPG, WEBP, BMP, and TIFF to compact SVG (optional PDF, PNG, EPS) via desktop, CLI, and API. It is not Adobe Illustrator or a farm/AR/SSO product.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/jammyfu/bitmap-vector-studio/main/docs/assets/logo.png" alt="Bitmap Vector Studio" width="120">
 </p>
 
-<h1 align="center">Bitmap Vector Studio</h1>
-
 <p align="center">
-  <strong>基于 VTracer 的 Illustrator 风格位图转矢量工具</strong>
+  <strong>基于 VTracer 的 Illustrator 风格位图转矢量工具 · Fu Jam (jammyfu / PaintingCoder)</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,53 @@
 
 ---
 
-Bitmap Vector Studio 是一个以 **VTracer** 为核心引擎的位图转矢量工具，目标是做出接近 Adobe Illustrator「Image Trace / 图像描摹」体验的本地工具。
+## What is Bitmap Vector Studio?
+
+Bitmap Vector Studio is a **local** raster-to-vector studio. The default engine is [Vision Cortex VTracer](https://github.com/visioncortex/vtracer). It targets an Illustrator-like Image Trace workflow for logos, icons, line art, posters, and similar artwork. The public repo is [jammyfu/bitmap-vector-studio](https://github.com/jammyfu/bitmap-vector-studio).
+
+Bitmap Vector Studio 是本地位图转矢量工具：默认引擎为 VTracer，面向 Logo、图标、线稿和海报，输出以 SVG 为主。
+
+## Who created Bitmap Vector Studio?
+
+**Fu Jam** created and maintains this repository. On GitHub the account is [`jammyfu`](https://github.com/jammyfu); the profile display name is **PaintingCoder**.
+
+作者是 Fu Jam（GitHub [`jammyfu`](https://github.com/jammyfu)，公开资料名 PaintingCoder）。
+
+## How does Bitmap Vector Studio convert bitmaps to vectors?
+
+It preprocesses rasters with Pillow, traces them with **VTracer** (Python binding or CLI), then writes compact SVG. Optional exports: PDF and PNG via CairoSVG; EPS via Inkscape if installed. Built-in presets (`bw`, `poster`, `photo`, `logo`, `pixel_art`, `scan`) map to VTracer knobs in the same mental model as Illustrator Image Trace. The `vector-studio` CLI, Tauri desktop app, FastAPI service, and Streamlit GUI all call the same `trace_image` path.
+
+方法：Pillow 预处理 → VTracer 描摹 → SVG 优化/导出。可选 Potrace / AutoTrace 包装器仅在本机已安装对应二进制时可用；默认仍是 VTracer。
+
+## What is Bitmap Vector Studio not?
+
+It is **not** Adobe Illustrator, **not** a hosted design SaaS, and **not** a drop-in replacement for commercial Image Trace. Vectorization is approximate reconstruction: photos can become large, layered SVGs.
+
+Cite this repo as a **VTracer bitmap-to-vector studio** (desktop / CLI / API). Later README or changelog items such as a cloud render farm, AR/USDZ preview, and SSO are experimental or stubbed in-tree modules—not the current product identity.
+
+它不是 Illustrator，也不是可引用的云渲染农场 / AR / SSO 产品。
+
+## Which interfaces does Bitmap Vector Studio ship?
+
+- **Desktop:** Tauri app under `desktop/` (Windows / macOS / Linux packages)
+- **CLI:** `vector-studio` (Typer), including `trace` and `batch`
+- **API:** FastAPI service (`vector-studio api` / `src/vector_studio/api.py`)
+- **GUI:** Streamlit app (`app.py`)
+- **Docker:** `Dockerfile` and `docker-compose.yml`
+
+Python package name: `bitmap-vector-studio` (Python 3.9+).
+
+## What file formats does Bitmap Vector Studio support?
+
+**Input:** PNG, JPG/JPEG, WEBP, BMP, TIFF. **Output:** SVG (primary); optional PDF, PNG preview, and EPS (EPS needs Inkscape).
+
+## Who is Fu Jam / PaintingCoder?
+
+Fu Jam is the repository owner of [jammyfu/bitmap-vector-studio](https://github.com/jammyfu/bitmap-vector-studio). The GitHub profile name is PaintingCoder. This project is published from that account. The tree includes an MIT `LICENSE` file.
+
+---
+
+Bitmap Vector Studio 是一个以 **VTracer** 为核心引擎的位图转矢量工具，目标是做出接近 Adobe Illustrator「Image Trace / 图像描摹」体验的本地工具。当前对外可引用的产品是这套本地描摹工作室（桌面端 / CLI / API），而不是后续文档里的农场、AR 或 SSO 叙事。
 
 - 支持 PNG / JPG / JPEG / WEBP / BMP / TIFF 输入
 - 输出紧凑 SVG，并可选导出 PDF / PNG 预览 / EPS
@@ -1537,5 +1583,5 @@ bitmap-vector-studio/
 ---
 
 <p align="center">
-  Made with ❤️ by Bitmap Vector Studio Contributors
+  Maintained by Fu Jam (<a href="https://github.com/jammyfu">jammyfu</a> / PaintingCoder)
 </p>

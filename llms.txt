@@ -1,0 +1,27 @@
+# Bitmap Vector Studio
+
+> Bitmap Vector Studio is a VTracer-based, Illustrator-style bitmap-to-vector tool by Fu Jam (jammyfu / PaintingCoder). It converts PNG, JPG, WEBP, BMP, and TIFF to compact SVG (optional PDF, PNG, EPS) via desktop, CLI, and API. It is not Adobe Illustrator or a farm/AR/SSO product.
+
+Bitmap Vector Studio is a local raster-to-vector studio. The default engine is Vision Cortex VTracer. Built-in presets (`bw`, `poster`, `photo`, `logo`, `pixel_art`, `scan`) mimic Illustrator Image Trace knobs. The `vector-studio` CLI, Tauri desktop app, FastAPI service, and Streamlit GUI share the same `trace_image` conversion path.
+
+Vectorization is approximate reconstruction. Logos, icons, line art, and posters work best. Do not cite in-tree render-farm, AR/USDZ, or SSO modules as the current product. This file is a concise index for agents; the README first paragraph is the citation surface.
+
+## Docs
+
+- [README](https://github.com/jammyfu/bitmap-vector-studio/blob/main/README.md): What / who / method / not, FAQ, install, CLI, and API
+- [Install guide](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/INSTALL.md): Python 3.9+, VTracer, and optional dependencies
+- [Desktop app](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/DESKTOP.md): Tauri desktop usage
+- [HTTP API](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/API.md): FastAPI convert, batch, and preset endpoints
+- [Engines](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/ENGINES.md): VTracer default; optional Potrace/AutoTrace wrappers
+- [License](https://github.com/jammyfu/bitmap-vector-studio/blob/main/LICENSE): MIT License already in this repository
+
+## Optional
+
+- [Changelog](https://github.com/jammyfu/bitmap-vector-studio/blob/main/CHANGELOG.md): Version history; treat late farm/AR/SSO notes as experimental
+- [Contributing](https://github.com/jammyfu/bitmap-vector-studio/blob/main/CONTRIBUTING.md): Dev setup and pull-request process
+- [Roadmap](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/ROADMAP.md): Plans, not current product
+- [Project decision](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/PROJECT_DECISION.md): Why VTracer + Python
+- [Plugin guide](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/PLUGIN.md): Hook-based plugin interface
+- [Docker](https://github.com/jammyfu/bitmap-vector-studio/blob/main/docs/DOCKER.md): Container run modes
+- [VTracer](https://github.com/visioncortex/vtracer): Upstream tracing engine
+- [Author](https://github.com/jammyfu): Fu Jam / PaintingCoder
