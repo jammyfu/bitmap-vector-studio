@@ -159,6 +159,7 @@ class TestConfigYaml:
     def test_save_and_load_yaml(self, tmp_path):
         pytest.importorskip("yaml")
         from vector_studio.config import Config
+
         cfg = Config(default_preset="bw", max_workers=2)
         path = tmp_path / "config.yaml"
         cfg.save(path)
@@ -170,6 +171,7 @@ class TestConfigYaml:
     def test_load_yaml_preferred_over_json(self, tmp_path):
         pytest.importorskip("yaml")
         from vector_studio.config import Config
+
         json_cfg = Config(default_preset="photo")
         yaml_cfg = Config(default_preset="logo")
         json_path = tmp_path / "config.json"

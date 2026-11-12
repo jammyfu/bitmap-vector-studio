@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
+import time as time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _default_workspace_dir() -> Path:
     """Return the default workspace directory."""
@@ -62,6 +63,7 @@ def _deserialize_trace_options(data: dict[str, Any]) -> TraceOptions:
 # Workspace dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Workspace:
     """Represents a saved application work session."""
@@ -102,6 +104,7 @@ class Workspace:
 # ---------------------------------------------------------------------------
 # WorkspaceManager
 # ---------------------------------------------------------------------------
+
 
 class WorkspaceManager:
     """Persist and restore :class:`Workspace` snapshots."""
@@ -276,6 +279,7 @@ class WorkspaceManager:
 # ---------------------------------------------------------------------------
 # CrashRecovery
 # ---------------------------------------------------------------------------
+
 
 class CrashRecovery:
     """Save and restore application state around unexpected crashes."""

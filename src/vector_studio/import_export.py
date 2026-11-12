@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict as asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,18 +37,13 @@ class ImportExporter:
 
     def export_presets(self, preset_names: list[str] | None = None) -> list[dict]:
         """导出预设."""
-        from .preset_manager import get_all_presets, list_user_presets
+        from .preset_manager import get_all_presets as get_all_presets, list_user_presets
 
         user_presets = list_user_presets()
         if preset_names:
-            user_presets = {
-                k: v for k, v in user_presets.items() if k in preset_names
-            }
+            user_presets = {k: v for k, v in user_presets.items() if k in preset_names}
         # Return list of dicts with name included for portability
-        return [
-            {"name": name, **entry}
-            for name, entry in user_presets.items()
-        ]
+        return [{"name": name, **entry} for name, entry in user_presets.items()]
 
     def export_config(self) -> dict:
         """导出配置."""
@@ -126,9 +121,7 @@ class ImportExporter:
 
         return output_path
 
-    def import_from_json(
-        self, input_path: Path, merge_strategy: str = "merge"
-    ) -> dict[str, Any]:
+    def import_from_json(self, input_path: Path, merge_strategy: str = "merge") -> dict[str, Any]:
         """从JSON导入.
 
         Args:
@@ -151,9 +144,7 @@ class ImportExporter:
 
         return stats
 
-    def import_from_zip(
-        self, input_path: Path, merge_strategy: str = "merge"
-    ) -> dict[str, Any]:
+    def import_from_zip(self, input_path: Path, merge_strategy: str = "merge") -> dict[str, Any]:
         """从ZIP导入."""
         with zipfile.ZipFile(input_path, "r") as zf:
             manifest = json.loads(zf.read("manifest.json").decode("utf-8"))

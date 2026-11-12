@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+from pathlib import Path as Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -69,17 +69,13 @@ class TestTemplate:
 class TestTemplateMarket:
     def test_discover_templates_empty(self, tmp_path, monkeypatch):
         """discover_templates returns an empty list when no templates exist."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         assert market.discover_templates() == []
 
     def test_publish_and_discover(self, tmp_path, monkeypatch):
         """Publishing a template makes it discoverable."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         t = Template(
             template_id="",
@@ -96,9 +92,7 @@ class TestTemplateMarket:
 
     def test_discover_with_query_and_category(self, tmp_path, monkeypatch):
         """Query and category filters work correctly."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         market.publish_template(
             Template(template_id="", name="Logo A", category="logo", tags=["minimal"], data={}),
@@ -114,9 +108,7 @@ class TestTemplateMarket:
 
     def test_rate_template(self, tmp_path, monkeypatch):
         """rate_template updates the average rating."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         t = Template(template_id="", name="R", category="c", data={})
         tid = market.publish_template(t, "u1")
@@ -128,9 +120,7 @@ class TestTemplateMarket:
 
     def test_rate_template_out_of_range(self, tmp_path, monkeypatch):
         """rate_template rejects ratings outside 1–5."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         with pytest.raises(ValueError, match="Rating must be between 1 and 5"):
             market.rate_template("any", "u1", 0)
@@ -139,12 +129,12 @@ class TestTemplateMarket:
 
     def test_get_recommendations(self, tmp_path, monkeypatch):
         """get_recommendations scores templates by context match."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         market.publish_template(
-            Template(template_id="", name="Logo Rec", category="logo", tags=["logo", "minimal"], data={}),
+            Template(
+                template_id="", name="Logo Rec", category="logo", tags=["logo", "minimal"], data={}
+            ),
             "u1",
         )
         market.publish_template(
@@ -156,9 +146,7 @@ class TestTemplateMarket:
 
     def test_apply_template_not_found(self, tmp_path, monkeypatch):
         """apply_template raises ValueError for missing template."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         with pytest.raises(ValueError, match="not found"):
             market.apply_template("missing", tmp_path / "in.png", tmp_path / "out.svg")
@@ -211,18 +199,14 @@ class TestTemplateEditor:
 class TestTemplateCLI:
     def test_template_list_empty(self, tmp_path, monkeypatch):
         """template list prints a friendly message when empty."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         result = runner.invoke(app, ["template", "list"])
         assert result.exit_code == 0
         assert "No templates found" in result.output
 
     def test_template_list_with_items(self, tmp_path, monkeypatch):
         """template list renders a table of templates."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         market.publish_template(
             Template(template_id="", name="T1", category="logo", data={}),
@@ -234,9 +218,7 @@ class TestTemplateCLI:
 
     def test_template_recommend(self, tmp_path, monkeypatch):
         """template recommend renders recommendations."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         market.publish_template(
             Template(template_id="", name="Rec", category="logo", tags=["logo"], data={}),
@@ -248,9 +230,7 @@ class TestTemplateCLI:
 
     def test_template_publish(self, tmp_path, monkeypatch):
         """template publish uploads a template JSON file."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         template_file = tmp_path / "my_template.json"
         template_file.write_text(
             json.dumps(
@@ -270,9 +250,7 @@ class TestTemplateCLI:
 
     def test_template_publish_invalid_json(self, tmp_path, monkeypatch):
         """template publish exits with code 1 for invalid JSON."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         bad_file = tmp_path / "bad.json"
         bad_file.write_text("not json", encoding="utf-8")
         result = runner.invoke(app, ["template", "publish", str(bad_file)])
@@ -281,9 +259,7 @@ class TestTemplateCLI:
 
     def test_template_apply(self, tmp_path, monkeypatch):
         """template apply invokes trace_image and prints success."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         img = tmp_path / "img.png"
         img.write_bytes(b"fake image")
         out = tmp_path / "out.svg"

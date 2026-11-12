@@ -49,6 +49,7 @@ class TestLocalStorage:
     def test_list_files_returns_entries(self, tmp_path: Path):
         """list_files must return all files under the prefix."""
         import os
+
         storage = LocalStorage(tmp_path / "local")
         (tmp_path / "local" / "a" / "b").mkdir(parents=True)
         (tmp_path / "local" / "a" / "file1.txt").write_text("1")
@@ -152,9 +153,7 @@ class TestCloudStorageFallbacks:
 
     def test_cos_fallback_without_qcloud_cos(self, tmp_path: Path):
         """COSStorage must fall back to local storage when qcloud_cos is missing."""
-        config = StorageConfig(
-            provider="cos", bucket="my-bucket", region="ap-guangzhou"
-        )
+        config = StorageConfig(provider="cos", bucket="my-bucket", region="ap-guangzhou")
         storage = COSStorage(config)
         source = tmp_path / "file.txt"
         source.write_text("cos-fallback")

@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 _STYLE_PALETTES: dict[str, list[tuple[int, int, int]]] = {
     "flat": [
-        (255, 99, 71),   # tomato
+        (255, 99, 71),  # tomato
         (60, 179, 113),  # medium sea green
         (30, 144, 255),  # dodger blue
-        (255, 215, 0),   # gold
-        (238, 130, 238), # violet
+        (255, 215, 0),  # gold
+        (238, 130, 238),  # violet
     ],
     "line": [
         (0, 0, 0),
@@ -30,18 +30,18 @@ _STYLE_PALETTES: dict[str, list[tuple[int, int, int]]] = {
         (255, 255, 255),
     ],
     "gradient": [
-        (25, 25, 112),   # midnight blue
+        (25, 25, 112),  # midnight blue
         (70, 130, 180),  # steel blue
-        (135, 206, 250), # light sky blue
-        (255, 255, 224), # light yellow
-        (255, 165, 0),   # orange
+        (135, 206, 250),  # light sky blue
+        (255, 255, 224),  # light yellow
+        (255, 165, 0),  # orange
     ],
     "3d": [
-        (139, 69, 19),   # saddle brown
+        (139, 69, 19),  # saddle brown
         (205, 133, 63),  # peru
-        (222, 184, 135), # burlywood
-        (245, 222, 179), # wheat
-        (255, 250, 240), # floral white
+        (222, 184, 135),  # burlywood
+        (245, 222, 179),  # wheat
+        (255, 250, 240),  # floral white
     ],
     "sketch": [
         (40, 40, 40),
@@ -71,11 +71,11 @@ _STYLE_PALETTES: dict[str, list[tuple[int, int, int]]] = {
         (0, 255, 255),
     ],
     "watercolor": [
-        (176, 224, 230), # powder blue
-        (255, 228, 196), # bisque
-        (221, 160, 221), # plum
-        (152, 251, 152), # pale green
-        (255, 182, 193), # light pink
+        (176, 224, 230),  # powder blue
+        (255, 228, 196),  # bisque
+        (221, 160, 221),  # plum
+        (152, 251, 152),  # pale green
+        (255, 182, 193),  # light pink
     ],
 }
 
@@ -87,6 +87,7 @@ _ILLUSTRATION_SIZE = (512, 512)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _prompt_seed(prompt: str) -> int:
     """Deterministic integer seed from *prompt*."""
@@ -103,7 +104,9 @@ def _quantize_to_palette(image: Image.Image, palette: list[tuple[int, int, int]]
     arr = np.array(image.convert("RGB"), dtype=np.float32)
     palette_arr = np.array(palette, dtype=np.float32)
     # Compute distance to each palette color
-    distances = np.linalg.norm(arr[:, :, np.newaxis, :] - palette_arr[np.newaxis, np.newaxis, :, :], axis=3)
+    distances = np.linalg.norm(
+        arr[:, :, np.newaxis, :] - palette_arr[np.newaxis, np.newaxis, :, :], axis=3
+    )
     nearest = np.argmin(distances, axis=2)
     quantized = palette_arr[nearest].astype(np.uint8)
     return Image.fromarray(quantized)
@@ -127,6 +130,7 @@ def _color_transfer(source: Image.Image, target: Image.Image) -> Image.Image:
 # VectorDiffusion
 # ---------------------------------------------------------------------------
 
+
 class VectorDiffusion:
     """Simplified diffusion process using only Pillow and NumPy.
 
@@ -146,7 +150,9 @@ class VectorDiffusion:
         """
         self.models_dir = models_dir
 
-    def diffuse(self, prompt: str, steps: int = 20, size: tuple[int, int] = (512, 512)) -> Image.Image:
+    def diffuse(
+        self, prompt: str, steps: int = 20, size: tuple[int, int] = (512, 512)
+    ) -> Image.Image:
         """Generate an image from *prompt* via simulated diffusion.
 
         The process:
@@ -208,17 +214,19 @@ class VectorDiffusion:
         perturbed: list[tuple[int, int, int]] = []
         for r, g, b in palette:
             dr, dg, db = rng.integers(-20, 21, size=3)
-            perturbed.append((
-                int(np.clip(r + dr, 0, 255)),
-                int(np.clip(g + dg, 0, 255)),
-                int(np.clip(b + db, 0, 255)),
-            ))
+            perturbed.append(
+                (
+                    int(np.clip(r + dr, 0, 255)),
+                    int(np.clip(g + dg, 0, 255)),
+                    int(np.clip(b + db, 0, 255)),
+                )
+            )
         return perturbed
 
     @staticmethod
     def _smooth_field(field: np.ndarray) -> np.ndarray:
         """Apply a lightweight 3x3 average smooth using pure NumPy."""
-        kernel = np.ones((3, 3), dtype=np.float32) / 9.0
+        _kernel = np.ones((3, 3), dtype=np.float32) / 9.0
         smoothed = np.empty_like(field)
         for c in range(field.shape[2]):
             channel = field[:, :, c]
@@ -226,9 +234,15 @@ class VectorDiffusion:
             padded = np.pad(channel, pad_width=1, mode="edge")
             # Simple 2D convolution via slicing
             conv = (
-                padded[0:-2, 0:-2] + padded[0:-2, 1:-1] + padded[0:-2, 2:] +
-                padded[1:-1, 0:-2] + padded[1:-1, 1:-1] + padded[1:-1, 2:] +
-                padded[2:, 0:-2] + padded[2:, 1:-1] + padded[2:, 2:]
+                padded[0:-2, 0:-2]
+                + padded[0:-2, 1:-1]
+                + padded[0:-2, 2:]
+                + padded[1:-1, 0:-2]
+                + padded[1:-1, 1:-1]
+                + padded[1:-1, 2:]
+                + padded[2:, 0:-2]
+                + padded[2:, 1:-1]
+                + padded[2:, 2:]
             ) / 9.0
             smoothed[:, :, c] = conv
         return smoothed
@@ -237,7 +251,9 @@ class VectorDiffusion:
     def _guide_to_palette(field: np.ndarray, palette: np.ndarray, strength: float) -> np.ndarray:
         """Nudge each pixel toward its nearest palette color."""
         # field: HxWx3, palette: Nx3
-        distances = np.linalg.norm(field[:, :, np.newaxis, :] - palette[np.newaxis, np.newaxis, :, :], axis=3)
+        distances = np.linalg.norm(
+            field[:, :, np.newaxis, :] - palette[np.newaxis, np.newaxis, :, :], axis=3
+        )
         nearest = palette[np.argmin(distances, axis=2)]
         return field * (1 - strength) + nearest * strength
 
@@ -245,6 +261,7 @@ class VectorDiffusion:
 # ---------------------------------------------------------------------------
 # StyleEncoder
 # ---------------------------------------------------------------------------
+
 
 class StyleEncoder:
     """Extract and apply style feature vectors using purely NumPy/Pillow."""
@@ -363,6 +380,7 @@ class StyleEncoder:
 # VectorGenerator
 # ---------------------------------------------------------------------------
 
+
 class VectorGenerator:
     """AI generative vector-style image creation without PyTorch/TensorFlow.
 
@@ -471,7 +489,9 @@ class VectorGenerator:
         """
         valid = {"flat", "minimal", "line", "gradient"}
         if style not in valid:
-            raise ValueError(f"Unknown icon style '{style}'. Available: {', '.join(sorted(valid))}.")
+            raise ValueError(
+                f"Unknown icon style '{style}'. Available: {', '.join(sorted(valid))}."
+            )
 
         base = self.diffusion.diffuse(prompt, steps=16, size=(_ICON_SIZE, _ICON_SIZE))
         processed = self._apply_style_postprocess(base, style)
@@ -479,12 +499,14 @@ class VectorGenerator:
         # Center-crop to square if somehow not square
         if processed.size[0] != processed.size[1]:
             min_side = min(processed.size)
-            processed = processed.crop((
-                (processed.width - min_side) // 2,
-                (processed.height - min_side) // 2,
-                (processed.width + min_side) // 2,
-                (processed.height + min_side) // 2,
-            ))
+            processed = processed.crop(
+                (
+                    (processed.width - min_side) // 2,
+                    (processed.height - min_side) // 2,
+                    (processed.width + min_side) // 2,
+                    (processed.height + min_side) // 2,
+                )
+            )
         return processed.resize((_ICON_SIZE, _ICON_SIZE), Image.Resampling.LANCZOS)
 
     def generate_logo(self, prompt: str, style: str = "minimal") -> Image.Image:
@@ -504,7 +526,9 @@ class VectorGenerator:
         """
         valid = {"minimal", "modern", "flat"}
         if style not in valid:
-            raise ValueError(f"Unknown logo style '{style}'. Available: {', '.join(sorted(valid))}.")
+            raise ValueError(
+                f"Unknown logo style '{style}'. Available: {', '.join(sorted(valid))}."
+            )
 
         base = self.diffusion.diffuse(prompt, steps=18, size=_LOGO_SIZE)
         processed = self._apply_style_postprocess(base, style)
@@ -533,7 +557,9 @@ class VectorGenerator:
         """
         valid = {"cartoon", "watercolor", "sketch"}
         if style not in valid:
-            raise ValueError(f"Unknown illustration style '{style}'. Available: {', '.join(sorted(valid))}.")
+            raise ValueError(
+                f"Unknown illustration style '{style}'. Available: {', '.join(sorted(valid))}."
+            )
 
         base = self.diffusion.diffuse(prompt, steps=22, size=_ILLUSTRATION_SIZE)
         processed = self._apply_style_postprocess(base, style)
@@ -610,6 +636,7 @@ class VectorGenerator:
 # ---------------------------------------------------------------------------
 # Optional: unified entry point (mirrors AIProcessor pattern)
 # ---------------------------------------------------------------------------
+
 
 class AIGenerationProcessor:
     """Unified entry point for generative AI tasks."""

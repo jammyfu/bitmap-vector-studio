@@ -11,10 +11,20 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+    from fastapi import (
+        BackgroundTasks,
+        FastAPI,
+        File as File,
+        Form,
+        HTTPException,
+        UploadFile,
+        WebSocket,
+        WebSocketDisconnect,
+    )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse as JSONResponse
     from pydantic import BaseModel
+
     _HAS_FASTAPI = True
 except ImportError as exc:
     raise RuntimeError(
@@ -22,11 +32,19 @@ except ImportError as exc:
         "'pip install bitmap-vector-studio[api]'"
     ) from exc
 
+from .health_check import (
+    HealthChecker,
+    check_disk_space,
+    check_memory,
+    check_python_deps,
+    check_vtracer,
+)
+from .metrics import get_metrics
 from . import __version__
 from .cloud_sync import CloudSyncManager, LocalServerBackend
 from .collaboration import (
-    CollabManager,
-    CollabRoom,
+    CollabManager as CollabManager,
+    CollabRoom as CollabRoom,
     Operation,
     get_collab_manager,
 )
@@ -114,9 +132,6 @@ def _cleanup_api_temp() -> None:
         _share_manager = None
 
 
-from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
-from .metrics import get_metrics
-
 # 初始化健康检查器
 _health_checker = HealthChecker()
 _health_checker.register("disk", lambda: check_disk_space())
@@ -128,6 +143,7 @@ _health_checker.register("vtracer", lambda: check_vtracer())
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class ConvertAsyncResponse(BaseModel):
     task_id: str
@@ -198,6 +214,7 @@ class ShareQrResponse(BaseModel):
 # Collaboration Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class RoomCreateResponse(BaseModel):
     room_id: str
     owner: str
@@ -246,6 +263,7 @@ class RoomListResponse(BaseModel):
 # Render farm Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class FarmTaskSubmitResponse(BaseModel):
     task_id: str
     status: str
@@ -291,6 +309,7 @@ class FarmHeartbeatResponse(BaseModel):
 # Webhook Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class WebhookRegisterRequest(BaseModel):
     url: str
     channel: str = "webhook"
@@ -313,6 +332,7 @@ class WebhookListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Search Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class SearchHistoryResponse(BaseModel):
     results: list[dict[str, Any]]
@@ -341,6 +361,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_options(options: str) -> dict[str, Any]:
     """Parse the *options* JSON string into a dictionary."""
@@ -399,6 +420,7 @@ def _run_sync_conversion(
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post(
     "/convert",
@@ -665,6 +687,7 @@ async def liveness_check():
 # Share endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.post(
     "/share",
     response_model=ShareResponse,
@@ -770,6 +793,7 @@ async def get_share_qr(share_id: str):
 # Collaboration endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.websocket("/ws/collab/{room_id}")
 async def collab_websocket(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for real-time collaboration in a room.
@@ -798,12 +822,14 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
                     await websocket.close()
                     return
                 await manager.join_room(room_id, client_id, websocket)
-                await websocket.send_json({
-                    "event": "joined",
-                    "room_id": room_id,
-                    "client_id": client_id,
-                    "state": room.get_state_snapshot(),
-                })
+                await websocket.send_json(
+                    {
+                        "event": "joined",
+                        "room_id": room_id,
+                        "client_id": client_id,
+                        "state": room.get_state_snapshot(),
+                    }
+                )
 
             elif event == "operation":
                 if client_id is None:
@@ -834,7 +860,7 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
     except WebSocketDisconnect:
         if client_id:
             await manager.leave_room(room_id, client_id)
-    except Exception as exc:  # pragma: no cover
+    except Exception:  # pragma: no cover
         if client_id:
             await manager.leave_room(room_id, client_id)
         raise
@@ -929,6 +955,7 @@ async def list_rooms():
 # ---------------------------------------------------------------------------
 # Render farm endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post("/farm/submit", response_model=FarmTaskSubmitResponse)
 async def submit_farm_task(
@@ -1026,6 +1053,7 @@ async def get_farm_status():
 # Webhook endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.post("/webhooks", response_model=WebhookRegisterResponse)
 async def register_webhook(request: WebhookRegisterRequest):
     """Register a new webhook notification."""
@@ -1070,6 +1098,7 @@ async def list_webhooks():
 # ---------------------------------------------------------------------------
 # Search endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.get("/search/history", response_model=SearchHistoryResponse)
 async def search_history(

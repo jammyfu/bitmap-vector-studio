@@ -1,8 +1,8 @@
-import json
+import json as json
 import time
-from pathlib import Path
+from pathlib import Path as Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.cache_manager import CacheManager, DiskCache, LRUCache
 

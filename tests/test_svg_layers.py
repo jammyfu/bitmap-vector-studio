@@ -78,7 +78,7 @@ def test_analyze_svg_structure_layer_details(tmp_path: Path):
     assert layers[0]["type"] == "g"
     assert layers[0]["path_count"] == 2
     # Find the rect layer
-    rect_layer = next(l for l in layers if l["type"] == "rect")
+    rect_layer = next(layer for layer in layers if layer["type"] == "rect")
     assert rect_layer["fill"] == "#ff0000"
     assert rect_layer["bbox"] == [50.0, 50.0, 10.0, 10.0]
 
@@ -103,7 +103,10 @@ def test_extract_color_palette_counts_and_sorting(tmp_path: Path):
 def test_suggest_optimization_large_file(tmp_path: Path):
     svg = tmp_path / "big.svg"
     # Create a large SVG with many paths to exceed 100 KB
-    paths = "\n".join(f'<path d="M{i} 0 L{i+1} 1 C{i+2} 2 {i+3} 3 {i+4} 4 Z" fill="#ff0000" stroke="#000000" stroke-width="2"/>' for i in range(1200))
+    paths = "\n".join(
+        f'<path d="M{i} 0 L{i + 1} 1 C{i + 2} 2 {i + 3} 3 {i + 4} 4 Z" fill="#ff0000" stroke="#000000" stroke-width="2"/>'
+        for i in range(1200)
+    )
     content = f'<svg viewBox="0 0 100 100">{paths}</svg>'
     svg.write_text(content, encoding="utf-8")
     suggestions = suggest_optimization(svg)
@@ -113,7 +116,7 @@ def test_suggest_optimization_large_file(tmp_path: Path):
 
 def test_suggest_optimization_single_path_layers(tmp_path: Path):
     svg = tmp_path / "layers.svg"
-    groups = "\n".join(f'<g><path d="M{i} 0 L{i+1} 1" fill="#ff0000"/></g>' for i in range(10))
+    groups = "\n".join(f'<g><path d="M{i} 0 L{i + 1} 1" fill="#ff0000"/></g>' for i in range(10))
     content = f'<svg viewBox="0 0 100 100">{groups}</svg>'
     svg.write_text(content, encoding="utf-8")
     suggestions = suggest_optimization(svg)

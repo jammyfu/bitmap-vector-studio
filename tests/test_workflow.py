@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
+import json as json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 
-from vector_studio.models import TraceOptions, TraceResult
+from vector_studio.models import TraceOptions as TraceOptions, TraceResult
 from vector_studio.workflow import (
     NodeType,
     Workflow,
@@ -95,7 +95,9 @@ class TestWorkflowValidation:
         wf = Workflow(
             nodes={
                 "input": WorkflowNode(id="input", type=NodeType.INPUT.value),
-                "convert": WorkflowNode(id="convert", type=NodeType.CONVERT.value, inputs=["input"]),
+                "convert": WorkflowNode(
+                    id="convert", type=NodeType.CONVERT.value, inputs=["input"]
+                ),
                 "export": WorkflowNode(id="export", type=NodeType.EXPORT.value, inputs=["convert"]),
             },
             edges=[("input", "convert"), ("convert", "export")],
@@ -124,7 +126,9 @@ class TestWorkflowSerialization:
         wf = Workflow(
             nodes={
                 "input": WorkflowNode(id="input", type=NodeType.INPUT.value, position=(0, 0)),
-                "convert": WorkflowNode(id="convert", type=NodeType.CONVERT.value, inputs=["input"], position=(100, 0)),
+                "convert": WorkflowNode(
+                    id="convert", type=NodeType.CONVERT.value, inputs=["input"], position=(100, 0)
+                ),
             },
             edges=[("input", "convert")],
             name="test",
@@ -164,7 +168,9 @@ class TestWorkflowExecution:
         wf = Workflow(
             nodes={
                 "input": WorkflowNode(id="input", type=NodeType.INPUT.value),
-                "convert": WorkflowNode(id="convert", type=NodeType.CONVERT.value, inputs=["input"]),
+                "convert": WorkflowNode(
+                    id="convert", type=NodeType.CONVERT.value, inputs=["input"]
+                ),
             },
             edges=[("input", "convert")],
         )
@@ -263,7 +269,11 @@ class TestWorkflowCondition:
                     id="cond",
                     type=NodeType.CONDITION.value,
                     inputs=["input"],
-                    config={"expression": "true", "true_branch": "convert", "false_branch": "export"},
+                    config={
+                        "expression": "true",
+                        "true_branch": "convert",
+                        "false_branch": "export",
+                    },
                 ),
                 "convert": WorkflowNode(id="convert", type=NodeType.CONVERT.value, inputs=["cond"]),
                 "export": WorkflowNode(id="export", type=NodeType.EXPORT.value, inputs=["cond"]),

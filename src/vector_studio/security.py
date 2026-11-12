@@ -13,12 +13,12 @@ from typing import Any
 
 # 允许的图片格式
 ALLOWED_IMAGE_TYPES = {
-    'image/png': ['.png'],
-    'image/jpeg': ['.jpg', '.jpeg'],
-    'image/bmp': ['.bmp'],
-    'image/tiff': ['.tiff', '.tif'],
-    'image/webp': ['.webp'],
-    'image/gif': ['.gif'],
+    "image/png": [".png"],
+    "image/jpeg": [".jpg", ".jpeg"],
+    "image/bmp": [".bmp"],
+    "image/tiff": [".tiff", ".tif"],
+    "image/webp": [".webp"],
+    "image/gif": [".gif"],
 }
 
 # 允许的文件扩展名
@@ -29,19 +29,37 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
 
 # 危险SVG标签和属性
 DANGEROUS_SVG_TAGS = {
-    'script', 'foreignObject', 'iframe', 'embed', 'object',
-    'audio', 'video', 'source', 'track', 'canvas',
+    "script",
+    "foreignObject",
+    "iframe",
+    "embed",
+    "object",
+    "audio",
+    "video",
+    "source",
+    "track",
+    "canvas",
 }
 
 DANGEROUS_SVG_ATTRS = {
-    'onload', 'onerror', 'onclick', 'onmouseover',
-    'onfocus', 'onblur', 'onchange', 'onsubmit',
-    'xlink:href', 'href', 'src', 'data',
+    "onload",
+    "onerror",
+    "onclick",
+    "onmouseover",
+    "onfocus",
+    "onblur",
+    "onchange",
+    "onsubmit",
+    "xlink:href",
+    "href",
+    "src",
+    "data",
 }
 
 
 class SecurityError(Exception):
     """安全错误."""
+
     pass
 
 
@@ -49,7 +67,12 @@ class InputValidator:
     """输入验证器."""
 
     @staticmethod
-    def validate_file_path(path: str | Path, must_exist: bool = True, allow_write: bool = False, base_dir: Path | None = None) -> Path:
+    def validate_file_path(
+        path: str | Path,
+        must_exist: bool = True,
+        allow_write: bool = False,
+        base_dir: Path | None = None,
+    ) -> Path:
         """验证文件路径安全.
 
         防护:
@@ -63,6 +86,13 @@ class InputValidator:
         if ".." in path.parts:
             raise SecurityError(f"路径包含非法遍历: {path}")
 
+        # resolve() follows links, so inspect the original path and its parents
+        # first. Checking only the resolved leaf misses both direct links and
+        # directory links, including dangling links used for output paths.
+        for component in (path, *path.parents):
+            if component.is_symlink():
+                raise SecurityError(f"不允许符号链接: {component}")
+
         path = path.resolve()
 
         # 如果指定了基础目录，检查是否在其范围内
@@ -72,10 +102,6 @@ class InputValidator:
             except ValueError:
                 if not allow_write:
                     raise SecurityError(f"路径不在允许范围内: {path}")
-
-        # 检查符号链接
-        if path.is_symlink():
-            raise SecurityError(f"不允许符号链接: {path}")
 
         if must_exist and not path.exists():
             raise SecurityError(f"文件不存在: {path}")
@@ -91,7 +117,9 @@ class InputValidator:
         # 检查大小
         size = path.stat().st_size
         if size > MAX_FILE_SIZE:
-            raise SecurityError(f"文件过大: {size / 1024 / 1024:.1f}MB > {MAX_FILE_SIZE / 1024 / 1024}MB")
+            raise SecurityError(
+                f"文件过大: {size / 1024 / 1024:.1f}MB > {MAX_FILE_SIZE / 1024 / 1024}MB"
+            )
 
         # 检查扩展名
         ext = path.suffix.lower()
@@ -109,7 +137,7 @@ class InputValidator:
 
         只允许字母、数字、下划线、连字符.
         """
-        if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", name):
             raise SecurityError(f"非法预设名称: {name}")
         return name
 
@@ -122,36 +150,36 @@ class InputValidator:
         validated = {}
 
         # color_precision: 1-8
-        cp = options.get('color_precision')
+        cp = options.get("color_precision")
         if cp is not None:
             cp = int(cp)
             if not 1 <= cp <= 8:
                 raise SecurityError(f"color_precision 超出范围: {cp}")
-            validated['color_precision'] = cp
+            validated["color_precision"] = cp
 
         # filter_speckle: 0-128
-        fs = options.get('filter_speckle')
+        fs = options.get("filter_speckle")
         if fs is not None:
             fs = int(fs)
             if not 0 <= fs <= 128:
                 raise SecurityError(f"filter_speckle 超出范围: {fs}")
-            validated['filter_speckle'] = fs
+            validated["filter_speckle"] = fs
 
         # max_iterations: 1-50
-        mi = options.get('max_iterations')
+        mi = options.get("max_iterations")
         if mi is not None:
             mi = int(mi)
             if not 1 <= mi <= 50:
                 raise SecurityError(f"max_iterations 超出范围: {mi}")
-            validated['max_iterations'] = mi
+            validated["max_iterations"] = mi
 
         # max_input_side: >=64
-        mis = options.get('max_input_side')
+        mis = options.get("max_input_side")
         if mis is not None:
             mis = int(mis)
             if mis < 64:
                 raise SecurityError(f"max_input_side 过小: {mis}")
-            validated['max_input_side'] = mis
+            validated["max_input_side"] = mis
 
         return validated
 
@@ -180,25 +208,26 @@ class SVGSanitizer:
         # 第二遍：彻底移除危险标签
         for parent in root.iter():
             for child in list(parent):
-                if child.tag in DANGEROUS_SVG_TAGS or \
-                   (isinstance(child.tag, str) and child.tag.endswith('}script')):
+                if child.tag in DANGEROUS_SVG_TAGS or (
+                    isinstance(child.tag, str) and child.tag.endswith("}script")
+                ):
                     parent.remove(child)
 
-        return ET.tostring(root, encoding='unicode')
+        return ET.tostring(root, encoding="unicode")
 
     @staticmethod
     def _clean_element(element):
         """递归清理元素."""
         # 移除危险标签
-        if element.tag in DANGEROUS_SVG_TAGS or \
-           (isinstance(element.tag, str) and element.tag.endswith('}script')):
+        if element.tag in DANGEROUS_SVG_TAGS or (
+            isinstance(element.tag, str) and element.tag.endswith("}script")
+        ):
             element.clear()
             return
 
         # 移除危险属性
         dangerous_attrs = [
-            attr for attr in element.attrib
-            if any(d in attr.lower() for d in DANGEROUS_SVG_ATTRS)
+            attr for attr in element.attrib if any(d in attr.lower() for d in DANGEROUS_SVG_ATTRS)
         ]
         for attr in dangerous_attrs:
             del element.attrib[attr]
@@ -221,8 +250,8 @@ class FileHashChecker:
     def compute_hash(path: Path) -> str:
         """计算文件SHA256哈希."""
         h = hashlib.sha256()
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 h.update(chunk)
         return h.hexdigest()
 

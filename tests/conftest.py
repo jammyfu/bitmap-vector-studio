@@ -1,4 +1,5 @@
 import pytest
+from vector_studio.models import TraceResult
 from pathlib import Path
 from PIL import Image
 from vector_studio.models import TraceOptions
@@ -54,10 +55,10 @@ def sample_svg_complex(tmp_path: Path) -> Path:
         '<path d="M0 0 L100 100" fill="#ff0000"/>'
         '<path d="M10 10 L90 90" fill="#ff0000"/>'
         '<rect x="50" y="50" width="20" height="20" fill="#00ff00"/>'
-        '</g>'
+        "</g>"
         '<circle cx="100" cy="100" r="30" fill="#0000ff"/>'
         '<polygon points="0,0 50,0 25,50" fill="#ffff00"/>'
-        '</svg>',
+        "</svg>",
         encoding="utf-8",
     )
     return svg_path
@@ -81,6 +82,7 @@ def sample_image_corrupt(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_vtracer():
     from unittest.mock import MagicMock
+
     fake = MagicMock()
     fake.convert_image_to_svg_py = MagicMock()
     return fake
@@ -89,14 +91,16 @@ def mock_vtracer():
 @pytest.fixture
 def mock_potrace():
     from unittest.mock import MagicMock
+
     fake = MagicMock()
-    fake.trace = MagicMock(return_value="<svg><path d=\"M0 0\"/></svg>")
+    fake.trace = MagicMock(return_value='<svg><path d="M0 0"/></svg>')
     return fake
 
 
 @pytest.fixture
 def mock_external_editor(tmp_path: Path):
     from unittest.mock import MagicMock
+
     editor = MagicMock()
     editor.name = "mock_editor"
     editor.executable_path = tmp_path / "mock_editor.exe"
@@ -104,7 +108,6 @@ def mock_external_editor(tmp_path: Path):
     editor.is_available = True
     editor.platform = "windows"
     return editor
-
 
 
 @pytest.fixture
@@ -138,6 +141,7 @@ def sample_image_very_small(tmp_path: Path) -> Path:
 def sample_config_path(tmp_path: Path) -> Path:
     """A valid config file path with logo preset."""
     from vector_studio.config import Config
+
     cfg = Config(default_preset="logo", export_pdf=True)
     path = tmp_path / "config.json"
     cfg.save(path)
@@ -148,6 +152,7 @@ def sample_config_path(tmp_path: Path) -> Path:
 def mock_trace_result(tmp_path: Path) -> "TraceResult":
     """A reusable mock TraceResult pointing into tmp_path."""
     from vector_studio.models import TraceResult
+
     svg = tmp_path / "out.svg"
     svg.write_text("<svg></svg>")
     return TraceResult(
@@ -163,11 +168,21 @@ def mock_trace_result(tmp_path: Path) -> "TraceResult":
 def mock_engine_registry():
     """Patch EngineRegistry to return a single mock engine."""
     from unittest.mock import MagicMock, patch
+
     mock_engine = MagicMock()
     mock_engine.is_available.return_value = True
     mock_engine.get_info.return_value = {"name": "vtracer", "version": "1.0", "available": True}
     with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
-        with patch("vector_studio.engines.EngineRegistry.list_engines", return_value=[
-            {"name": "vtracer", "version": "1.0", "available": True, "supported_formats": [".png"], "supported_outputs": [".svg"]},
-        ]):
+        with patch(
+            "vector_studio.engines.EngineRegistry.list_engines",
+            return_value=[
+                {
+                    "name": "vtracer",
+                    "version": "1.0",
+                    "available": True,
+                    "supported_formats": [".png"],
+                    "supported_outputs": [".svg"],
+                },
+            ],
+        ):
             yield mock_engine

@@ -36,6 +36,7 @@ def _has_yaml() -> bool:
     """Return ``True`` if the ``yaml`` module is installed."""
     try:
         import yaml  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -227,5 +228,7 @@ class Config:
         if self.max_workers < 1:
             errors.append(f"max_workers must be >= 1. Got: {self.max_workers}")
         if self.default_output_dir is not None and not isinstance(self.default_output_dir, Path):
-            errors.append(f"default_output_dir must be a Path or None. Got: {type(self.default_output_dir)}")
+            errors.append(
+                f"default_output_dir must be a Path or None. Got: {type(self.default_output_dir)}"
+            )
         return errors

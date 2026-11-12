@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import threading
-import time
-from unittest.mock import patch
+import time as time
+from unittest.mock import patch as patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.metrics import ConversionMetrics, MetricsCollector, get_metrics
 

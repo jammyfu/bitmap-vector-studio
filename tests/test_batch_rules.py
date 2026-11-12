@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.batch_rules import Rule, RuleEngine
 
@@ -12,7 +12,12 @@ class TestRuleEngine:
     def test_add_rule_and_list_rules(self):
         """add_rule must append rules and list_rules must return them."""
         engine = RuleEngine()
-        rule = Rule(name="png-to-svg", condition="suffix == '.png'", action="copy", action_params={"dest": "/tmp"})
+        rule = Rule(
+            name="png-to-svg",
+            condition="suffix == '.png'",
+            action="copy",
+            action_params={"dest": "/tmp"},
+        )
         engine.add_rule(rule)
         rules = engine.list_rules()
         assert len(rules) == 1
@@ -21,7 +26,14 @@ class TestRuleEngine:
     def test_remove_rule(self):
         """remove_rule must delete a rule by name and return True if found."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="r1", condition="suffix == '.png'", action="copy", action_params={"dest": "/tmp"}))
+        engine.add_rule(
+            Rule(
+                name="r1",
+                condition="suffix == '.png'",
+                action="copy",
+                action_params={"dest": "/tmp"},
+            )
+        )
         assert engine.remove_rule("r1") is True
         assert engine.list_rules() == []
         assert engine.remove_rule("r1") is False
@@ -29,8 +41,24 @@ class TestRuleEngine:
     def test_priority_ordering(self):
         """Rules must be evaluated in descending priority order."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="low", condition="suffix == '.png'", action="copy", action_params={"dest": "/tmp"}, priority=1))
-        engine.add_rule(Rule(name="high", condition="suffix == '.png'", action="move", action_params={"dest": "/tmp"}, priority=10))
+        engine.add_rule(
+            Rule(
+                name="low",
+                condition="suffix == '.png'",
+                action="copy",
+                action_params={"dest": "/tmp"},
+                priority=1,
+            )
+        )
+        engine.add_rule(
+            Rule(
+                name="high",
+                condition="suffix == '.png'",
+                action="move",
+                action_params={"dest": "/tmp"},
+                priority=10,
+            )
+        )
         rules = engine.list_rules()
         assert rules[0].name == "high"
         assert rules[1].name == "low"
@@ -38,7 +66,15 @@ class TestRuleEngine:
     def test_disabled_rule_is_skipped(self, tmp_path: Path):
         """Disabled rules must not be evaluated."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="disabled", condition="suffix == '.png'", action="copy", action_params={"dest": str(tmp_path)}, enabled=False))
+        engine.add_rule(
+            Rule(
+                name="disabled",
+                condition="suffix == '.png'",
+                action="copy",
+                action_params={"dest": str(tmp_path)},
+                enabled=False,
+            )
+        )
         file = tmp_path / "test.png"
         file.write_text("x")
         results = engine.evaluate(file)
@@ -47,7 +83,14 @@ class TestRuleEngine:
     def test_evaluate_suffix_equality(self, tmp_path: Path):
         """evaluate must match suffix == '.png' correctly."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="match-png", condition="suffix == '.png'", action="copy", action_params={"dest": str(tmp_path / "out")}))
+        engine.add_rule(
+            Rule(
+                name="match-png",
+                condition="suffix == '.png'",
+                action="copy",
+                action_params={"dest": str(tmp_path / "out")},
+            )
+        )
         file = tmp_path / "test.png"
         file.write_text("x")
         results = engine.evaluate(file)
@@ -58,7 +101,14 @@ class TestRuleEngine:
     def test_evaluate_size_greater_than(self, tmp_path: Path):
         """evaluate must match size > N correctly."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="big-files", condition="size > 5", action="copy", action_params={"dest": str(tmp_path / "out")}))
+        engine.add_rule(
+            Rule(
+                name="big-files",
+                condition="size > 5",
+                action="copy",
+                action_params={"dest": str(tmp_path / "out")},
+            )
+        )
         small = tmp_path / "small.txt"
         small.write_text("hi")
         big = tmp_path / "big.txt"
@@ -71,7 +121,14 @@ class TestRuleEngine:
     def test_evaluate_name_contains(self, tmp_path: Path):
         """evaluate must match name contains 'logo' correctly."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="logo-rule", condition="name contains 'logo'", action="copy", action_params={"dest": str(tmp_path / "out")}))
+        engine.add_rule(
+            Rule(
+                name="logo-rule",
+                condition="name contains 'logo'",
+                action="copy",
+                action_params={"dest": str(tmp_path / "out")},
+            )
+        )
         logo = tmp_path / "my_logo.png"
         logo.write_text("x")
         other = tmp_path / "other.png"
@@ -82,7 +139,14 @@ class TestRuleEngine:
     def test_evaluate_suffix_in_list(self, tmp_path: Path):
         """evaluate must match suffix in ['.png', '.jpg'] correctly."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="images", condition="suffix in ['.png', '.jpg']", action="copy", action_params={"dest": str(tmp_path / "out")}))
+        engine.add_rule(
+            Rule(
+                name="images",
+                condition="suffix in ['.png', '.jpg']",
+                action="copy",
+                action_params={"dest": str(tmp_path / "out")},
+            )
+        )
         png = tmp_path / "img.png"
         png.write_text("x")
         gif = tmp_path / "anim.gif"
@@ -93,7 +157,9 @@ class TestRuleEngine:
     def test_evaluate_unknown_action(self, tmp_path: Path):
         """evaluate must report failure for unknown actions."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="bad", condition="suffix == '.png'", action="fly", action_params={}))
+        engine.add_rule(
+            Rule(name="bad", condition="suffix == '.png'", action="fly", action_params={})
+        )
         file = tmp_path / "test.png"
         file.write_text("x")
         results = engine.evaluate(file)
@@ -106,7 +172,14 @@ class TestRuleEngine:
         engine = RuleEngine()
         dest = tmp_path / "dest"
         dest.mkdir()
-        engine.add_rule(Rule(name="copy-rule", condition="suffix == '.txt'", action="copy", action_params={"dest": str(dest)}))
+        engine.add_rule(
+            Rule(
+                name="copy-rule",
+                condition="suffix == '.txt'",
+                action="copy",
+                action_params={"dest": str(dest)},
+            )
+        )
         source = tmp_path / "source.txt"
         source.write_text("copy me")
         engine.evaluate(source)
@@ -118,7 +191,14 @@ class TestRuleEngine:
         engine = RuleEngine()
         dest = tmp_path / "dest"
         dest.mkdir()
-        engine.add_rule(Rule(name="move-rule", condition="suffix == '.txt'", action="move", action_params={"dest": str(dest)}))
+        engine.add_rule(
+            Rule(
+                name="move-rule",
+                condition="suffix == '.txt'",
+                action="move",
+                action_params={"dest": str(dest)},
+            )
+        )
         source = tmp_path / "source.txt"
         source.write_text("move me")
         engine.evaluate(source)
@@ -128,7 +208,14 @@ class TestRuleEngine:
     def test_action_rename(self, tmp_path: Path):
         """rename action must rename the file according to the pattern."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="rename-rule", condition="suffix == '.txt'", action="rename", action_params={"pattern": "{stem}_renamed{suffix}"}))
+        engine.add_rule(
+            Rule(
+                name="rename-rule",
+                condition="suffix == '.txt'",
+                action="rename",
+                action_params={"pattern": "{stem}_renamed{suffix}"},
+            )
+        )
         source = tmp_path / "source.txt"
         source.write_text("rename me")
         engine.evaluate(source)
@@ -138,7 +225,11 @@ class TestRuleEngine:
     def test_action_delete(self, tmp_path: Path):
         """delete action must remove the file."""
         engine = RuleEngine()
-        engine.add_rule(Rule(name="delete-rule", condition="suffix == '.tmp'", action="delete", action_params={}))
+        engine.add_rule(
+            Rule(
+                name="delete-rule", condition="suffix == '.tmp'", action="delete", action_params={}
+            )
+        )
         source = tmp_path / "junk.tmp"
         source.write_text("delete me")
         engine.evaluate(source)

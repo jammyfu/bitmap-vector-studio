@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path as Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +9,7 @@ from PIL import Image
 
 from vector_studio.builtin_plugins.resize_plugin import ResizePlugin
 from vector_studio.builtin_plugins.watermark_plugin import WatermarkPlugin
-from vector_studio.models import TraceResult
+from vector_studio.models import TraceResult as TraceResult
 from vector_studio.plugin_interface import Plugin
 from vector_studio.plugins import PluginManager
 
@@ -365,6 +365,8 @@ class TestPluginHotReload:
 
         manager = PluginManager()
         watcher = PluginWatcher([tmp_path], manager)
-        with patch("vector_studio.plugin_hotreload.SafePluginReloader.unload_plugin_safely") as mock_unload:
+        with patch(
+            "vector_studio.plugin_hotreload.SafePluginReloader.unload_plugin_safely"
+        ) as mock_unload:
             watcher.on_file_removed(tmp_path / "gone.py")
         mock_unload.assert_called_once_with("gone")

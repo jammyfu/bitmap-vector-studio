@@ -88,7 +88,9 @@ class VectorStudioClient:
     # Public API
     # ------------------------------------------------------------------
 
-    def convert(self, image_path: Path, preset: str = "poster", options: dict[str, Any] | None = None) -> bytes:
+    def convert(
+        self, image_path: Path, preset: str = "poster", options: dict[str, Any] | None = None
+    ) -> bytes:
         """Upload an image and retrieve the converted SVG as bytes.
 
         Args:
@@ -109,11 +111,17 @@ class VectorStudioClient:
         status, body = self._multipart_request("/convert", fields, {"file": image_path})
         if status != 200:
             raise urllib.error.HTTPError(
-                f"{self.base_url}/convert", status, body.decode("utf-8", errors="replace"), None, None
+                f"{self.base_url}/convert",
+                status,
+                body.decode("utf-8", errors="replace"),
+                None,
+                None,
             )
         return body
 
-    def convert_async(self, image_path: Path, preset: str = "poster", options: dict[str, Any] | None = None) -> str:
+    def convert_async(
+        self, image_path: Path, preset: str = "poster", options: dict[str, Any] | None = None
+    ) -> str:
         """Start an asynchronous conversion and return the task ID.
 
         Args:
@@ -131,7 +139,11 @@ class VectorStudioClient:
         status, body = self._multipart_request("/convert/async", fields, {"file": image_path})
         if status != 200:
             raise urllib.error.HTTPError(
-                f"{self.base_url}/convert/async", status, body.decode("utf-8", errors="replace"), None, None
+                f"{self.base_url}/convert/async",
+                status,
+                body.decode("utf-8", errors="replace"),
+                None,
+                None,
             )
         data = json.loads(body)
         return data["task_id"]
@@ -148,7 +160,11 @@ class VectorStudioClient:
         status, body = self._request("GET", f"/status/{task_id}")
         if status != 200:
             raise urllib.error.HTTPError(
-                f"{self.base_url}/status/{task_id}", status, body.decode("utf-8", errors="replace"), None, None
+                f"{self.base_url}/status/{task_id}",
+                status,
+                body.decode("utf-8", errors="replace"),
+                None,
+                None,
             )
         return json.loads(body)
 
@@ -187,11 +203,17 @@ class VectorStudioClient:
         status, body = self._multipart_request("/recommend", {}, {"file": image_path})
         if status != 200:
             raise urllib.error.HTTPError(
-                f"{self.base_url}/recommend", status, body.decode("utf-8", errors="replace"), None, None
+                f"{self.base_url}/recommend",
+                status,
+                body.decode("utf-8", errors="replace"),
+                None,
+                None,
             )
         return json.loads(body)
 
-    def batch_convert(self, image_paths: list[Path], preset: str = "poster", options: dict[str, Any] | None = None) -> list[str]:
+    def batch_convert(
+        self, image_paths: list[Path], preset: str = "poster", options: dict[str, Any] | None = None
+    ) -> list[str]:
         """Batch-convert multiple images asynchronously.
 
         Args:
@@ -205,7 +227,7 @@ class VectorStudioClient:
         fields = {"preset": preset}
         if options:
             fields["options"] = json.dumps(options)
-        files = {f"files": Path(p) for p in image_paths}
+        files = {"files": Path(p) for p in image_paths}
         status, body = self._multipart_request("/batch", fields, files)
         if status != 200:
             raise urllib.error.HTTPError(
@@ -223,6 +245,10 @@ class VectorStudioClient:
         status, body = self._request("GET", "/health")
         if status != 200:
             raise urllib.error.HTTPError(
-                f"{self.base_url}/health", status, body.decode("utf-8", errors="replace"), None, None
+                f"{self.base_url}/health",
+                status,
+                body.decode("utf-8", errors="replace"),
+                None,
+                None,
             )
         return json.loads(body)

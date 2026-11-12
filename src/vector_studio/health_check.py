@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import os
+import os as os
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -80,13 +80,14 @@ class HealthChecker:
 
 # 预定义检查项
 
+
 def check_disk_space(path: Path = Path.home(), min_gb: float = 1.0) -> dict[str, Any]:
     """检查磁盘空间."""
     import shutil
 
     usage = shutil.disk_usage(path)
-    free_gb = usage.free / (1024 ** 3)
-    total_gb = usage.total / (1024 ** 3)
+    free_gb = usage.free / (1024**3)
+    total_gb = usage.total / (1024**3)
     if free_gb < min_gb:
         raise RuntimeError(f"磁盘空间不足: {free_gb:.1f}GB < {min_gb}GB")
     return {"free_gb": round(free_gb, 2), "total_gb": round(total_gb, 2)}
@@ -98,12 +99,12 @@ def check_memory(min_mb: float = 100.0) -> dict[str, Any]:
         import psutil
 
         mem = psutil.virtual_memory()
-        available_mb = mem.available / (1024 ** 2)
+        available_mb = mem.available / (1024**2)
         if available_mb < min_mb:
             raise RuntimeError(f"内存不足: {available_mb:.1f}MB < {min_mb}MB")
         return {
             "available_mb": round(available_mb, 2),
-            "total_mb": round(mem.total / (1024 ** 2), 2),
+            "total_mb": round(mem.total / (1024**2), 2),
         }
     except ImportError:
         return {"available_mb": "unknown", "note": "psutil not installed"}

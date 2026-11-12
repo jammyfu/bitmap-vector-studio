@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import importlib
 import logging
-import os
+import os as os
 import sys
-import time
-from dataclasses import dataclass, field
+import time as time
+from dataclasses import dataclass as dataclass, field as field
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -48,7 +48,7 @@ def _detect_gpu() -> _GPUBackend:
     # Metal (macOS)
     if sys.platform == "darwin":
         try:
-            import metal  # type: ignore[import-untyped]
+            import metal as metal  # type: ignore[import-untyped]
 
             return _GPUBackend.METAL
         except Exception:
@@ -122,9 +122,7 @@ class PerformanceMonitor:
                 "percent": 0.0,
             }
 
-    def estimate_conversion_time(
-        self, image_size: tuple[int, int], options: TraceOptions
-    ) -> float:
+    def estimate_conversion_time(self, image_size: tuple[int, int], options: TraceOptions) -> float:
         """Estimate tracing time based on image dimensions and options.
 
         Parameters
@@ -314,11 +312,18 @@ class StreamingImageProcessor:
         file_size_mb = image_path.stat().st_size / (1024 * 1024)
         if file_size_mb > cls.SIZE_THRESHOLD_MB:
             return True
-        if image_size is not None:
-            width, height = image_size
-            if max(width, height) > cls.DIMENSION_THRESHOLD_PX:
-                return True
-        return False
+        if image_size is None:
+            # Compressed images can be tiny on disk but enormous when decoded.
+            # Pillow reads the dimensions from the header without loading pixels.
+            from PIL import Image
+
+            try:
+                with Image.open(image_path) as image:
+                    image_size = image.size
+            except OSError:
+                return False
+        width, height = image_size
+        return max(width, height) > cls.DIMENSION_THRESHOLD_PX
 
     @staticmethod
     def _merge_chunk_svgs(

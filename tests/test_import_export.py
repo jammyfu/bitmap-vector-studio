@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import zipfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from pathlib import Path as Path
+from unittest.mock import MagicMock as MagicMock, patch as patch
 
 import pytest
 
@@ -238,7 +238,11 @@ class TestPackageRoundTrip:
         exporter.export_to_json(export_path, include=["presets"])
 
         # Clear and re-import
-        from vector_studio.preset_manager import _user_presets_file, _save_user_presets_raw
+        from vector_studio.preset_manager import (
+            _user_presets_file as _user_presets_file,
+            _save_user_presets_raw,
+        )
+
         _save_user_presets_raw({})
 
         stats = exporter.import_from_json(export_path, merge_strategy="merge")
@@ -253,6 +257,7 @@ class TestPackageRoundTrip:
 
         # Clear and re-import
         from vector_studio.preset_manager import _save_user_presets_raw
+
         _save_user_presets_raw({})
 
         stats = exporter.import_from_zip(export_path, merge_strategy="merge")

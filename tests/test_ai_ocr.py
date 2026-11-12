@@ -100,9 +100,9 @@ class TestRecognizeText:
     def test_easyocr_fallback(self):
         img = Image.new("RGB", (100, 50), color=(255, 255, 255))
         fake_reader = MagicMock()
-        fake_reader.readtext = MagicMock(return_value=[
-            ([[10, 10], [40, 10], [40, 30], [10, 30]], "Test", 0.92)
-        ])
+        fake_reader.readtext = MagicMock(
+            return_value=[([[10, 10], [40, 10], [40, 30], [10, 30]], "Test", 0.92)]
+        )
         fake_easyocr = MagicMock()
         fake_easyocr.Reader = MagicMock(return_value=fake_reader)
 
@@ -182,7 +182,22 @@ class TestIntegrateTextToSvg:
         svg_path.write_text('<svg><path d="M0 0"/>', encoding="utf-8")
         regions = [{"text": "Hi", "bbox": [0, 0, 10, 10]}]
         out_path = tmp_path / "out.svg"
-        result = integrate_text_to_svg(svg_path, regions, out_path)
+        _result = integrate_text_to_svg(svg_path, regions, out_path)
         text = out_path.read_text(encoding="utf-8")
         assert "<text" in text
         assert "</svg>" in text
+
+
+@pytest.mark.parametrize("backend", ["pytesseract", "easyocr"])
+def test_empty_ocr_results_preserve_regions_without_mutating_input(backend):
+    """Installed engines finding no text must not discard supplied regions."""
+    image = Image.new("RGB", (50, 50), color="gray")
+    regions = [{"bbox": [10, 10, 30, 20], "confidence": 0.9}]
+    fake = MagicMock()
+    fake.image_to_data.return_value = {"text": []}
+    fake.Reader.return_value.readtext.return_value = []
+    modules = {"pytesseract": None, "easyocr": None, backend: fake}
+    with patch.dict("sys.modules", modules):
+        result = recognize_text(image, regions=regions)
+    assert result == [{"bbox": [10, 10, 30, 20], "confidence": 0.9, "text": ""}]
+    assert "text" not in regions[0]

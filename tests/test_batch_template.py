@@ -10,9 +10,7 @@ from vector_studio.template_market import Template, TemplateMarket
 class TestBatchTemplateApplier:
     def test_apply_to_directory_success(self, tmp_path, monkeypatch):
         """批量应用模板成功."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         tid = market.publish_template(
             Template(template_id="", name="Logo", category="logo", data={"preset": "logo"}),
@@ -39,9 +37,7 @@ class TestBatchTemplateApplier:
 
     def test_apply_to_directory_template_not_found(self, tmp_path, monkeypatch):
         """模板不存在时抛出ValueError."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         applier = BatchTemplateApplier(market=market)
 
@@ -50,9 +46,7 @@ class TestBatchTemplateApplier:
 
     def test_apply_to_directory_empty_input(self, tmp_path, monkeypatch):
         """空输入目录返回空结果."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         tid = market.publish_template(
             Template(template_id="", name="Logo", category="logo", data={"preset": "logo"}),
@@ -69,9 +63,7 @@ class TestBatchTemplateApplier:
 
     def test_apply_to_directory_progress_callback(self, tmp_path, monkeypatch):
         """进度回调被正确调用."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         tid = market.publish_template(
             Template(template_id="", name="Logo", category="logo", data={"preset": "logo"}),
@@ -102,9 +94,7 @@ class TestBatchTemplateApplier:
 
     def test_apply_to_directory_skips_unsupported_files(self, tmp_path, monkeypatch):
         """跳过不支持的文件格式."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         tid = market.publish_template(
             Template(template_id="", name="Logo", category="logo", data={"preset": "logo"}),
@@ -130,9 +120,7 @@ class TestBatchTemplateApplier:
 
     def test_apply_to_directory_failure_handling(self, tmp_path, monkeypatch):
         """单个文件失败不影响其他文件."""
-        monkeypatch.setattr(
-            "vector_studio.template_market._template_data_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("vector_studio.template_market._template_data_dir", lambda: tmp_path)
         market = TemplateMarket()
         tid = market.publish_template(
             Template(template_id="", name="Logo", category="logo", data={"preset": "logo"}),

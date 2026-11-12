@@ -157,7 +157,9 @@ class TaskQueue:
 
         iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
         images = [
-            path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            path
+            for path in iterator
+            if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
         ]
 
         task_ids: list[str] = []
@@ -401,6 +403,8 @@ class TaskQueue:
             # Update checkpoint after task completion if manager is present.
             if self.checkpoint_manager is not None:
                 try:
-                    self.checkpoint_manager.save_checkpoint(self.queue_id, list(self._tasks.values()))
+                    self.checkpoint_manager.save_checkpoint(
+                        self.queue_id, list(self._tasks.values())
+                    )
                 except Exception:  # noqa: BLE001
                     pass

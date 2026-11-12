@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
-import platform
+import platform as platform
 import sys
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -56,7 +56,7 @@ def detect_gpu() -> GPUBackend:
     # Metal (macOS)
     if sys.platform == "darwin":
         try:
-            import metal  # type: ignore[import-untyped]
+            import metal as metal  # type: ignore[import-untyped]
 
             return GPUBackend.METAL
         except Exception:
@@ -111,7 +111,7 @@ def gpu_preprocess(image: "Image.Image", backend: GPUBackend | None = None) -> "
     Image.Image
         The preprocessed image (blurred and with edges enhanced).
     """
-    from PIL import Image, ImageFilter
+    from PIL import Image as Image, ImageFilter as ImageFilter
 
     if backend is None:
         backend = detect_gpu()
@@ -128,7 +128,9 @@ def gpu_preprocess(image: "Image.Image", backend: GPUBackend | None = None) -> "
         if backend == GPUBackend.METAL:
             return _metal_preprocess(image)
     except Exception as exc:
-        logger.warning("GPU preprocessing failed (%s): %s. Falling back to CPU.", backend.value, exc)
+        logger.warning(
+            "GPU preprocessing failed (%s): %s. Falling back to CPU.", backend.value, exc
+        )
 
     return _cpu_preprocess(image)
 
@@ -206,7 +208,15 @@ def _opencl_preprocess(image: "Image.Image") -> "Image.Image":
             """,
         ).build()
 
-        prg.blur(queue, (arr.shape[1], arr.shape[0]), None, buf_in, buf_out, np.int32(arr.shape[1]), np.int32(arr.shape[0]))
+        prg.blur(
+            queue,
+            (arr.shape[1], arr.shape[0]),
+            None,
+            buf_in,
+            buf_out,
+            np.int32(arr.shape[1]),
+            np.int32(arr.shape[0]),
+        )
         result = np.empty_like(arr)
         cl.enqueue_copy(queue, result, buf_out).wait()
         result = result.clip(0, 255).astype(np.uint8)
@@ -234,7 +244,9 @@ def _metal_preprocess(image: "Image.Image") -> "Image.Image":
         tensor = torch.from_numpy(arr).to("mps")
         # Simple box blur via avg_pool2d
         tensor = tensor.permute(2, 0, 1).unsqueeze(0)  # NCHW
-        blurred = torch.nn.functional.avg_pool2d(tensor, kernel_size=3, stride=1, padding=1, count_include_pad=True)
+        blurred = torch.nn.functional.avg_pool2d(
+            tensor, kernel_size=3, stride=1, padding=1, count_include_pad=True
+        )
         blurred = blurred.squeeze(0).permute(1, 2, 0).cpu().numpy()
         blurred = blurred.clip(0, 255).astype(np.uint8)
         return Image.fromarray(blurred)
@@ -255,10 +267,14 @@ def _separable_convolve_3d(arr: Any, kernel: Any) -> Any:
     k = kernel.reshape(1, -1, 1, 1)
     tmp = cp.empty_like(arr)
     for c in range(arr.shape[2]):
-        tmp[:, :, c] = cp.apply_along_axis(lambda x: cp.convolve(x, k.ravel(), mode="same"), 0, arr[:, :, c])
+        tmp[:, :, c] = cp.apply_along_axis(
+            lambda x: cp.convolve(x, k.ravel(), mode="same"), 0, arr[:, :, c]
+        )
     out = cp.empty_like(tmp)
     for c in range(tmp.shape[2]):
-        out[:, :, c] = cp.apply_along_axis(lambda x: cp.convolve(x, k.ravel(), mode="same"), 1, tmp[:, :, c])
+        out[:, :, c] = cp.apply_along_axis(
+            lambda x: cp.convolve(x, k.ravel(), mode="same"), 1, tmp[:, :, c]
+        )
     return out
 
 
@@ -274,5 +290,5 @@ def _sobel_gpu(arr: Any) -> Any:
         gx = cp.apply_along_axis(lambda x: cp.convolve(x, sobel_x[:, 1], mode="same"), 1, gx)
         gy = cp.apply_along_axis(lambda x: cp.convolve(x, sobel_y[1], mode="same"), 0, arr[:, :, c])
         gy = cp.apply_along_axis(lambda x: cp.convolve(x, sobel_y[:, 1], mode="same"), 1, gy)
-        mag[:, :, c] = cp.sqrt(gx ** 2 + gy ** 2)
+        mag[:, :, c] = cp.sqrt(gx**2 + gy**2)
     return mag

@@ -25,9 +25,29 @@ ET.register_namespace("sodipodi", _SODIPODI_NS)
 _COLOR_HEX_RE = re.compile(r"#([0-9a-fA-F]{3,8})\b")
 _COLOR_RGB_RE = re.compile(r"rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)")
 _COLOR_KEYWORDS = {
-    "black", "white", "red", "green", "blue", "yellow", "cyan", "magenta",
-    "orange", "purple", "pink", "brown", "gray", "grey", "lime", "navy",
-    "teal", "silver", "gold", "indigo", "violet", "turquoise", "coral",
+    "black",
+    "white",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "cyan",
+    "magenta",
+    "orange",
+    "purple",
+    "pink",
+    "brown",
+    "gray",
+    "grey",
+    "lime",
+    "navy",
+    "teal",
+    "silver",
+    "gold",
+    "indigo",
+    "violet",
+    "turquoise",
+    "coral",
 }
 
 
@@ -313,14 +333,16 @@ def analyze_svg_structure(svg_path: Path) -> dict[str, Any]:
             path_count = sum(1 for child in elem.iter() if _get_local_name(child.tag) == "path")
 
         layer_name = elem.get("id") or elem.get(f"{{{_INKSCAPE_NS}}}label") or f"unnamed_{tag}"
-        result["layers"].append({
-            "name": layer_name,
-            "type": tag,
-            "fill": fill,
-            "stroke": stroke,
-            "path_count": path_count if tag == "g" else 1,
-            "bbox": bbox,
-        })
+        result["layers"].append(
+            {
+                "name": layer_name,
+                "type": tag,
+                "fill": fill,
+                "stroke": stroke,
+                "path_count": path_count if tag == "g" else 1,
+                "bbox": bbox,
+            }
+        )
 
     result["color_palette"] = sorted(palette)
     return result
@@ -383,7 +405,9 @@ def export_svg_to_pdf(svg_path: Path, output_path: Path) -> Path:
     try:
         import cairosvg
     except ImportError as exc:
-        raise RuntimeError("PDF export requires cairosvg. Install with: pip install cairosvg") from exc
+        raise RuntimeError(
+            "PDF export requires cairosvg. Install with: pip install cairosvg"
+        ) from exc
 
     svg_path = Path(svg_path)
     output_path = Path(output_path)
@@ -396,7 +420,9 @@ def export_svg_to_png(svg_path: Path, output_path: Path, scale: float = 1.0) -> 
     try:
         import cairosvg
     except ImportError as exc:
-        raise RuntimeError("PNG export requires cairosvg. Install with: pip install cairosvg") from exc
+        raise RuntimeError(
+            "PNG export requires cairosvg. Install with: pip install cairosvg"
+        ) from exc
 
     svg_path = Path(svg_path)
     output_path = Path(output_path)
@@ -426,11 +452,14 @@ def export_svg_to_eps_with_inkscape(svg_path: Path, output_path: Path) -> Path:
     ]
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "Inkscape EPS export failed.")
+        raise RuntimeError(
+            completed.stderr.strip() or completed.stdout.strip() or "Inkscape EPS export failed."
+        )
     return output_path
 
 
 def svg_quality_score(svg_path: Path) -> dict[str, float]:
     """Lightweight wrapper that lazily imports the real scorer to avoid circular imports."""
     from .svg_optimizer import svg_quality_score as _real_score
+
     return _real_score(svg_path)

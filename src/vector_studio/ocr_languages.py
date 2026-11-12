@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import re
+import re as re
 import subprocess
 from typing import Any
 
@@ -189,7 +189,7 @@ def suggest_language_pack(lang: str) -> str:
     # Ubuntu / Debian
     hints.append(f"  Ubuntu/Debian: sudo apt install tesseract-ocr-{lang}")
     # macOS
-    hints.append(f"  macOS (Homebrew): brew install tesseract-lang")
+    hints.append("  macOS (Homebrew): brew install tesseract-lang")
     # Windows
     hints.append(
         f"  Windows: Download {lang}.traineddata from "

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import re
+import re as re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -84,9 +84,7 @@ class RuleEngine:
                         action_fn(ctx, rule.action_params)
                         results.append((rule.name, True, "executed"))
                     else:
-                        results.append(
-                            (rule.name, False, f"未知动作: {rule.action}")
-                        )
+                        results.append((rule.name, False, f"未知动作: {rule.action}"))
                 except Exception as e:
                     results.append((rule.name, False, str(e)))
 

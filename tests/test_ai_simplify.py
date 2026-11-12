@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.ai_simplify import (
@@ -24,11 +24,12 @@ class TestSemanticSimplify:
         for x in range(50):
             for y in range(50):
                 img.putpixel((x, y), (x * 5, y * 5, 128))
-        result = semantic_simplify(img, color_clusters=4)
+        _result = semantic_simplify(img, color_clusters=4)
         # Quantized image should have fewer distinct colors than original
         # Note: final Gaussian blur may introduce intermediate colors, so we
         # check that the median-cut quantization itself reduces colors.
         from vector_studio.ai_simplify import _kmeans_quantize
+
         quantized = _kmeans_quantize(img, k=4)
         colors = quantized.getcolors(maxcolors=256)
         assert colors is not None

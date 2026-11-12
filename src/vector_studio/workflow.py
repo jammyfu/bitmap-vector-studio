@@ -3,16 +3,16 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
-import uuid
+import time as time
+import uuid as uuid
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict as asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
-from .models import TraceOptions, TraceResult
+from .models import TraceOptions as TraceOptions, TraceResult
 from .presets import options_from_preset
 from .tracer import SUPPORTED_EXTENSIONS, trace_image
 
@@ -242,7 +242,11 @@ class Workflow:
         nodes_data = data.get("nodes", {})
         nodes = {nid: WorkflowNode.from_dict(nd) for nid, nd in nodes_data.items()}
         edges_raw = data.get("edges", [])
-        edges = [(str(e[0]), str(e[1])) for e in edges_raw if isinstance(e, (list, tuple)) and len(e) >= 2]
+        edges = [
+            (str(e[0]), str(e[1]))
+            for e in edges_raw
+            if isinstance(e, (list, tuple)) and len(e) >= 2
+        ]
         return cls(nodes=nodes, edges=edges, name=str(data.get("name", "untitled")))
 
     def save(self, path: Path) -> None:
@@ -415,7 +419,7 @@ class WorkflowEngine:
         results_by_node: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply preprocessing (e.g. background removal, resize)."""
-        cfg = node.config
+        _cfg = node.config
         files = self._collect_upstream_files(node, results_by_node)
         processed: list[Path] = []
         for f in files:
@@ -527,7 +531,7 @@ class WorkflowEngine:
         results_by_node: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply AI enhancement or simplification."""
-        cfg = node.config
+        _cfg = node.config
         files = self._collect_upstream_files(node, results_by_node)
         # Placeholder: real implementation would call ai_simplify / ai_ocr.
         return {"files": files}
@@ -560,7 +564,7 @@ class WorkflowEngine:
         results_by_node: dict[str, Any],
     ) -> dict[str, Any]:
         """Iterate over upstream files and process each one."""
-        cfg = node.config
+        _cfg = node.config
         files = self._collect_upstream_files(node, results_by_node)
         # The loop node simply passes files through; the engine handles
         # parallel execution of downstream nodes per file implicitly by

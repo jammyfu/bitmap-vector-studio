@@ -8,7 +8,12 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from .ai_ocr import detect_text_regions, integrate_text_to_svg, recognize_text, recognize_text_multilang
+from .ai_ocr import (
+    detect_text_regions as detect_text_regions,
+    integrate_text_to_svg,
+    recognize_text as recognize_text,
+    recognize_text_multilang,
+)
 from .ai_simplify import adaptive_simplify
 from .models import TraceOptions, TraceResult
 from .plugin_interface import Plugin
@@ -48,7 +53,9 @@ def _trace_with_cli(input_path: Path, output_path: Path, options: TraceOptions) 
     command = [executable, *options.vtracer_cli_args(input_path, output_path)]
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "VTracer CLI failed.")
+        raise RuntimeError(
+            completed.stderr.strip() or completed.stdout.strip() or "VTracer CLI failed."
+        )
 
 
 def trace_image(
@@ -135,7 +142,9 @@ def trace_image(
             raise FileNotFoundError(f"Input file not found: {input_path}") from exc
         if "不支持的文件格式" in msg or "不支持的MIME类型" in msg:
             valid = ", ".join(sorted(SUPPORTED_EXTENSIONS))
-            raise ValueError(f"Unsupported input format: {input_path.suffix}. Supported: {valid}") from exc
+            raise ValueError(
+                f"Unsupported input format: {input_path.suffix}. Supported: {valid}"
+            ) from exc
         raise
 
     options = (options or TraceOptions()).validate()
@@ -261,7 +270,9 @@ def trace_image(
     engine_label = requested
     with tempfile.TemporaryDirectory(prefix="vector-studio-") as tmp:
         normalized_input = Path(tmp) / "input.png"
-        prepare_input(input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance)
+        prepare_input(
+            input_path, normalized_input, options, smart_remove_bg=smart_remove_bg, enhance=enhance
+        )
 
         # AI pipeline preprocessing (optional)
         if ai_pipeline:
@@ -345,21 +356,29 @@ def trace_image(
         else:
             engine_options: dict[str, object] = {"trace_options": options}
             if requested == "potrace":
-                engine_options.update({
-                    k: v for k, v in {
-                        "turdsize": getattr(options, "filter_speckle", None),
-                        "alphamax": getattr(options, "corner_threshold", None),
-                        "opticurve": True,
-                    }.items() if v is not None
-                })
+                engine_options.update(
+                    {
+                        k: v
+                        for k, v in {
+                            "turdsize": getattr(options, "filter_speckle", None),
+                            "alphamax": getattr(options, "corner_threshold", None),
+                            "opticurve": True,
+                        }.items()
+                        if v is not None
+                    }
+                )
             elif requested == "autotrace":
-                engine_options.update({
-                    k: v for k, v in {
-                        "color_count": getattr(options, "color_precision", None),
-                        "despeckle_level": getattr(options, "filter_speckle", None),
-                        "corner_threshold": getattr(options, "corner_threshold", None),
-                    }.items() if v is not None
-                })
+                engine_options.update(
+                    {
+                        k: v
+                        for k, v in {
+                            "color_count": getattr(options, "color_precision", None),
+                            "despeckle_level": getattr(options, "filter_speckle", None),
+                            "corner_threshold": getattr(options, "corner_threshold", None),
+                        }.items()
+                        if v is not None
+                    }
+                )
             engine_instance.convert(normalized_input, output_path, engine_options)
             engine_label = requested
 

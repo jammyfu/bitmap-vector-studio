@@ -1,4 +1,4 @@
-import json
+import json as json
 from pathlib import Path
 
 import pytest
@@ -11,7 +11,7 @@ from vector_studio.history import (
     get_task,
     get_task_options,
     record_task,
-    _history_path,
+    _history_path as _history_path,
 )
 from vector_studio.models import TraceOptions, TraceResult
 
@@ -173,7 +173,7 @@ def test_export_report_unsupported_extension(tmp_path: Path):
 def test_graceful_corrupt_history(tmp_path: Path, monkeypatch):
     # Write a corrupt history file
     fake_history = tmp_path / "history.jsonl"
-    fake_history.write_text("not json\n{\"valid\": true}\n", encoding="utf-8")
+    fake_history.write_text('not json\n{"valid": true}\n', encoding="utf-8")
     monkeypatch.setattr(
         "vector_studio.history._history_path",
         lambda: fake_history,

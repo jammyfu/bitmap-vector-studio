@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.audit_logger import AuditEvent, AuditLevel, AuditLogger
 
@@ -74,14 +74,17 @@ class TestAuditLogger:
         # Simulate a second day by writing directly
         second_file = tmp_path / "audit-2099-01-01.jsonl"
         second_file.write_text(
-            json.dumps({
-                "timestamp": "2099-01-01T00:00:00",
-                "level": "info",
-                "action": "batch",
-                "user": "bob",
-                "resource": "folder",
-                "details": {},
-            }) + "\n"
+            json.dumps(
+                {
+                    "timestamp": "2099-01-01T00:00:00",
+                    "level": "info",
+                    "action": "batch",
+                    "user": "bob",
+                    "resource": "folder",
+                    "details": {},
+                }
+            )
+            + "\n"
         )
         events = logger.query()
         assert len(events) == 2

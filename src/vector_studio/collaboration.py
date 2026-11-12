@@ -7,13 +7,14 @@ optimistic locking, and WebSocket broadcasting.
 from __future__ import annotations
 
 import asyncio
-import time
+import time as time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as field
 from typing import Any
 
 try:
     from fastapi import WebSocket, WebSocketDisconnect
+
     _HAS_FASTAPI = True
 except ImportError:  # pragma: no cover
     WebSocket = Any  # type: ignore[misc,assignment]
@@ -108,6 +109,7 @@ class CollabRoom:
     @staticmethod
     def _now_iso() -> str:
         from datetime import datetime, timezone
+
         return datetime.now(timezone.utc).isoformat()
 
     async def broadcast(
@@ -206,6 +208,7 @@ class CollabRoom:
             Deep copy of the room state dictionary.
         """
         import copy
+
         return {
             "room_id": self.room_id,
             "owner": self.owner,

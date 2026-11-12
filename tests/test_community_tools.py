@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.community_tools import (
     ContributionGuideGenerator,

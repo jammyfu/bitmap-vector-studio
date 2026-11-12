@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
+import json as json
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass as dataclass, field as field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path as Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,9 @@ class TeamWorkspace:
             ``True`` if the member was added.
         """
         if user_id in self.members:
-            logger.warning("User %s is already a member of workspace %s", user_id, self.workspace_id)
+            logger.warning(
+                "User %s is already a member of workspace %s", user_id, self.workspace_id
+            )
             return False
         if role not in RolePermissions.ROLES:
             logger.warning("Invalid role '%s'", role)
@@ -205,7 +207,9 @@ class TeamWorkspace:
             return False
         self.members[user_id] = role
         self._permissions.assign_role(user_id, role)
-        self._permissions.log_action(user_id, "role_changed", f"workspace={self.workspace_id},role={role}")
+        self._permissions.log_action(
+            user_id, "role_changed", f"workspace={self.workspace_id},role={role}"
+        )
         return True
 
     def get_member_permissions(self, user_id: str) -> list[str]:

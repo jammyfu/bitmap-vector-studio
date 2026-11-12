@@ -30,9 +30,7 @@ class StatsDashboard:
         for line in history_file.read_text(encoding="utf-8").strip().split("\n"):
             try:
                 entry = json.loads(line)
-                entry_time = datetime.fromisoformat(
-                    entry.get("timestamp", "2000-01-01")
-                )
+                entry_time = datetime.fromisoformat(entry.get("timestamp", "2000-01-01"))
                 # Ensure both datetimes are timezone-aware for comparison
                 if entry_time.tzinfo is None:
                     entry_time = entry_time.replace(tzinfo=timezone.utc)
@@ -81,9 +79,7 @@ class StatsDashboard:
             for line in history_file.read_text(encoding="utf-8").strip().split("\n"):
                 try:
                     entry = json.loads(line)
-                    entry_time = datetime.fromisoformat(
-                        entry.get("timestamp", "2000-01-01")
-                    )
+                    entry_time = datetime.fromisoformat(entry.get("timestamp", "2000-01-01"))
                     # Ensure both datetimes are timezone-aware for comparison
                     if entry_time.tzinfo is None:
                         entry_time = entry_time.replace(tzinfo=timezone.utc)
@@ -98,8 +94,10 @@ class StatsDashboard:
         for i in range(days - 1, -1, -1):
             date = datetime.now(timezone.utc) - timedelta(days=i)
             date_key = date.strftime("%Y-%m-%d")
-            result.append({
-                "date": date_key,
-                "count": counts.get(date_key, 0),
-            })
+            result.append(
+                {
+                    "date": date_key,
+                    "count": counts.get(date_key, 0),
+                }
+            )
         return result

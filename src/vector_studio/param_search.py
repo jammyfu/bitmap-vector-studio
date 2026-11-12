@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .models import TraceOptions, TraceResult
+from .models import TraceOptions, TraceResult as TraceResult
 from .presets import options_from_preset
 from .svg_tools import svg_stats
 from .tracer import trace_image
@@ -40,6 +40,7 @@ class ParamGrid:
         reached.  Each sampled point is merged with a randomly chosen preset
         candidate so that the resulting options remain valid.
         """
+
         # Build a coarse grid for each parameter.
         def _steps(low: int, high: int, steps: int = 3) -> list[int]:
             if low == high:

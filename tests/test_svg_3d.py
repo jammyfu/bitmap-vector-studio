@@ -58,7 +58,9 @@ class TestSVG3D:
 class TestARPreview:
     def test_create_ar_overlay(self, tmp_path: Path):
         svg = tmp_path / "sample.svg"
-        svg.write_text('<svg viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100"/></svg>')
+        svg.write_text(
+            '<svg viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100"/></svg>'
+        )
         ar = ARPreview()
         overlay = ar.create_ar_overlay(svg, width=50.0)
         assert overlay["type"] == "svg_overlay"

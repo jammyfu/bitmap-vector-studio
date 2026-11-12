@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+from pathlib import Path as Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -142,9 +142,9 @@ class TestCloudMarket:
         market = CloudMarket("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"item_id": "new-item-456"}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"item_id": "new-item-456"}).encode(
+                "utf-8"
+            )
             mock_urlopen.return_value.__enter__.return_value = mock_response
             item_id = market.publish_item("u1", "plugin", {"name": "MyPlugin"})
         assert item_id == "new-item-456"
@@ -154,9 +154,7 @@ class TestCloudMarket:
         market = CloudMarket("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"success": True}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             assert market.rate_item("u1", "item-1", 5) is True
 
@@ -193,9 +191,7 @@ class TestCreditSystem:
         cs = CreditSystem("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"balance": 150}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"balance": 150}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             balance = cs.add_credits("u1", 50)
         assert balance == 150
@@ -205,9 +201,7 @@ class TestCreditSystem:
         cs = CreditSystem("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"balance": 80}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"balance": 80}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             balance = cs.deduct_credits("u1", 20)
         assert balance == 80
@@ -217,9 +211,7 @@ class TestCreditSystem:
         cs = CreditSystem("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"balance": 200}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"balance": 200}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             assert cs.get_balance("u1") == 200
 
@@ -260,9 +252,7 @@ class TestDeveloperDashboard:
         dash = DeveloperDashboard("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"revenue": 999.99}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"revenue": 999.99}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             assert dash.get_revenue("dev1") == 999.99
 
@@ -271,9 +261,7 @@ class TestDeveloperDashboard:
         dash = DeveloperDashboard("https://example.com")
         with patch("vector_studio.cloud_market.urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
-            mock_response.read.return_value = json.dumps(
-                {"success": True}
-            ).encode("utf-8")
+            mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_response
             assert dash.withdraw("dev1", 100.0) is True
 

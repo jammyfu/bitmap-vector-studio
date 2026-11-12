@@ -6,14 +6,17 @@ import threading
 import time
 import uuid
 import urllib.parse
+import urllib as urllib
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 import typer
+from typer.core import TyperGroup
 from rich.console import Console
 from rich.table import Table
 
+from .cloud_sync import CloudSyncManager, GitHubGistBackend, LocalServerBackend
 from . import __version__
 from .batch_template import BatchTemplateApplier
 from .cache_manager import CacheManager
@@ -28,25 +31,25 @@ from .cloud_storage import LocalStorage, StorageConfig, StorageManager
 from .batch_rules import Rule, RuleEngine
 from .config import Config
 from .enterprise import (
-    RolePermissions,
+    RolePermissions as RolePermissions,
     SSOIntegration,
     TeamWorkspace,
 )
 from .external_editors import open_with_default_editor, open_with_editor
 from .ocr_languages import (
     OCR_LANGUAGE_CONFIG,
-    check_language_available,
+    check_language_available as check_language_available,
     get_tesseract_languages,
-    normalize_language_code,
-    suggest_language_pack,
+    normalize_language_code as normalize_language_code,
+    suggest_language_pack as suggest_language_pack,
 )
-from .param_search import ParamGrid, quick_search, search_best_params
+from .param_search import ParamGrid as ParamGrid, quick_search, search_best_params
 from .plugin_interface import Plugin
 from .plugin_sdk import (
     PluginDebugger,
     PluginDocsGenerator,
     PluginScaffold,
-    PluginSDK,
+    PluginSDK as PluginSDK,
     PluginValidator,
 )
 from .plugin_market import PluginMarket
@@ -79,7 +82,7 @@ from .migration import MigrationManager
 from .animation import (
     AnimationBuilder,
     LottieExporter,
-    SVGAnimation,
+    SVGAnimation as SVGAnimation,
     list_presets as list_animation_presets,
 )
 
@@ -215,8 +218,18 @@ app.add_typer(audit_app, name="audit")
 notify_app = typer.Typer(help="Notification management.")
 app.add_typer(notify_app, name="notify")
 
-# Sub-typer for search commands
-search_app = typer.Typer(help="Search history and files.")
+
+class SearchGroup(TyperGroup):
+    """Preserve legacy parameter search alongside history/file subcommands."""
+
+    def parse_args(self, ctx, args):
+        if args and not args[0].startswith("-") and args[0] not in self.commands:
+            args = ["params", *args]
+        return super().parse_args(ctx, args)
+
+
+# Explicit params avoids registering a command and group under the same name.
+search_app = typer.Typer(cls=SearchGroup, help="Search tracing parameters, history and files.")
 app.add_typer(search_app, name="search")
 
 # Conditional import so tests can patch vector_studio.cli.uvicorn.run
@@ -294,7 +307,9 @@ def api_command(
 ) -> None:
     """Start the Bitmap Vector Studio API server."""
     if uvicorn is None:
-        console.print("[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'")
+        console.print(
+            "[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'"
+        )
         raise typer.Exit(code=1)
 
     console.print(f"[green]Starting API server at[/green] http://{host}:{port}")
@@ -307,7 +322,9 @@ def main_callback(
     host: str = typer.Option("0.0.0.0", "--host"),
     port: int = typer.Option(8000, "--port"),
     reload: bool = typer.Option(False, "--reload"),
-    help_all: bool = typer.Option(False, "--help-all", help="Show all commands including advanced ones."),
+    help_all: bool = typer.Option(
+        False, "--help-all", help="Show all commands including advanced ones."
+    ),
     version: bool = typer.Option(False, "--version", help="Show version."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Global quiet mode."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Global verbose mode."),
@@ -321,7 +338,9 @@ def main_callback(
         raise typer.Exit()
     if api:
         if uvicorn is None:
-            console.print("[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'")
+            console.print(
+                "[red]API dependencies are missing.[/red] Install with: pip install 'bitmap-vector-studio[api]'"
+            )
             raise typer.Exit(code=1)
         console.print(f"[green]Starting API server at[/green] http://{host}:{port}")
         uvicorn.run("vector_studio.api:app", host=host, port=port, workers=1, reload=reload)
@@ -379,15 +398,29 @@ def _active_plugins(config: Config, cli_plugins: list[str]) -> list[Plugin]:
 # Output helpers for "Less is More" CLI experience
 # ------------------------------------------------------------------
 
-def _print_analysis(input_path: Path, preset_name: str, confidence: float, features: dict[str, Any], quiet: bool, verbose: bool) -> None:
+
+def _print_analysis(
+    input_path: Path,
+    preset_name: str,
+    confidence: float,
+    features: dict[str, Any],
+    quiet: bool,
+    verbose: bool,
+) -> None:
     if quiet:
         return
     if verbose:
-        console.print(f"[分析] 图片: {input_path.name} ({features.get('width', '?')}x{features.get('height', '?')}, {features.get('color_count', '?')}色, 边缘密度: {features.get('edge_density', 0):.2f})")
-        console.print(f"[推荐] {t('convert.recommending', preset=preset_name, confidence=round(confidence*100))}")
+        console.print(
+            f"[分析] 图片: {input_path.name} ({features.get('width', '?')}x{features.get('height', '?')}, {features.get('color_count', '?')}色, 边缘密度: {features.get('edge_density', 0):.2f})"
+        )
+        console.print(
+            f"[推荐] {t('convert.recommending', preset=preset_name, confidence=round(confidence * 100))}"
+        )
     else:
         console.print(f"{t('convert.analyzing')} ✓")
-        console.print(t('convert.recommending', preset=preset_name, confidence=round(confidence*100)))
+        console.print(
+            t("convert.recommending", preset=preset_name, confidence=round(confidence * 100))
+        )
 
 
 def _print_convert_progress(step: str, quiet: bool, verbose: bool) -> None:
@@ -444,6 +477,7 @@ def _run_single_convert(
     # Auto-recommend preset if not specified
     if preset is None:
         from .smart_recommend import recommend_for_image
+
         preset_name, confidence, reason, features = recommend_for_image(input_path)
         _print_analysis(input_path, preset_name, confidence, features, quiet, verbose)
         preset = preset_name
@@ -480,11 +514,17 @@ convert_app = typer.Typer(help="转换图片为矢量格式（统一入口）")
 
 @convert_app.command("file")
 def convert_file(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
-    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="预设名称，不指定则自动推荐。"),
+    preset: Optional[str] = typer.Option(
+        None, "--preset", "-p", help="预设名称，不指定则自动推荐。"
+    ),
     format: str = typer.Option("svg", "--format", "-f", help="输出格式: svg/pdf/png/eps。"),
-    optimize: str = typer.Option("basic", "--optimize", help="优化级别: none/basic/comprehensive/aggressive。"),
+    optimize: str = typer.Option(
+        "basic", "--optimize", help="优化级别: none/basic/comprehensive/aggressive。"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
     config_path: Optional[Path] = typer.Option(None, "--config", help="配置文件路径。"),
@@ -506,7 +546,9 @@ def convert_file(
 
 @convert_app.command("batch")
 def convert_batch(
-    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="输入文件夹。"),
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="输入文件夹。"
+    ),
     output_dir: Path = typer.Argument(..., help="输出文件夹。"),
     preset: str = typer.Option("poster", "--preset", "-p", help="预设名称。"),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="递归扫描输入文件夹。"),
@@ -523,7 +565,9 @@ def convert_batch(
     output_dir.mkdir(parents=True, exist_ok=True)
     opts = options_from_preset(preset)
     iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
-    images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+    images = [
+        path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    ]
 
     if not images:
         if not quiet:
@@ -549,7 +593,16 @@ def convert_batch(
             continue
         try:
             if not quiet and not verbose:
-                console.print(t('batch.progress', current=idx, total=len(images), filename=image_path.name, status=''), end=" ")
+                console.print(
+                    t(
+                        "batch.progress",
+                        current=idx,
+                        total=len(images),
+                        filename=image_path.name,
+                        status="",
+                    ),
+                    end=" ",
+                )
             result = trace_image(
                 image_path,
                 out_path,
@@ -581,9 +634,13 @@ def convert_batch(
 @convert_app.command("generate")
 def convert_generate(
     prompt: str = typer.Argument(..., help="AI 生成提示词。"),
-    input_path: Optional[Path] = typer.Option(None, "--input", "-i", exists=True, dir_okay=False, readable=True, help="参考图片（可选）。"),
+    input_path: Optional[Path] = typer.Option(
+        None, "--input", "-i", exists=True, dir_okay=False, readable=True, help="参考图片（可选）。"
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
-    style: str = typer.Option("flat", "--style", "-s", help="风格: flat, line, gradient, 3d, sketch。"),
+    style: str = typer.Option(
+        "flat", "--style", "-s", help="风格: flat, line, gradient, 3d, sketch。"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
 ) -> None:
@@ -617,7 +674,9 @@ app.add_typer(convert_app, name="convert")
 
 @app.command("quick")
 def quick_command(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出。"),
@@ -661,9 +720,13 @@ def list_presets() -> None:
 
 @app.command("trace", hidden=True)
 def trace_command(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output SVG path."),
-    preset: str = typer.Option("poster", "--preset", "-p", help="Preset: bw, poster, photo, logo, pixel_art, scan, custom."),
+    preset: str = typer.Option(
+        "poster", "--preset", "-p", help="Preset: bw, poster, photo, logo, pixel_art, scan, custom."
+    ),
     colormode: Optional[str] = typer.Option(None, "--colormode", help="color or binary."),
     hierarchical: Optional[str] = typer.Option(None, "--hierarchical", help="stacked or cutout."),
     mode: Optional[str] = typer.Option(None, "--mode", help="spline, polygon, pixel, or none."),
@@ -676,32 +739,84 @@ def trace_command(
     splice_threshold: Optional[int] = typer.Option(None, "--splice-threshold", min=0, max=180),
     path_precision: Optional[int] = typer.Option(None, "--path-precision", min=0, max=12),
     denoise: Optional[bool] = typer.Option(None, "--denoise/--no-denoise"),
-    posterize: Optional[int] = typer.Option(None, "--posterize", min=1, max=8, help="Optional Pillow posterize bits."),
-    max_input_side: Optional[int] = typer.Option(None, "--max-input-side", min=64, help="Downscale max side before tracing."),
-    optimize: bool = typer.Option(True, "--optimize/--no-optimize", help="Conservative SVG cleanup."),
-    optimize_level: str = typer.Option("basic", "--optimize-level", help="none, basic, comprehensive, aggressive."),
+    posterize: Optional[int] = typer.Option(
+        None, "--posterize", min=1, max=8, help="Optional Pillow posterize bits."
+    ),
+    max_input_side: Optional[int] = typer.Option(
+        None, "--max-input-side", min=64, help="Downscale max side before tracing."
+    ),
+    optimize: bool = typer.Option(
+        True, "--optimize/--no-optimize", help="Conservative SVG cleanup."
+    ),
+    optimize_level: str = typer.Option(
+        "basic", "--optimize-level", help="none, basic, comprehensive, aggressive."
+    ),
     score: bool = typer.Option(False, "--score", help="Output quality score after conversion."),
-    name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to the output SVG."),
+    name_layers: bool = typer.Option(
+        False, "--name-layers", help="Add meaningful layer names to the output SVG."
+    ),
     export_pdf: bool = typer.Option(False, "--export-pdf", help="Also export PDF via CairoSVG."),
-    export_png: bool = typer.Option(False, "--export-png", help="Also export PNG preview via CairoSVG."),
-    export_eps: bool = typer.Option(False, "--export-eps", help="Also export EPS via Inkscape CLI."),
-    open_editor: Optional[str] = typer.Option(None, "--open", help="Open the output SVG in an external editor (inkscape, illustrator, etc.). Use without value for default editor."),
-    smart_remove_bg: bool = typer.Option(False, "--smart-remove-bg", help="Auto-detect and remove background for logo-like images."),
-    enhance: Optional[str] = typer.Option(None, "--enhance", help="Enhancement type: scan, photo, logo, auto."),
-    ai_simplify: bool = typer.Option(False, "--ai-simplify", help="Apply AI semantic simplification before tracing."),
-    ai_ocr: bool = typer.Option(False, "--ai-ocr", help="Detect and embed text as editable SVG text elements."),
-    ocr_lang: Optional[str] = typer.Option(None, "--ocr-lang", help="OCR language code (e.g. chi_sim, jpn, kor, ara, rus, deu, fra, spa)."),
-    ocr_vertical: bool = typer.Option(False, "--ocr-vertical", help="Detect vertical text orientation during OCR."),
-    simplify_type: str = typer.Option("auto", "--simplify-type", help="Simplification strategy: photo, complex, sketch, auto."),
-    recommend: bool = typer.Option(False, "--recommend", help="Only analyze and recommend a preset, do not convert."),
-    region: Optional[str] = typer.Option(None, "--region", help="Rectangular region to trace as x,y,w,h."),
+    export_png: bool = typer.Option(
+        False, "--export-png", help="Also export PNG preview via CairoSVG."
+    ),
+    export_eps: bool = typer.Option(
+        False, "--export-eps", help="Also export EPS via Inkscape CLI."
+    ),
+    open_editor: Optional[str] = typer.Option(
+        None,
+        "--open",
+        help="Open the output SVG in an external editor (inkscape, illustrator, etc.). Use without value for default editor.",
+    ),
+    smart_remove_bg: bool = typer.Option(
+        False, "--smart-remove-bg", help="Auto-detect and remove background for logo-like images."
+    ),
+    enhance: Optional[str] = typer.Option(
+        None, "--enhance", help="Enhancement type: scan, photo, logo, auto."
+    ),
+    ai_simplify: bool = typer.Option(
+        False, "--ai-simplify", help="Apply AI semantic simplification before tracing."
+    ),
+    ai_ocr: bool = typer.Option(
+        False, "--ai-ocr", help="Detect and embed text as editable SVG text elements."
+    ),
+    ocr_lang: Optional[str] = typer.Option(
+        None,
+        "--ocr-lang",
+        help="OCR language code (e.g. chi_sim, jpn, kor, ara, rus, deu, fra, spa).",
+    ),
+    ocr_vertical: bool = typer.Option(
+        False, "--ocr-vertical", help="Detect vertical text orientation during OCR."
+    ),
+    simplify_type: str = typer.Option(
+        "auto", "--simplify-type", help="Simplification strategy: photo, complex, sketch, auto."
+    ),
+    recommend: bool = typer.Option(
+        False, "--recommend", help="Only analyze and recommend a preset, do not convert."
+    ),
+    region: Optional[str] = typer.Option(
+        None, "--region", help="Rectangular region to trace as x,y,w,h."
+    ),
     live_preview: bool = typer.Option(False, "--live-preview", help="Fast low-res preview mode."),
-    config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
-    plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
-    gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
-    stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing for large images."),
-    engine: str = typer.Option("vtracer", "--engine", "-e", help="Vectorization engine: vtracer, potrace, autotrace."),
-    ai_pipeline: list[str] = typer.Option([], "--ai-pipeline", help="AI pre-processing tasks: segment, style_transfer, upscale, auto_enhance."),
+    config_path: Optional[Path] = typer.Option(
+        None, "--config", help="Path to configuration file."
+    ),
+    plugin: list[str] = typer.Option(
+        [], "--plugin", help="Enable a plugin by name (can be used multiple times)."
+    ),
+    gpu: bool = typer.Option(
+        False, "--gpu", help="Use GPU-accelerated preprocessing if available."
+    ),
+    stream: bool = typer.Option(
+        False, "--stream", help="Force chunked/streaming processing for large images."
+    ),
+    engine: str = typer.Option(
+        "vtracer", "--engine", "-e", help="Vectorization engine: vtracer, potrace, autotrace."
+    ),
+    ai_pipeline: list[str] = typer.Option(
+        [],
+        "--ai-pipeline",
+        help="AI pre-processing tasks: segment, style_transfer, upscale, auto_enhance.",
+    ),
 ) -> None:
     """Convert one bitmap image to SVG. (Deprecated: use 'convert' instead)"""
     console.print(f"[yellow]{t('deprecated.trace')}[/yellow]")
@@ -724,6 +839,7 @@ def trace_command(
 
     if recommend:
         from .smart_recommend import recommend_for_image
+
         preset_name, confidence, reason, features = recommend_for_image(input_path)
         table = Table(title="Smart Preset Recommendation")
         table.add_column("Property", style="bold")
@@ -761,10 +877,12 @@ def trace_command(
 
     if live_preview:
         from .live_preview import LivePreviewEngine
+
         preview_engine = LivePreviewEngine(max_size=400)
         preview_path, elapsed = preview_engine.generate_preview(input_path, opts)
         if output and Path(preview_path).resolve() != Path(out).resolve():
             import shutil
+
             shutil.copy2(preview_path, out)
             console.print(f"[green]Preview[/green] {out}")
         else:
@@ -774,6 +892,7 @@ def trace_command(
 
     if region:
         from .region_trace import RegionSelector, region_trace
+
         parts = region.split(",")
         if len(parts) != 4:
             console.print("[red]Error:[/red] --region must be x,y,w,h")
@@ -819,7 +938,9 @@ def trace_command(
     if score:
         try:
             qs = svg_quality_score(result.svg_path)
-            console.print(f"Quality score: {qs['overall']}/100 (size={qs['file_size_score']}, paths={qs['path_efficiency']}, complexity={qs['complexity_score']}, colors={qs['color_efficiency']})")
+            console.print(
+                f"Quality score: {qs['overall']}/100 (size={qs['file_size_score']}, paths={qs['path_efficiency']}, complexity={qs['complexity_score']}, colors={qs['color_efficiency']})"
+            )
         except Exception as exc:
             console.print(f"[red]Score failed:[/red] {exc}")
     if result.pdf_path:
@@ -842,10 +963,14 @@ def trace_command(
 
 @app.command("benchmark", hidden=True)
 def benchmark_command(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
     runs: int = typer.Option(3, "--runs", "-r", min=1, max=20, help="Number of benchmark runs."),
-    gpu: bool = typer.Option(False, "--gpu", help="Use GPU-accelerated preprocessing if available."),
+    gpu: bool = typer.Option(
+        False, "--gpu", help="Use GPU-accelerated preprocessing if available."
+    ),
     stream: bool = typer.Option(False, "--stream", help="Force chunked/streaming processing."),
 ) -> None:
     """Run a performance benchmark on a single image."""
@@ -870,7 +995,9 @@ def benchmark_command(
 
         for i in range(runs):
             profiler.stage(f"run_{i + 1}")
-            result = trace_image(input_path, input_path.with_suffix(".svg"), opts, use_gpu=gpu, stream=stream)
+            result = trace_image(
+                input_path, input_path.with_suffix(".svg"), opts, use_gpu=gpu, stream=stream
+            )
             times.append(result.elapsed_seconds)
 
     table = Table(title=f"Benchmark: {input_path.name} ({runs} runs)")
@@ -884,27 +1011,51 @@ def benchmark_command(
     console.print(table)
 
     report = profiler.get_report()
-    console.print(f"[cyan]Bottleneck:[/cyan] {report['bottleneck']} ({report['total_seconds']:.3f}s total)")
+    console.print(
+        f"[cyan]Bottleneck:[/cyan] {report['bottleneck']} ({report['total_seconds']:.3f}s total)"
+    )
 
 
 @app.command("batch", hidden=True)
 def batch_command(
-    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input folder."),
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="Input folder."
+    ),
     output_dir: Path = typer.Argument(..., help="Output folder."),
     preset: str = typer.Option("poster", "--preset", "-p"),
-    recursive: bool = typer.Option(False, "--recursive", "-r", help="Scan input folder recursively."),
+    recursive: bool = typer.Option(
+        False, "--recursive", "-r", help="Scan input folder recursively."
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing SVG files."),
-    name_layers: bool = typer.Option(False, "--name-layers", help="Add meaningful layer names to each output SVG."),
-    optimize_level: str = typer.Option("basic", "--optimize-level", help="none, basic, comprehensive, aggressive."),
-    score: bool = typer.Option(False, "--score", help="Output quality score after each conversion."),
+    name_layers: bool = typer.Option(
+        False, "--name-layers", help="Add meaningful layer names to each output SVG."
+    ),
+    optimize_level: str = typer.Option(
+        "basic", "--optimize-level", help="none, basic, comprehensive, aggressive."
+    ),
+    score: bool = typer.Option(
+        False, "--score", help="Output quality score after each conversion."
+    ),
     export_pdf: bool = typer.Option(False, "--export-pdf"),
     export_png: bool = typer.Option(False, "--export-png"),
-    open_editor: bool = typer.Option(False, "--open", help="Open each output SVG in the default external editor after conversion."),
-    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
+    open_editor: bool = typer.Option(
+        False,
+        "--open",
+        help="Open each output SVG in the default external editor after conversion.",
+    ),
+    workers: int = typer.Option(
+        1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."
+    ),
     retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
-    config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file."),
-    plugin: list[str] = typer.Option([], "--plugin", help="Enable a plugin by name (can be used multiple times)."),
-    checkpoint: bool = typer.Option(False, "--checkpoint", help="Enable checkpoint/resume for this batch."),
+    config_path: Optional[Path] = typer.Option(
+        None, "--config", help="Path to configuration file."
+    ),
+    plugin: list[str] = typer.Option(
+        [], "--plugin", help="Enable a plugin by name (can be used multiple times)."
+    ),
+    checkpoint: bool = typer.Option(
+        False, "--checkpoint", help="Enable checkpoint/resume for this batch."
+    ),
 ) -> None:
     """Batch-convert a folder of images. (Deprecated: use 'convert batch' instead)"""
     console.print(f"[yellow]{t('deprecated.batch')}[/yellow]")
@@ -922,7 +1073,9 @@ def batch_command(
     output_dir.mkdir(parents=True, exist_ok=True)
     opts = options_from_preset(preset)
     iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
-    images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+    images = [
+        path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    ]
 
     if not images:
         console.print(f"[yellow]{t('no_images')}[/yellow]")
@@ -979,7 +1132,9 @@ def batch_command(
 
     # Concurrent path via TaskQueue.
     cp_mgr = CheckpointManager() if checkpoint else None
-    q = TaskQueue(max_workers=workers, output_dir=output_dir, max_retries=retry, checkpoint_manager=cp_mgr)
+    q = TaskQueue(
+        max_workers=workers, output_dir=output_dir, max_retries=retry, checkpoint_manager=cp_mgr
+    )
     for image_path in images:
         rel = image_path.relative_to(input_dir) if recursive else Path(image_path.name)
         out_path = (output_dir / rel).with_suffix(".svg")
@@ -1021,12 +1176,20 @@ def batch_command(
         raise typer.Exit(code=1)
 
 
-@app.command("search", hidden=True)
+@search_app.command("params")
 def search_command(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
-    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory to store search results."),
-    max_combinations: int = typer.Option(20, "--max", "-m", min=1, max=100, help="Maximum parameter combinations to try."),
-    quick: bool = typer.Option(False, "--quick", help="Run a quick preset-only search instead of full grid search."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
+    output_dir: Path = typer.Option(
+        ..., "--output-dir", "-o", help="Directory to store search results."
+    ),
+    max_combinations: int = typer.Option(
+        20, "--max", "-m", min=1, max=100, help="Maximum parameter combinations to try."
+    ),
+    quick: bool = typer.Option(
+        False, "--quick", help="Run a quick preset-only search instead of full grid search."
+    ),
 ) -> None:
     """Search for the best tracing parameters for a single image."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1079,8 +1242,13 @@ def search_command(
 # Config sub-commands
 # ------------------------------------------------------------------
 
+
 @config_app.command("show")
-def config_show(config_path: Optional[Path] = typer.Option(None, "--config", help="Path to configuration file.")) -> None:
+def config_show(
+    config_path: Optional[Path] = typer.Option(
+        None, "--config", help="Path to configuration file."
+    ),
+) -> None:
     """Display the current configuration."""
     cfg = _load_config(config_path)
     table = Table(title="Bitmap Vector Studio Configuration")
@@ -1100,11 +1268,14 @@ def config_show(config_path: Optional[Path] = typer.Option(None, "--config", hel
 
 @config_app.command("init")
 def config_init(
-    path: Optional[Path] = typer.Option(None, "--path", help="Destination path for the config file."),
+    path: Optional[Path] = typer.Option(
+        None, "--path", help="Destination path for the config file."
+    ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing file."),
 ) -> None:
     """Generate a default configuration file."""
     from .config import _default_config_path
+
     dest = path or _default_config_path()
     if dest.exists() and not force:
         console.print(f"[yellow]Config file already exists:[/yellow] {dest}")
@@ -1169,6 +1340,7 @@ def config_validate(
 # ------------------------------------------------------------------
 # Plugin sub-commands
 # ------------------------------------------------------------------
+
 
 @plugin_app.command("list")
 def plugin_list() -> None:
@@ -1235,7 +1407,9 @@ def plugin_disable(name: str = typer.Argument(..., help="Plugin name to disable.
 
 @plugin_app.command("install")
 def plugin_install(
-    source: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to the plugin .py file."),
+    source: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Path to the plugin .py file."
+    ),
 ) -> None:
     """Install a plugin into the user plugin directory."""
     manager = PluginManager()
@@ -1249,7 +1423,9 @@ def plugin_install(
 
 @plugin_app.command("validate")
 def plugin_validate(
-    path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a plugin .py file or directory."),
+    path: Path = typer.Argument(
+        ..., exists=True, readable=True, help="Path to a plugin .py file or directory."
+    ),
 ) -> None:
     """Validate a plugin file or all plugins in a directory."""
     if path.is_dir():
@@ -1278,7 +1454,9 @@ def plugin_validate(
 
 @plugin_app.command("test")
 def plugin_test(
-    path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."),
+    path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."
+    ),
 ) -> None:
     """Test a plugin in an isolated environment."""
     result = PluginDebugger.test_plugin(path)
@@ -1300,9 +1478,15 @@ def plugin_test(
 @plugin_app.command("scaffold")
 def plugin_scaffold(
     name: str = typer.Argument(..., help="Name for the new plugin."),
-    output_dir: Path = typer.Option(Path("."), "--output-dir", "-o", help="Directory to write the plugin."),
-    template: str = typer.Option("", "--template", "-t", help="Built-in template: watermark, resize, filter, annotate."),
-    hooks: str = typer.Option("", "--hooks", help="Comma-separated hooks: preprocess,postprocess,on_complete"),
+    output_dir: Path = typer.Option(
+        Path("."), "--output-dir", "-o", help="Directory to write the plugin."
+    ),
+    template: str = typer.Option(
+        "", "--template", "-t", help="Built-in template: watermark, resize, filter, annotate."
+    ),
+    hooks: str = typer.Option(
+        "", "--hooks", help="Comma-separated hooks: preprocess,postprocess,on_complete"
+    ),
 ) -> None:
     """Generate a new plugin scaffold."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1323,7 +1507,9 @@ def plugin_scaffold(
 
 @plugin_app.command("docs")
 def plugin_docs(
-    path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a plugin .py file or directory."),
+    path: Path = typer.Argument(
+        ..., exists=True, readable=True, help="Path to a plugin .py file or directory."
+    ),
     output: Path = typer.Option(None, "--output", "-o", help="Output markdown file."),
 ) -> None:
     """Generate documentation for a plugin or a directory of plugins."""
@@ -1342,10 +1528,13 @@ def plugin_docs(
 # Plugin market sub-commands
 # ------------------------------------------------------------------
 
+
 @plugin_market_app.command("list")
 def plugin_market_list(
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
-    sort_by: str = typer.Option("rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."),
+    sort_by: str = typer.Option(
+        "rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."
+    ),
 ) -> None:
     """List available plugins from the marketplace."""
     market = PluginMarket()
@@ -1380,7 +1569,9 @@ def plugin_market_list(
 def plugin_market_search(
     query: str = typer.Argument(..., help="Search query."),
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
-    sort_by: str = typer.Option("rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."),
+    sort_by: str = typer.Option(
+        "rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."
+    ),
 ) -> None:
     """Search for plugins in the marketplace."""
     market = PluginMarket()
@@ -1410,7 +1601,15 @@ def plugin_market_search(
 @plugin_market_app.command("install")
 def plugin_market_install(
     package_id: str = typer.Argument(..., help="Plugin package ID to install."),
-    source: Path = typer.Option(..., "--source", "-s", exists=True, dir_okay=False, readable=True, help="Path to the plugin .py file."),
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        "-s",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to the plugin .py file.",
+    ),
 ) -> None:
     """Install a plugin from the marketplace."""
     market = PluginMarket()
@@ -1444,7 +1643,7 @@ def plugin_market_rate(
     if success:
         console.print(f"[green]Rated[/green] {package_id} {stars} stars")
     else:
-        console.print(f"[red]Rating failed:[/red] must be 1-5 stars")
+        console.print("[red]Rating failed:[/red] must be 1-5 stars")
         raise typer.Exit(code=1)
 
 
@@ -1452,16 +1651,19 @@ def plugin_market_rate(
 # Docs sub-commands
 # ------------------------------------------------------------------
 
+
 @docs_app.command("generate")
 def docs_generate(
-    output_dir: Path = typer.Option(Path("docs"), "--output", "-o", help="Output directory for generated docs."),
+    output_dir: Path = typer.Option(
+        Path("docs"), "--output", "-o", help="Output directory for generated docs."
+    ),
 ) -> None:
     """Generate API documentation."""
     generator = APIDocsGenerator(output_dir=output_dir)
     cli_path = generator.generate_cli_docs()
     python_path = generator.generate_python_api_docs()
     plugin_path = generator.generate_plugin_docs()
-    console.print(f"[green]Generated docs:[/green]")
+    console.print("[green]Generated docs:[/green]")
     console.print(f"  CLI: {cli_path}")
     console.print(f"  Python API: {python_path}")
     console.print(f"  Plugin Dev: {plugin_path}")
@@ -1471,9 +1673,12 @@ def docs_generate(
 # Validate sub-commands
 # ------------------------------------------------------------------
 
+
 @validate_app.command("preset")
 def validate_preset(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a preset .json file."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Path to a preset .json file."
+    ),
 ) -> None:
     """Validate a preset JSON file."""
     passed, errors = PresetValidator.validate(file)
@@ -1488,7 +1693,9 @@ def validate_preset(
 
 @validate_app.command("plugin")
 def validate_plugin(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Path to a plugin .py file."
+    ),
 ) -> None:
     """Validate a plugin file."""
     passed, errors = PluginValidator.validate(file)
@@ -1505,9 +1712,12 @@ def validate_plugin(
 # Contrib sub-commands
 # ------------------------------------------------------------------
 
+
 @contrib_app.command("guide")
 def contrib_guide(
-    output: Path = typer.Option(Path("CONTRIBUTING.md"), "--output", "-o", help="Output path for the guide."),
+    output: Path = typer.Option(
+        Path("CONTRIBUTING.md"), "--output", "-o", help="Output path for the guide."
+    ),
 ) -> None:
     """Generate a CONTRIBUTING.md template."""
     ContributionGuideGenerator.generate(output)
@@ -1518,9 +1728,12 @@ def contrib_guide(
 # Queue sub-commands
 # ------------------------------------------------------------------
 
+
 @queue_app.command("add")
 def queue_add(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Path = typer.Option(..., "--output", help="Output SVG path."),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
 ) -> None:
@@ -1569,6 +1782,7 @@ def queue_report(
 # ------------------------------------------------------------------
 # Market sub-commands
 # ------------------------------------------------------------------
+
 
 @market_app.command("list")
 def market_list() -> None:
@@ -1676,7 +1890,9 @@ def market_publish(
 
 @market_app.command("popular")
 def market_popular(
-    limit: int = typer.Option(10, "--limit", "-l", min=1, max=50, help="Number of presets to show."),
+    limit: int = typer.Option(
+        10, "--limit", "-l", min=1, max=50, help="Number of presets to show."
+    ),
 ) -> None:
     """Show popular presets from the market."""
     from .market import PresetMarket
@@ -1743,6 +1959,7 @@ def market_info(
 # ------------------------------------------------------------------
 # Cloud market sub-commands (extends market)
 # ------------------------------------------------------------------
+
 
 @market_app.command("purchase")
 def market_purchase(
@@ -1818,7 +2035,9 @@ def market_library() -> None:
 
 @market_app.command("publish-item")
 def market_publish_item(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Item JSON file to publish."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Item JSON file to publish."
+    ),
     item_type: str = typer.Option("plugin", "--type", "-t", help="Item type: plugin, preset, etc."),
     name: str = typer.Option(..., "--name", "-n", help="Display name for the item."),
 ) -> None:
@@ -1860,10 +2079,13 @@ def market_publish_item(
 # Account sub-commands
 # ------------------------------------------------------------------
 
+
 @account_app.command("login")
 def account_login(
     token: str = typer.Argument(..., help="Authentication token."),
-    backend_url: str = typer.Option("https://api.bitmap-vector-studio.example", "--backend-url", help="Cloud backend URL."),
+    backend_url: str = typer.Option(
+        "https://api.bitmap-vector-studio.example", "--backend-url", help="Cloud backend URL."
+    ),
 ) -> None:
     """Log in to the cloud account using a token."""
     save_auth(token, backend_url)
@@ -1928,10 +2150,15 @@ def account_credits() -> None:
 # OCR sub-commands
 # ------------------------------------------------------------------
 
+
 @ocr_app.command("detect")
 def ocr_detect(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output JSON path for regions."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output JSON path for regions."
+    ),
     vertical: bool = typer.Option(False, "--vertical", help="Detect vertical text orientation."),
 ) -> None:
     """Detect text regions in an image."""
@@ -1946,6 +2173,7 @@ def ocr_detect(
 
     if output:
         import json
+
         output.write_text(json.dumps(regions, indent=2, ensure_ascii=False), encoding="utf-8")
         console.print(f"[green]Saved[/green] {output} ({len(regions)} regions)")
     else:
@@ -1966,9 +2194,15 @@ def ocr_detect(
 
 @ocr_app.command("recognize")
 def ocr_recognize(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
-    lang: Optional[str] = typer.Option(None, "--lang", "-l", help="OCR language code (e.g. chi_sim, jpn, kor)."),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output JSON path for results."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
+    lang: Optional[str] = typer.Option(
+        None, "--lang", "-l", help="OCR language code (e.g. chi_sim, jpn, kor)."
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output JSON path for results."
+    ),
 ) -> None:
     """Recognize text in an image with optional language support."""
     from PIL import Image
@@ -1979,6 +2213,7 @@ def ocr_recognize(
 
     if output:
         import json
+
         output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
         console.print(f"[green]Saved[/green] {output} ({len(results)} lines)")
     else:
@@ -2022,9 +2257,12 @@ def ocr_languages() -> None:
 # AI sub-commands
 # ------------------------------------------------------------------
 
+
 @ai_app.command("segment")
 def ai_segment(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
     model: str = typer.Option("unet-lite", "--model", help="Segmentation model name."),
 ) -> None:
@@ -2045,7 +2283,9 @@ def ai_segment(
 
 @ai_app.command("style")
 def ai_style(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
     style: str = typer.Option("sketch", "--style", help="Style: sketch, oil, watercolor, cartoon."),
 ) -> None:
@@ -2066,7 +2306,9 @@ def ai_style(
 
 @ai_app.command("upscale")
 def ai_upscale(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
     scale: int = typer.Option(2, "--scale", min=1, max=4, help="Upscaling factor."),
 ) -> None:
@@ -2082,7 +2324,9 @@ def ai_upscale(
     if out.suffix.lower() != ".png":
         out = out.with_suffix(".png")
     upscaled.save(out, format="PNG", optimize=True)
-    console.print(f"[green]Saved upscaled image[/green] {out} ({upscaled.size[0]}x{upscaled.size[1]})")
+    console.print(
+        f"[green]Saved upscaled image[/green] {out} ({upscaled.size[0]}x{upscaled.size[1]})"
+    )
 
 
 @ai_app.command("models")
@@ -2126,10 +2370,13 @@ def ai_download(
 # Generate sub-commands
 # ------------------------------------------------------------------
 
+
 @generate_app.command("text")
 def generate_text(
     prompt: str = typer.Argument(..., help="Text prompt for the image."),
-    style: str = typer.Option("flat", "--style", "-s", help="Style: flat, line, gradient, 3d, sketch."),
+    style: str = typer.Option(
+        "flat", "--style", "-s", help="Style: flat, line, gradient, 3d, sketch."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
     width: int = typer.Option(512, "--width", min=64, max=2048, help="Output width."),
     height: int = typer.Option(512, "--height", min=64, max=2048, help="Output height."),
@@ -2148,7 +2395,9 @@ def generate_text(
 
 @generate_app.command("image")
 def generate_image(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Reference image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Reference image."
+    ),
     prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Optional text prompt."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
 ) -> None:
@@ -2169,7 +2418,9 @@ def generate_image(
 @generate_app.command("icon")
 def generate_icon(
     prompt: str = typer.Argument(..., help="Text prompt for the icon."),
-    style: str = typer.Option("flat", "--style", "-s", help="Style: flat, minimal, line, gradient."),
+    style: str = typer.Option(
+        "flat", "--style", "-s", help="Style: flat, minimal, line, gradient."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
 ) -> None:
     """Generate a square icon from a text prompt."""
@@ -2205,7 +2456,9 @@ def generate_logo(
 @generate_app.command("illustration")
 def generate_illustration(
     prompt: str = typer.Argument(..., help="Text prompt for the illustration."),
-    style: str = typer.Option("cartoon", "--style", "-s", help="Style: cartoon, watercolor, sketch."),
+    style: str = typer.Option(
+        "cartoon", "--style", "-s", help="Style: cartoon, watercolor, sketch."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
 ) -> None:
     """Generate an illustration from a text prompt."""
@@ -2224,10 +2477,13 @@ def generate_illustration(
 # Resume command
 # ------------------------------------------------------------------
 
+
 @app.command("resume", hidden=True)
 def resume_command(
     checkpoint_id: str = typer.Argument("", help="Checkpoint ID to resume."),
-    workers: int = typer.Option(1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."),
+    workers: int = typer.Option(
+        1, "--workers", "-w", min=1, max=16, help="Number of concurrent workers."
+    ),
     retry: int = typer.Option(0, "--retry", min=0, max=5, help="Number of retries on failure."),
     list_checkpoints: bool = typer.Option(False, "--list", help="List available checkpoints."),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -2239,6 +2495,7 @@ def resume_command(
         checkpoints = cp_mgr.list_checkpoints()
         if json_output:
             import json as _json
+
             console.print(_json.dumps(checkpoints, indent=2, ensure_ascii=False))
         else:
             table = Table(title="Checkpoints")
@@ -2264,7 +2521,9 @@ def resume_command(
         console.print("[green]All tasks in this checkpoint are already completed.[/green]")
         raise typer.Exit(code=0)
 
-    q = TaskQueue(max_workers=workers, max_retries=retry, checkpoint_manager=cp_mgr, queue_id=checkpoint_id)
+    q = TaskQueue(
+        max_workers=workers, max_retries=retry, checkpoint_manager=cp_mgr, queue_id=checkpoint_id
+    )
     with q._lock:
         for task in pending_tasks:
             task.status = "pending"
@@ -2301,6 +2560,7 @@ def resume_command(
 # ------------------------------------------------------------------
 # Workspace sub-commands
 # ------------------------------------------------------------------
+
 
 @workspace_app.command("list")
 def workspace_list() -> None:
@@ -2366,17 +2626,23 @@ def workspace_delete(
 # Cloud sync sub-commands
 # ------------------------------------------------------------------
 
-def _get_cloud_manager(backend: str | None = None, base_url: str = "http://localhost:8000") -> CloudSyncManager:
+
+def _get_cloud_manager(
+    backend: str | None = None, base_url: str = "http://localhost:8000"
+) -> CloudSyncManager:
     """Build a CloudSyncManager from CLI options."""
     if backend == "gist":
         token = os.environ.get("GITHUB_TOKEN")
         if not token:
-            console.print("[red]GITHUB_TOKEN environment variable is required for Gist backend.[/red]")
+            console.print(
+                "[red]GITHUB_TOKEN environment variable is required for Gist backend.[/red]"
+            )
             raise typer.Exit(code=1)
         gb = GitHubGistBackend(token=token)
         return CloudSyncManager(backend=gb)
     # Default local backend
     import tempfile
+
     tmpdir = Path(tempfile.mkdtemp(prefix="vs-cloud-cli-"))
     lb = LocalServerBackend(storage_dir=tmpdir, base_url=base_url)
     return CloudSyncManager(backend=lb)
@@ -2384,10 +2650,16 @@ def _get_cloud_manager(backend: str | None = None, base_url: str = "http://local
 
 @cloud_app.command("share")
 def cloud_share(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to share."),
-    expire_hours: int = typer.Option(24, "--expire", "-e", min=1, max=168, help="Expiration time in hours."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to share."
+    ),
+    expire_hours: int = typer.Option(
+        24, "--expire", "-e", min=1, max=168, help="Expiration time in hours."
+    ),
     backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
-    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+    base_url: str = typer.Option(
+        "http://localhost:8000", "--base-url", help="Base URL for local shares."
+    ),
 ) -> None:
     """Share an SVG file and display the link and QR code."""
     manager = _get_cloud_manager(backend=backend, base_url=base_url)
@@ -2408,7 +2680,9 @@ def cloud_share(
 @cloud_app.command("list")
 def cloud_list(
     backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
-    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+    base_url: str = typer.Option(
+        "http://localhost:8000", "--base-url", help="Base URL for local shares."
+    ),
 ) -> None:
     """List all shared files."""
     manager = _get_cloud_manager(backend=backend, base_url=base_url)
@@ -2433,7 +2707,9 @@ def cloud_list(
 def cloud_revoke(
     file_id: str = typer.Argument(..., help="File ID to revoke."),
     backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
-    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+    base_url: str = typer.Option(
+        "http://localhost:8000", "--base-url", help="Base URL for local shares."
+    ),
 ) -> None:
     """Revoke a shared file."""
     manager = _get_cloud_manager(backend=backend, base_url=base_url)
@@ -2449,7 +2725,9 @@ def cloud_revoke(
 def cloud_qr(
     file_id: str = typer.Argument(..., help="File ID to generate QR for."),
     backend: str = typer.Option("local", "--backend", "-b", help="Backend: local or gist."),
-    base_url: str = typer.Option("http://localhost:8000", "--base-url", help="Base URL for local shares."),
+    base_url: str = typer.Option(
+        "http://localhost:8000", "--base-url", help="Base URL for local shares."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output PNG path."),
 ) -> None:
     """Generate a QR code PNG for a shared file."""
@@ -2466,12 +2744,14 @@ def cloud_qr(
     else:
         # Print base64 to stdout so it can be piped.
         import base64
+
         console.print(base64.b64encode(qr_bytes).decode("ascii"))
 
 
 # ------------------------------------------------------------------
 # Engine sub-commands
 # ------------------------------------------------------------------
+
 
 @engine_app.command("list")
 def engine_list() -> None:
@@ -2527,19 +2807,27 @@ def engine_info(
 
 @engine_app.command("benchmark")
 def engine_benchmark(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
-    engines: list[str] = typer.Option([], "--engine", "-e", help="Engine(s) to benchmark. Omit to test all available."),
-    preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use for VTracer-based engines."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
+    engines: list[str] = typer.Option(
+        [], "--engine", "-e", help="Engine(s) to benchmark. Omit to test all available."
+    ),
+    preset: str = typer.Option(
+        "poster", "--preset", "-p", help="Preset to use for VTracer-based engines."
+    ),
 ) -> None:
     """Compare multiple engines on the same image."""
-    from .engines import EngineBenchmark, EngineRegistry
+    from .engines import EngineBenchmark, EngineRegistry as EngineRegistry
     from .presets import options_from_preset
 
     opts = options_from_preset(preset)
     benchmark = EngineBenchmark()
     engine_list = engines if engines else None
 
-    results = benchmark.compare_engines(input_path, engines=engine_list, options={"trace_options": opts})
+    results = benchmark.compare_engines(
+        input_path, engines=engine_list, options={"trace_options": opts}
+    )
 
     table = Table(title=f"Engine Benchmark: {input_path.name}")
     table.add_column("Engine", style="bold")
@@ -2573,7 +2861,9 @@ def engine_benchmark(
 
 @engine_app.command("auto")
 def engine_auto(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output SVG path."),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
 ) -> None:
@@ -2584,7 +2874,9 @@ def engine_auto(
     registry = EngineRegistry()
     best_engine = registry.get_best_engine(input_path)
     info = best_engine.get_info()
-    console.print(f"[cyan]Recommended engine:[/cyan] {info['name']} (available={info['available']})")
+    console.print(
+        f"[cyan]Recommended engine:[/cyan] {info['name']} (available={info['available']})"
+    )
 
     opts = options_from_preset(preset)
     out = output or input_path.with_suffix(".svg")
@@ -2603,7 +2895,9 @@ def engine_auto(
 @collab_app.command("create")
 def collab_create(
     owner: str = typer.Option("anonymous", "--owner", "-o", help="Room owner identifier."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
 ) -> None:
     """Create a new collaboration room."""
     import urllib.request
@@ -2630,8 +2924,12 @@ def collab_create(
 @collab_app.command("join")
 def collab_join(
     room_id: str = typer.Argument(..., help="Room identifier to join."),
-    client_id: str = typer.Option("", "--client-id", "-c", help="Client identifier (auto-generated if empty)."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    client_id: str = typer.Option(
+        "", "--client-id", "-c", help="Client identifier (auto-generated if empty)."
+    ),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
 ) -> None:
     """Join a collaboration room (CLI polling mode).
 
@@ -2670,7 +2968,9 @@ def collab_join(
 @collab_app.command("status")
 def collab_status(
     room_id: str = typer.Argument(..., help="Room identifier."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
 ) -> None:
     """Show the current status of a collaboration room."""
     import urllib.request
@@ -2711,8 +3011,12 @@ def collab_status(
 @collab_app.command("history")
 def collab_history(
     room_id: str = typer.Argument(..., help="Room identifier."),
-    limit: int = typer.Option(20, "--limit", "-l", min=1, max=500, help="Number of operations to show."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    limit: int = typer.Option(
+        20, "--limit", "-l", min=1, max=500, help="Number of operations to show."
+    ),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
 ) -> None:
     """Show the operation history of a collaboration room."""
     import urllib.request
@@ -2757,8 +3061,10 @@ def collab_history(
 
 
 @sync_app.command("status")
-def sync_status(
-    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+def legacy_sync_status(
+    server_url: str = typer.Option(
+        "http://localhost:8000", "--server-url", help="Sync server URL."
+    ),
 ) -> None:
     """Show the sync status for this device."""
     client = SyncClient(server_url=server_url)
@@ -2774,6 +3080,7 @@ def sync_status(
 # ------------------------------------------------------------------
 # Workflow sub-commands
 # ------------------------------------------------------------------
+
 
 @workflow_app.command("list")
 def workflow_list() -> None:
@@ -2793,8 +3100,12 @@ def workflow_list() -> None:
 
 @workflow_app.command("run")
 def workflow_run(
-    workflow_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."),
-    input_path: Path = typer.Option(..., "--input", "-i", exists=True, dir_okay=False, readable=True, help="Input image."),
+    workflow_file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."
+    ),
+    input_path: Path = typer.Option(
+        ..., "--input", "-i", exists=True, dir_okay=False, readable=True, help="Input image."
+    ),
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory."),
 ) -> None:
     """Run a workflow file against an input image."""
@@ -2827,8 +3138,15 @@ def workflow_run(
 
 @workflow_app.command("create")
 def workflow_create(
-    template: str = typer.Option(..., "--template", "-t", help="Template name: logo_pipeline, photo_pipeline, batch_pipeline."),
-    output: Path = typer.Option(Path("workflow.json"), "--output", "-o", help="Output workflow JSON file."),
+    template: str = typer.Option(
+        ...,
+        "--template",
+        "-t",
+        help="Template name: logo_pipeline, photo_pipeline, batch_pipeline.",
+    ),
+    output: Path = typer.Option(
+        Path("workflow.json"), "--output", "-o", help="Output workflow JSON file."
+    ),
 ) -> None:
     """Create a workflow from a built-in template."""
     try:
@@ -2842,7 +3160,9 @@ def workflow_create(
 
 @workflow_app.command("validate")
 def workflow_validate(
-    workflow_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."),
+    workflow_file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Workflow JSON file."
+    ),
 ) -> None:
     """Validate a workflow file."""
     try:
@@ -2865,9 +3185,12 @@ def workflow_validate(
 # Sync sub-commands
 # ------------------------------------------------------------------
 
+
 @sync_app.command("push")
 def sync_push(
-    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+    server_url: str = typer.Option(
+        "http://localhost:8000", "--server-url", help="Sync server URL."
+    ),
 ) -> None:
     """Push local data to the sync server."""
     client = SyncClient(server_url=server_url)
@@ -2885,7 +3208,9 @@ def sync_push(
 
 @sync_app.command("pull")
 def sync_pull(
-    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+    server_url: str = typer.Option(
+        "http://localhost:8000", "--server-url", help="Sync server URL."
+    ),
 ) -> None:
     """Pull remote data from the sync server and merge with local copies."""
     client = SyncClient(server_url=server_url)
@@ -2918,7 +3243,9 @@ def sync_pull(
 
 @sync_app.command("status")
 def sync_status(
-    server_url: str = typer.Option("http://localhost:8000", "--server-url", help="Sync server URL."),
+    server_url: str = typer.Option(
+        "http://localhost:8000", "--server-url", help="Sync server URL."
+    ),
 ) -> None:
     """Show the sync status for this device."""
     client = SyncClient(server_url=server_url)
@@ -2935,11 +3262,16 @@ def sync_status(
 # Animation sub-commands
 # ------------------------------------------------------------------
 
+
 @animate_app.command("svg")
 def animate_svg(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input SVG file."
+    ),
     output: Path = typer.Option(..., "--output", "-o", help="Output animated SVG path."),
-    preset: str = typer.Option("draw", "--preset", "-p", help="Animation preset: draw, reveal, morph, pulse, color_cycle."),
+    preset: str = typer.Option(
+        "draw", "--preset", "-p", help="Animation preset: draw, reveal, morph, pulse, color_cycle."
+    ),
 ) -> None:
     """Export an SVG with embedded SMIL animations."""
     builder = AnimationBuilder().load_svg(input_path).apply_preset(preset)
@@ -2949,7 +3281,9 @@ def animate_svg(
 
 @animate_app.command("lottie")
 def animate_lottie(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input SVG file."
+    ),
     output: Path = typer.Option(..., "--output", "-o", help="Output Lottie JSON path."),
 ) -> None:
     """Convert an SVG to Lottie JSON format."""
@@ -2960,10 +3294,14 @@ def animate_lottie(
 
 @animate_app.command("gif")
 def animate_gif(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input SVG file."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input SVG file."
+    ),
     output: Path = typer.Option(..., "--output", "-o", help="Output GIF path."),
     fps: int = typer.Option(30, "--fps", min=1, max=60, help="Frames per second."),
-    duration: float = typer.Option(2.0, "--duration", min=0.1, max=10.0, help="Animation duration in seconds."),
+    duration: float = typer.Option(
+        2.0, "--duration", min=0.1, max=10.0, help="Animation duration in seconds."
+    ),
     preset: str = typer.Option("draw", "--preset", "-p", help="Animation preset."),
 ) -> None:
     """Export a GIF preview of an SVG animation."""
@@ -2995,9 +3333,12 @@ def animate_presets() -> None:
 # Design sub-commands
 # ------------------------------------------------------------------
 
+
 @design_app.command("figma-export")
 def design_figma_export(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to export."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to export."
+    ),
     file_key: str = typer.Option(..., "--file-key", help="Figma file key."),
     node_id: str = typer.Option("", "--node-id", help="Target node id."),
 ) -> None:
@@ -3007,7 +3348,7 @@ def design_figma_export(
     if success:
         console.print(f"[green]Exported[/green] {svg.name} to Figma {file_key}")
     else:
-        console.print(f"[red]Export failed.[/red] Check FIGMA_TOKEN and file permissions.")
+        console.print("[red]Export failed.[/red] Check FIGMA_TOKEN and file permissions.")
         raise typer.Exit(code=1)
 
 
@@ -3023,6 +3364,7 @@ def design_figma_import(
         path = plugin.import_from_figma(file_key, node_id)
         if output:
             import shutil
+
             shutil.move(str(path), str(output))
             path = output
         console.print(f"[green]Imported[/green] {path}")
@@ -3033,7 +3375,9 @@ def design_figma_import(
 
 @design_app.command("sketch-export")
 def design_sketch_export(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to export."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to export."
+    ),
     document: Path = typer.Option(..., "--document", help="Sketch .sketch document path."),
 ) -> None:
     """Export an SVG into a Sketch document."""
@@ -3042,13 +3386,15 @@ def design_sketch_export(
     if success:
         console.print(f"[green]Exported[/green] {svg.name} to {document}")
     else:
-        console.print(f"[red]Export failed.[/red]")
+        console.print("[red]Export failed.[/red]")
         raise typer.Exit(code=1)
 
 
 @design_app.command("tokens-extract")
 def design_tokens_extract(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to analyse."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to analyse."
+    ),
     output: Path = typer.Option(None, "--output", "-o", help="Output JSON path."),
 ) -> None:
     """Extract design tokens from an SVG."""
@@ -3064,7 +3410,9 @@ def design_tokens_extract(
         table.add_column("Values")
         table.add_row("Colors", str(len(tokens["colors"])), ", ".join(tokens["colors"][:5]) or "-")
         table.add_row("Fonts", str(len(tokens["fonts"])), ", ".join(tokens["fonts"][:5]) or "-")
-        table.add_row("Spacing", str(len(tokens["spacing"])), ", ".join(tokens["spacing"][:5]) or "-")
+        table.add_row(
+            "Spacing", str(len(tokens["spacing"])), ", ".join(tokens["spacing"][:5]) or "-"
+        )
         console.print(table)
 
 
@@ -3072,9 +3420,12 @@ def design_tokens_extract(
 # 3D sub-commands
 # ------------------------------------------------------------------
 
+
 @three_d_app.command("extrude")
 def three_d_extrude(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to extrude."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to extrude."
+    ),
     depth: float = typer.Option(10.0, "--depth", help="Extrusion depth."),
     output: Path = typer.Option(None, "--output", "-o", help="Output SVG path."),
 ) -> None:
@@ -3090,7 +3441,9 @@ def three_d_extrude(
 
 @three_d_app.command("rotate")
 def three_d_rotate(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to rotate."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to rotate."
+    ),
     axis: str = typer.Option("z", "--axis", help="Rotation axis: x, y, z."),
     angle: float = typer.Option(45.0, "--angle", help="Rotation angle in degrees."),
     output: Path = typer.Option(None, "--output", "-o", help="Output SVG path."),
@@ -3107,7 +3460,9 @@ def three_d_rotate(
 
 @three_d_app.command("ar-preview")
 def three_d_ar_preview(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file for AR preview."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file for AR preview."
+    ),
     width: float = typer.Option(100.0, "--width", help="Physical width in mm."),
     output: Path = typer.Option(None, "--output", "-o", help="Output USDZ path."),
 ) -> None:
@@ -3125,6 +3480,7 @@ def three_d_ar_preview(
 # ------------------------------------------------------------------
 # Enterprise sub-commands
 # ------------------------------------------------------------------
+
 
 @enterprise_app.command("team")
 def enterprise_team(
@@ -3150,14 +3506,22 @@ def enterprise_team(
             console.print("[red]User ID is required.[/red]")
             raise typer.Exit(code=1)
         ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
-        ws_files = sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws_dir.exists() else []
+        ws_files = (
+            sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if ws_dir.exists()
+            else []
+        )
         if not ws_files:
-            console.print("[red]No workspace found. Create one first with 'enterprise team create <name>'.[/red]")
+            console.print(
+                "[red]No workspace found. Create one first with 'enterprise team create <name>'.[/red]"
+            )
             raise typer.Exit(code=1)
         ws_data = json.loads(ws_files[0].read_text(encoding="utf-8"))
         ws = TeamWorkspace.from_dict(ws_data)
         if ws.add_member(name, role):
-            ws_files[0].write_text(json.dumps(ws.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+            ws_files[0].write_text(
+                json.dumps(ws.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+            )
             console.print(f"[green]Added member[/green] {name} as {role}")
         else:
             console.print(f"[yellow]Failed to add member[/yellow] {name}")
@@ -3201,7 +3565,11 @@ def enterprise_audit_log(
     if workspace_id:
         target = ws_dir / f"{workspace_id}.json"
     else:
-        files = sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws_dir.exists() else []
+        files = (
+            sorted(ws_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if ws_dir.exists()
+            else []
+        )
         if files:
             target = files[0]
     if target is None or not target.exists():
@@ -3230,9 +3598,13 @@ def enterprise_audit_log(
 
 @enterprise_app.command("sso-configure")
 def enterprise_sso_configure(
-    provider: str = typer.Option(..., "--provider", "-p", help="SSO provider: google, github, saml, ldap."),
+    provider: str = typer.Option(
+        ..., "--provider", "-p", help="SSO provider: google, github, saml, ldap."
+    ),
     client_id: str = typer.Option("", "--client-id", help="Client / application ID."),
-    redirect_url: str = typer.Option("http://localhost:8000/callback", "--redirect-url", help="Redirect URL."),
+    redirect_url: str = typer.Option(
+        "http://localhost:8000/callback", "--redirect-url", help="Redirect URL."
+    ),
 ) -> None:
     """Configure an SSO provider."""
     sso = SSOIntegration()
@@ -3254,6 +3626,7 @@ def enterprise_sso_configure(
 # Template market sub-commands
 # ------------------------------------------------------------------
 
+
 @template_app.command("list")
 def template_list(
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
@@ -3272,14 +3645,14 @@ def template_list(
     table.add_column("Author")
     table.add_column("Rating")
     table.add_column("Downloads")
-    for t in templates:
+    for template in templates:
         table.add_row(
-            t.template_id,
-            t.name,
-            t.category,
-            t.author or "-",
-            f"{t.rating:.1f}",
-            str(t.downloads),
+            template.template_id,
+            template.name,
+            template.category,
+            template.author or "-",
+            f"{template.rating:.1f}",
+            str(template.downloads),
         )
     console.print(table)
 
@@ -3300,15 +3673,19 @@ def template_recommend(
     table.add_column("Name")
     table.add_column("Category")
     table.add_column("Rating")
-    for t in recs:
-        table.add_row(t.template_id, t.name, t.category, f"{t.rating:.1f}")
+    for template in recs:
+        table.add_row(
+            template.template_id, template.name, template.category, f"{template.rating:.1f}"
+        )
     console.print(table)
 
 
 @template_app.command("apply")
 def template_apply(
     template_id: str = typer.Argument(..., help="Template ID to apply."),
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
     output: Path = typer.Option(..., "--output", "-o", help="Output SVG path."),
 ) -> None:
     """Apply a template to an input image."""
@@ -3324,12 +3701,13 @@ def template_apply(
 @template_app.command("batch-apply")
 def template_batch_apply(
     template_id: str = typer.Argument(..., help="Template ID to apply."),
-    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input images directory."),
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="Input images directory."
+    ),
     output_dir: Path = typer.Argument(..., help="Output directory."),
     workers: int = typer.Option(4, "--workers", "-w", min=1, max=16, help="Concurrent workers."),
 ) -> None:
     """Batch-apply a template to all images in a directory."""
-    from .batch_template import BatchTemplateApplier
 
     applier = BatchTemplateApplier(max_workers=workers)
     try:
@@ -3354,7 +3732,9 @@ def template_batch_apply(
 
 @template_app.command("publish")
 def template_publish(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Template JSON file to publish."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Template JSON file to publish."
+    ),
     user_id: str = typer.Option("cli_user", "--user", "-u", help="Publisher user identifier."),
 ) -> None:
     """Publish a template JSON file to the marketplace."""
@@ -3374,6 +3754,7 @@ def template_publish(
 # Cache sub-commands
 # ------------------------------------------------------------------
 
+
 @cache_app.command("status")
 def cache_status() -> None:
     """Show cache status and statistics."""
@@ -3392,7 +3773,9 @@ def cache_status() -> None:
 
 @cache_app.command("clear")
 def cache_clear(
-    level: str = typer.Option("all", "--level", "-l", help="Cache level to clear: memory, disk, all."),
+    level: str = typer.Option(
+        "all", "--level", "-l", help="Cache level to clear: memory, disk, all."
+    ),
 ) -> None:
     """Clear cache at the specified level."""
     mgr = CacheManager()
@@ -3407,9 +3790,12 @@ def cache_clear(
 # Render farm sub-commands
 # ------------------------------------------------------------------
 
+
 @farm_app.command("status")
 def farm_status(
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
 ) -> None:
     """Show the current status of the render farm."""
     import urllib.request
@@ -3464,8 +3850,12 @@ def farm_status(
 
 @farm_app.command("submit")
 def farm_submit(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input bitmap image."
+    ),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
     priority: int = typer.Option(0, "--priority", min=0, max=100, help="Task priority."),
 ) -> None:
@@ -3483,7 +3873,9 @@ def farm_submit(
     def _encode_multipart() -> bytes:
         lines: list[bytes] = []
         lines.append(f"--{boundary}".encode("utf-8"))
-        lines.append(f'Content-Disposition: form-data; name="file"; filename="{file.name}"'.encode("utf-8"))
+        lines.append(
+            f'Content-Disposition: form-data; name="file"; filename="{file.name}"'.encode("utf-8")
+        )
         lines.append(f"Content-Type: {content_type}".encode("utf-8"))
         lines.append(b"")
         lines.append(file.read_bytes())
@@ -3520,9 +3912,13 @@ def farm_submit(
 
 @farm_app.command("batch")
 def farm_batch(
-    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Input folder."),
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="Input folder."
+    ),
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory."),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="Base URL of the API server."),
+    api_url: str = typer.Option(
+        "http://localhost:8000", "--api-url", help="Base URL of the API server."
+    ),
     preset: str = typer.Option("poster", "--preset", "-p", help="Preset to use."),
     chunk_size: int = typer.Option(4, "--chunk-size", "-c", min=1, max=64, help="Files per chunk."),
 ) -> None:
@@ -3554,7 +3950,11 @@ def farm_batch(
             def _encode_multipart(path: Path, bnd: str) -> bytes:
                 lines: list[bytes] = []
                 lines.append(f"--{bnd}".encode("utf-8"))
-                lines.append(f'Content-Disposition: form-data; name="file"; filename="{path.name}"'.encode("utf-8"))
+                lines.append(
+                    f'Content-Disposition: form-data; name="file"; filename="{path.name}"'.encode(
+                        "utf-8"
+                    )
+                )
                 lines.append(f"Content-Type: {content_type}".encode("utf-8"))
                 lines.append(b"")
                 lines.append(path.read_bytes())
@@ -3577,7 +3977,9 @@ def farm_batch(
                     data = _json.loads(resp.read().decode("utf-8"))
                     task_ids.append(data["task_id"])
             except urllib.error.HTTPError as exc:
-                console.print(f"[red]API error for {image_path.name}:[/red] {exc.code} {exc.reason}")
+                console.print(
+                    f"[red]API error for {image_path.name}:[/red] {exc.code} {exc.reason}"
+                )
             except Exception as exc:
                 console.print(f"[red]Submit failed for {image_path.name}:[/red] {exc}")
 
@@ -3588,11 +3990,15 @@ def farm_batch(
 def farm_worker(
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host."),
     port: int = typer.Option(9000, "--port", help="Bind port."),
-    capacity: int = typer.Option(4, "--capacity", "-c", min=1, max=16, help="Max concurrent tasks."),
-    coordinator: str = typer.Option("http://localhost:8000", "--coordinator", help="Farm coordinator API URL."),
+    capacity: int = typer.Option(
+        4, "--capacity", "-c", min=1, max=16, help="Max concurrent tasks."
+    ),
+    coordinator: str = typer.Option(
+        "http://localhost:8000", "--coordinator", help="Farm coordinator API URL."
+    ),
 ) -> None:
     """Start a local render-farm worker node."""
-    from .render_farm import start_worker_server, WorkerNode
+    from .render_farm import start_worker_server, WorkerNode as WorkerNode
     import urllib.request
     import urllib.error
     import json as _json
@@ -3602,12 +4008,14 @@ def farm_worker(
 
     # Register with coordinator
     reg_url = f"{coordinator}/farm/workers/register"
-    payload = _json.dumps({
-        "worker_id": worker.worker_id,
-        "host": worker.host,
-        "port": worker.port,
-        "capacity": worker.capacity,
-    }).encode("utf-8")
+    payload = _json.dumps(
+        {
+            "worker_id": worker.worker_id,
+            "host": worker.host,
+            "port": worker.port,
+            "capacity": worker.capacity,
+        }
+    ).encode("utf-8")
     req = urllib.request.Request(
         reg_url,
         data=payload,
@@ -3618,7 +4026,9 @@ def farm_worker(
         with urllib.request.urlopen(req, timeout=10) as resp:
             reg_data = _json.loads(resp.read().decode("utf-8"))
             if reg_data.get("success"):
-                console.print(f"[green]Registered worker[/green] {worker.worker_id} with coordinator")
+                console.print(
+                    f"[green]Registered worker[/green] {worker.worker_id} with coordinator"
+                )
             else:
                 console.print(f"[yellow]Worker already registered[/yellow] {worker.worker_id}")
     except Exception as exc:
@@ -3632,7 +4042,9 @@ def farm_worker(
     def _heartbeat_loop() -> None:
         while True:
             try:
-                hb_url = f"{coordinator}/farm/workers/{urllib.parse.quote(worker.worker_id)}/heartbeat"
+                hb_url = (
+                    f"{coordinator}/farm/workers/{urllib.parse.quote(worker.worker_id)}/heartbeat"
+                )
                 hb_req = urllib.request.Request(hb_url, method="POST")
                 with urllib.request.urlopen(hb_req, timeout=5):
                     pass
@@ -3655,11 +4067,16 @@ def farm_worker(
 # Report sub-commands
 # ------------------------------------------------------------------
 
+
 @report_app.command("convert")
 def report_convert(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="输入位图图片。"
+    ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="输出路径。"),
-    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="预设名称，不指定则自动推荐。"),
+    preset: Optional[str] = typer.Option(
+        None, "--preset", "-p", help="预设名称，不指定则自动推荐。"
+    ),
     format: str = typer.Option("json", "--format", "-f", help="报告格式: json/md/csv。"),
     optimize: str = typer.Option("basic", "--optimize", help="优化级别。"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="静默模式。"),
@@ -3724,7 +4141,9 @@ def report_convert(
 
 @report_app.command("batch")
 def report_batch(
-    input_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="输入文件夹。"),
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="输入文件夹。"
+    ),
     output_dir: Path = typer.Argument(..., help="输出文件夹。"),
     preset: str = typer.Option("poster", "--preset", "-p", help="预设名称。"),
     format: str = typer.Option("json", "--format", "-f", help="报告格式: json/md/csv。"),
@@ -3745,7 +4164,9 @@ def report_batch(
     output_dir.mkdir(parents=True, exist_ok=True)
     opts = options_from_preset(preset)
     iterator = input_dir.rglob("*") if recursive else input_dir.glob("*")
-    images = [path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+    images = [
+        path for path in iterator if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    ]
 
     if not images:
         if not quiet:
@@ -3899,6 +4320,7 @@ def report_list() -> None:
 # Stats command
 # ------------------------------------------------------------------
 
+
 @app.command("stats")
 def stats_command(
     days: int = typer.Option(30, "--days", "-d", min=1, max=365, help="统计天数。"),
@@ -3939,10 +4361,17 @@ def stats_command(
 # Health / Metrics / Status commands
 # ------------------------------------------------------------------
 
+
 @app.command("health")
 def health_command() -> None:
     """显示系统健康状态."""
-    from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
+    from .health_check import (
+        HealthChecker,
+        check_disk_space,
+        check_memory,
+        check_python_deps,
+        check_vtracer,
+    )
 
     checker = HealthChecker()
     checker.register("disk", lambda: check_disk_space())
@@ -3997,7 +4426,13 @@ def metrics_command() -> None:
 @app.command("status")
 def status_command() -> None:
     """综合状态报告（健康 + 指标 + 版本）."""
-    from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
+    from .health_check import (
+        HealthChecker,
+        check_disk_space,
+        check_memory,
+        check_python_deps,
+        check_vtracer,
+    )
     from .metrics import get_metrics
 
     checker = HealthChecker()
@@ -4034,9 +4469,12 @@ def status_command() -> None:
 # Security commands
 # ------------------------------------------------------------------
 
+
 @security_app.command("scan")
 def security_scan(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="File to scan."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="File to scan."
+    ),
 ) -> None:
     """Scan a file for security issues."""
     try:
@@ -4052,8 +4490,12 @@ def security_scan(
 
 @security_app.command("sanitize")
 def security_sanitize(
-    svg: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG file to sanitize."),
-    output: Path | None = typer.Option(None, "--output", "-o", help="Output path for sanitized SVG."),
+    svg: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="SVG file to sanitize."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Output path for sanitized SVG."
+    ),
 ) -> None:
     """Sanitize an SVG file by removing dangerous elements."""
     svg_content = svg.read_text(encoding="utf-8")
@@ -4070,11 +4512,14 @@ def security_sanitize(
 # Audit commands
 # ------------------------------------------------------------------
 
+
 @audit_app.command("log")
 def audit_log(
     user: str | None = typer.Option(None, "--user", "-u", help="Filter by user."),
     action: str | None = typer.Option(None, "--action", "-a", help="Filter by action."),
-    limit: int = typer.Option(50, "--limit", "-l", min=1, max=500, help="Maximum number of entries."),
+    limit: int = typer.Option(
+        50, "--limit", "-l", min=1, max=500, help="Maximum number of entries."
+    ),
 ) -> None:
     """View audit logs."""
     logger = AuditLogger()
@@ -4111,10 +4556,13 @@ def audit_log(
 # Notify sub-commands
 # ------------------------------------------------------------------
 
+
 @notify_app.command("add-webhook")
 def notify_add_webhook(
     url: str = typer.Argument(..., help="Webhook URL."),
-    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+    events: list[str] = typer.Option(
+        [], "--event", help="Event types to subscribe (can be used multiple times)."
+    ),
 ) -> None:
     """Add a Webhook notification."""
     notifier = Notifier()
@@ -4125,7 +4573,9 @@ def notify_add_webhook(
 @notify_app.command("add-slack")
 def notify_add_slack(
     url: str = typer.Argument(..., help="Slack webhook URL."),
-    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+    events: list[str] = typer.Option(
+        [], "--event", help="Event types to subscribe (can be used multiple times)."
+    ),
 ) -> None:
     """Add a Slack notification."""
     notifier = Notifier()
@@ -4136,7 +4586,9 @@ def notify_add_slack(
 @notify_app.command("add-discord")
 def notify_add_discord(
     url: str = typer.Argument(..., help="Discord webhook URL."),
-    events: list[str] = typer.Option([], "--event", help="Event types to subscribe (can be used multiple times)."),
+    events: list[str] = typer.Option(
+        [], "--event", help="Event types to subscribe (can be used multiple times)."
+    ),
 ) -> None:
     """Add a Discord notification."""
     notifier = Notifier()
@@ -4173,7 +4625,9 @@ def notify_list() -> None:
 
 @notify_app.command("remove")
 def notify_remove(
-    index: int = typer.Argument(..., min=0, help="Index of the notification to remove (from list)."),
+    index: int = typer.Argument(
+        ..., min=0, help="Index of the notification to remove (from list)."
+    ),
 ) -> None:
     """Remove a notification configuration."""
     notifier = Notifier()
@@ -4212,10 +4666,13 @@ def notify_test(
 # Search sub-commands
 # ------------------------------------------------------------------
 
+
 @search_app.command("history")
 def search_history(
     query: str = typer.Argument("", help="Search query."),
-    status: str | None = typer.Option(None, "--status", help="Filter by status: completed, failed."),
+    status: str | None = typer.Option(
+        None, "--status", help="Filter by status: completed, failed."
+    ),
     preset: str | None = typer.Option(None, "--preset", "-p", help="Filter by preset name."),
     limit: int = typer.Option(20, "--limit", "-l", min=1, max=100, help="Maximum results."),
 ) -> None:
@@ -4299,6 +4756,7 @@ app.add_typer(tag_app, name="tag")
 # Export sub-commands
 # ------------------------------------------------------------------
 
+
 @export_app.command("json")
 def export_json(
     output: Path = typer.Option(..., "--output", "-o", help="Output JSON file path."),
@@ -4355,9 +4813,12 @@ def export_zip(
 # Import sub-commands
 # ------------------------------------------------------------------
 
+
 @import_app.command("json")
 def import_json(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input JSON file path."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input JSON file path."
+    ),
     strategy: str = typer.Option("merge", "--strategy", help="merge / replace / skip."),
 ) -> None:
     """Import data from a JSON file."""
@@ -4369,7 +4830,7 @@ def import_json(
 
     exporter = ImportExporter()
     stats = exporter.import_from_json(input_path, merge_strategy=strategy)
-    console.print(f"[green]Import complete[/green]")
+    console.print("[green]Import complete[/green]")
     for category, count in stats.get("imported", {}).items():
         console.print(f"  {category}: {count} items")
     for error in stats.get("errors", []):
@@ -4378,7 +4839,9 @@ def import_json(
 
 @import_app.command("zip")
 def import_zip(
-    input_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Input ZIP file path."),
+    input_path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Input ZIP file path."
+    ),
     strategy: str = typer.Option("merge", "--strategy", help="merge / replace / skip."),
 ) -> None:
     """Import data from a ZIP archive."""
@@ -4390,7 +4853,7 @@ def import_zip(
 
     exporter = ImportExporter()
     stats = exporter.import_from_zip(input_path, merge_strategy=strategy)
-    console.print(f"[green]Import complete[/green]")
+    console.print("[green]Import complete[/green]")
     for category, count in stats.get("imported", {}).items():
         console.print(f"  {category}: {count} items")
     for error in stats.get("errors", []):
@@ -4400,6 +4863,7 @@ def import_zip(
 # ------------------------------------------------------------------
 # Tag sub-commands
 # ------------------------------------------------------------------
+
 
 @tag_app.command("add")
 def tag_add(
@@ -4495,13 +4959,16 @@ def tag_auto(
 # Cloud storage sub-commands
 # ------------------------------------------------------------------
 
+
 @storage_app.command("add")
 def storage_add(
     name: str = typer.Argument(..., help="Storage configuration name."),
     provider: str = typer.Option(..., "--provider", "-p", help="Provider: local, s3, oss, cos."),
     bucket: str = typer.Option(..., "--bucket", "-b", help="Bucket name or local directory path."),
     region: str | None = typer.Option(None, "--region", "-r", help="Region (for s3, cos)."),
-    endpoint: str | None = typer.Option(None, "--endpoint", "-e", help="Endpoint URL (for oss, cos)."),
+    endpoint: str | None = typer.Option(
+        None, "--endpoint", "-e", help="Endpoint URL (for oss, cos)."
+    ),
     access_key: str | None = typer.Option(None, "--access-key", "-a", help="Access key."),
     secret_key: str | None = typer.Option(None, "--secret-key", "-s", help="Secret key."),
     prefix: str = typer.Option("", "--prefix", help="Key prefix."),
@@ -4554,9 +5021,13 @@ def storage_list() -> None:
 
 @storage_app.command("upload")
 def storage_upload(
-    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="File to upload."),
+    file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="File to upload."
+    ),
     storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
-    remote_key: str | None = typer.Option(None, "--key", "-k", help="Remote key (defaults to file name)."),
+    remote_key: str | None = typer.Option(
+        None, "--key", "-k", help="Remote key (defaults to file name)."
+    ),
 ) -> None:
     """Upload a file to cloud storage."""
     manager = StorageManager()
@@ -4597,9 +5068,13 @@ def storage_download(
 
 @storage_app.command("sync")
 def storage_sync(
-    local_dir: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Local directory to sync."),
+    local_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="Local directory to sync."
+    ),
     storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
-    direction: str = typer.Option("up", "--direction", "-d", help="Sync direction: up (to cloud) or down (from cloud)."),
+    direction: str = typer.Option(
+        "up", "--direction", "-d", help="Sync direction: up (to cloud) or down (from cloud)."
+    ),
     remote_prefix: str = typer.Option("", "--prefix", "-p", help="Remote prefix."),
 ) -> None:
     """Sync a local directory with cloud storage."""
@@ -4623,12 +5098,17 @@ def storage_sync(
 # Rule engine sub-commands
 # ------------------------------------------------------------------
 
+
 @rule_app.command("add")
 def rule_add(
     name: str = typer.Argument(..., help="Rule name."),
     condition: str = typer.Option(..., "--condition", "-c", help="Condition expression."),
-    action: str = typer.Option(..., "--action", "-a", help="Action type: convert, tag, move, copy, rename, delete."),
-    action_params: str = typer.Option("{}", "--params", "-p", help="Action parameters as JSON string."),
+    action: str = typer.Option(
+        ..., "--action", "-a", help="Action type: convert, tag, move, copy, rename, delete."
+    ),
+    action_params: str = typer.Option(
+        "{}", "--params", "-p", help="Action parameters as JSON string."
+    ),
     priority: int = typer.Option(0, "--priority", help="Rule priority (higher runs first)."),
 ) -> None:
     """Add a batch processing rule."""
@@ -4676,7 +5156,9 @@ def rule_list() -> None:
 
 @rule_app.command("run")
 def rule_run(
-    directory: Path = typer.Argument(..., exists=True, file_okay=False, readable=True, help="Directory to process."),
+    directory: Path = typer.Argument(
+        ..., exists=True, file_okay=False, readable=True, help="Directory to process."
+    ),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Process subdirectories."),
 ) -> None:
     """Run batch rules against all files in a directory."""
@@ -4694,10 +5176,14 @@ def rule_run(
             total += 1
             if not success:
                 failures += 1
-                console.print(f"[red]Rule '{rule_name}' failed for {file_path.name}:[/red] {message}")
+                console.print(
+                    f"[red]Rule '{rule_name}' failed for {file_path.name}:[/red] {message}"
+                )
             else:
                 console.print(f"[green]Rule '{rule_name}'[/green] applied to {file_path.name}")
-    console.print(f"Processed {len(files)} file(s), {total} rule execution(s), {failures} failure(s).")
+    console.print(
+        f"Processed {len(files)} file(s), {total} rule execution(s), {failures} failure(s)."
+    )
     if failures:
         raise typer.Exit(code=1)
 
@@ -4705,6 +5191,7 @@ def rule_run(
 # ------------------------------------------------------------------
 # Migrate command
 # ------------------------------------------------------------------
+
 
 @app.command("migrate")
 def migrate_command() -> None:

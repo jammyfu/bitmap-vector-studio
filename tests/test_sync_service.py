@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
+import json as json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 

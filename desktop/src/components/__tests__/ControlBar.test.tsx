@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent } from '../../test/render'
 import ControlBar from '../ControlBar'
 
 describe('ControlBar', () => {
@@ -112,7 +112,7 @@ describe('ControlBar', () => {
         onAddToQueue={mock}
       />
     )
-    fireEvent.click(screen.getByText('添加到队列'))
+    fireEvent.click(screen.getByRole('button', { name: /添加到队列$/ }))
     expect(mock).toHaveBeenCalled()
   })
 
@@ -127,7 +127,7 @@ describe('ControlBar', () => {
         onOpenExternal={mock}
       />
     )
-    fireEvent.click(screen.getByText('外部编辑器'))
+    fireEvent.click(screen.getByRole('button', { name: /外部编辑器$/ }))
     expect(mock).toHaveBeenCalled()
   })
 
@@ -142,7 +142,7 @@ describe('ControlBar', () => {
         onOpenExternal={mock}
       />
     )
-    fireEvent.click(screen.getByText('外部编辑器'))
+    fireEvent.click(screen.getByRole('button', { name: /外部编辑器$/ }))
     expect(mock).not.toHaveBeenCalled()
   })
 })

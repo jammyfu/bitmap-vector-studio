@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import numpy as np
 import pytest
@@ -137,14 +137,18 @@ class TestVectorGenerator:
 class TestAIGenerationProcessor:
     def test_generate_text_task(self):
         processor = AIGenerationProcessor()
-        with patch.object(processor.generator, "generate_from_text", return_value=Image.new("RGB", (64, 64))) as mock_gen:
+        with patch.object(
+            processor.generator, "generate_from_text", return_value=Image.new("RGB", (64, 64))
+        ) as mock_gen:
             result = processor.generate("text", "hello", style="flat", size=(64, 64))
         mock_gen.assert_called_once_with("hello", style="flat", size=(64, 64))
         assert result.size == (64, 64)
 
     def test_generate_icon_task(self):
         processor = AIGenerationProcessor()
-        with patch.object(processor.generator, "generate_icon", return_value=Image.new("RGB", (256, 256))) as mock_gen:
+        with patch.object(
+            processor.generator, "generate_icon", return_value=Image.new("RGB", (256, 256))
+        ) as mock_gen:
             result = processor.generate("icon", "settings")
         mock_gen.assert_called_once_with("settings")
         assert result.size == (256, 256)
@@ -176,7 +180,20 @@ class TestGenerateCLI:
         with patch("vector_studio.ai_generation.VectorGenerator") as mock_cls:
             mock_instance = mock_cls.return_value
             mock_instance.generate_from_text.return_value = Image.new("RGB", (64, 64))
-            result = runner.invoke(app, ["generate", "text", "a cat", "--output", str(out), "--width", "64", "--height", "64"])
+            result = runner.invoke(
+                app,
+                [
+                    "generate",
+                    "text",
+                    "a cat",
+                    "--output",
+                    str(out),
+                    "--width",
+                    "64",
+                    "--height",
+                    "64",
+                ],
+            )
         assert result.exit_code == 0
         assert "Generated" in result.output
         mock_instance.generate_from_text.assert_called_once()
@@ -218,7 +235,9 @@ class TestGenerateCLI:
         with patch("vector_studio.ai_generation.VectorGenerator") as mock_cls:
             mock_instance = mock_cls.return_value
             mock_instance.generate_illustration.return_value = Image.new("RGB", (512, 512))
-            result = runner.invoke(app, ["generate", "illustration", "forest", "--output", str(out)])
+            result = runner.invoke(
+                app, ["generate", "illustration", "forest", "--output", str(out)]
+            )
         assert result.exit_code == 0
         assert "Generated illustration" in result.output
         mock_instance.generate_illustration.assert_called_once_with("forest", style="cartoon")

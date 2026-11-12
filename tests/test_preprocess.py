@@ -1,7 +1,7 @@
-from pathlib import Path
+from pathlib import Path as Path
 
 import pytest
-from PIL import Image, ExifTags
+from PIL import Image, ExifTags as ExifTags
 
 from vector_studio.models import TraceOptions
 from vector_studio.preprocess import prepare_input, _hex_to_rgb

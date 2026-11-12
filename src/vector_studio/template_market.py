@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
+import shutil as shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .svg_tools import optimize_svg_file, svg_stats
+from .svg_tools import optimize_svg_file as optimize_svg_file, svg_stats as svg_stats
 from .tracer import trace_image
 
 logger = logging.getLogger(__name__)
@@ -181,10 +181,7 @@ class TemplateMarket:
         if query:
             q = query.lower()
             results = [
-                t
-                for t in results
-                if q in t.name.lower()
-                or any(q in tag.lower() for tag in t.tags)
+                t for t in results if q in t.name.lower() or any(q in tag.lower() for tag in t.tags)
             ]
         # Sort by rating descending, then downloads.
         results.sort(key=lambda t: (t.rating, t.downloads), reverse=True)

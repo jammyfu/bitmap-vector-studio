@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import threading
-import time
+import time as time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any

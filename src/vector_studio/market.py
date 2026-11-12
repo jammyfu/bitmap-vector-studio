@@ -12,7 +12,7 @@ from typing import Any
 
 from . import preset_manager as pm
 from .config import _default_config_path, _has_yaml, _load_json, _load_yaml
-from .models import TraceOptions
+from .models import TraceOptions as TraceOptions
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ COMMUNITY_REPO_PATH: str = "presets"
 # ---------------------------------------------------------------------------
 # Local market data helpers
 # ---------------------------------------------------------------------------
+
 
 def _market_data_dir() -> Path:
     """Return the directory used for market data (ratings, cache)."""
@@ -81,6 +82,7 @@ def _save_ratings(data: dict[str, dict[str, Any]]) -> None:
 # HTTP helper
 # ---------------------------------------------------------------------------
 
+
 def _http_json(
     url: str,
     headers: dict[str, str] | None = None,
@@ -114,6 +116,7 @@ def _http_json(
 # ---------------------------------------------------------------------------
 # Backends
 # ---------------------------------------------------------------------------
+
 
 class MarketBackend(ABC):
     """Abstract base class for preset market backends."""
@@ -371,11 +374,7 @@ class GitHubGistBackend(MarketBackend):
         payload = {
             "description": json.dumps(preset_data, ensure_ascii=False),
             "public": True,
-            "files": {
-                filename: {
-                    "content": json.dumps(preset_data, indent=2, ensure_ascii=False)
-                }
-            },
+            "files": {filename: {"content": json.dumps(preset_data, indent=2, ensure_ascii=False)}},
         }
 
         data = json.dumps(payload).encode("utf-8")
@@ -437,8 +436,7 @@ class GitHubRepoBackend(MarketBackend):
     def _raw_url(self, file_path: str) -> str:
         """Build a raw.githubusercontent.com URL."""
         return (
-            f"https://raw.githubusercontent.com/"
-            f"{self.owner}/{self.repo}/{self.branch}/{file_path}"
+            f"https://raw.githubusercontent.com/{self.owner}/{self.repo}/{self.branch}/{file_path}"
         )
 
     def list_presets(self) -> list[dict]:
@@ -557,6 +555,7 @@ class GitHubRepoBackend(MarketBackend):
 # ---------------------------------------------------------------------------
 # High-level market interface
 # ---------------------------------------------------------------------------
+
 
 class PresetMarket:
     """High-level preset market interface.
@@ -761,6 +760,7 @@ class PresetMarket:
 # ---------------------------------------------------------------------------
 # Config helper
 # ---------------------------------------------------------------------------
+
 
 def _load_raw_config() -> dict[str, Any]:
     """Load the raw configuration dict including unknown keys.

@@ -1,8 +1,8 @@
-import json
+import json as json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch as patch
 
-import pytest
+import pytest as pytest
 from typer.testing import CliRunner
 
 from vector_studio.cli import app
@@ -221,7 +221,9 @@ class TestEnterpriseCLI:
         """enterprise team add-member updates the latest workspace."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         runner.invoke(app, ["enterprise", "team", "create", "MyTeam"])
-        result = runner.invoke(app, ["enterprise", "team", "add-member", "alice", "--role", "editor"])
+        result = runner.invoke(
+            app, ["enterprise", "team", "add-member", "alice", "--role", "editor"]
+        )
         assert result.exit_code == 0
         assert "Added member" in result.output
 
@@ -245,7 +247,9 @@ class TestEnterpriseCLI:
     def test_enterprise_sso_configure(self, tmp_path, monkeypatch):
         """enterprise sso-configure persists provider config."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        result = runner.invoke(app, ["enterprise", "sso-configure", "--provider", "google", "--client-id", "cid123"])
+        result = runner.invoke(
+            app, ["enterprise", "sso-configure", "--provider", "google", "--client-id", "cid123"]
+        )
         assert result.exit_code == 0
         assert "Configured SSO" in result.output
         sso_file = tmp_path / ".bitmap_vector_studio" / "sso" / "google.json"

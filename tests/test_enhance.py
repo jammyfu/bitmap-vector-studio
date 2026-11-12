@@ -1,6 +1,6 @@
-from pathlib import Path
+from pathlib import Path as Path
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.enhance import (

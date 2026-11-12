@@ -180,8 +180,7 @@ class Notifier:
                 {
                     "color": "good" if "error" not in event else "danger",
                     "fields": [
-                        {"title": k, "value": str(v), "short": True}
-                        for k, v in payload.items()
+                        {"title": k, "value": str(v), "short": True} for k, v in payload.items()
                     ],
                 }
             ],

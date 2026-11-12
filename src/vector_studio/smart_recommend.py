@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+import math as math
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover
 
 from PIL import Image, ImageFilter, ImageStat
 
-from .smart_background import detect_background_color, is_likely_logo
+from .smart_background import detect_background_color as detect_background_color, is_likely_logo
 
 
 def _to_numpy(img: Image.Image) -> Any:
@@ -26,6 +26,7 @@ def _to_numpy(img: Image.Image) -> Any:
 # ---------------------------------------------------------------------------
 # Feature analysis
 # ---------------------------------------------------------------------------
+
 
 def analyze_image_features(input_path: Path) -> dict[str, Any]:
     """Extract a feature vector from a raster image for preset recommendation.
@@ -96,9 +97,7 @@ def analyze_image_features(input_path: Path) -> dict[str, Any]:
                 defaults["edge_density"] = round(float(np.mean(edge_arr)) / 255.0, 3)
             else:
                 pixels = list(edges.getdata())
-                defaults["edge_density"] = round(
-                    sum(pixels) / (255.0 * max(len(pixels), 1)), 3
-                )
+                defaults["edge_density"] = round(sum(pixels) / (255.0 * max(len(pixels), 1)), 3)
 
             # Text-like density: high-contrast small regions.
             if _HAS_NUMPY:
@@ -126,6 +125,7 @@ def analyze_image_features(input_path: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Recommendation engine
 # ---------------------------------------------------------------------------
+
 
 def recommend_preset(features: dict[str, Any]) -> tuple[str, float, str]:
     """Recommend a tracing preset based on image features.
@@ -176,7 +176,9 @@ def recommend_preset(features: dict[str, Any]) -> tuple[str, float, str]:
         logo_score += 0.25
         logo_reasons.append("logo-like composition")
     scores["logo"] = min(logo_score, 0.95)
-    reasons["logo"] = f"Logo candidate: {', '.join(logo_reasons)}" if logo_reasons else "Not a strong logo match"
+    reasons["logo"] = (
+        f"Logo candidate: {', '.join(logo_reasons)}" if logo_reasons else "Not a strong logo match"
+    )
 
     # pixel_art: low resolution + blocky colors.
     max_side = max(width, height)

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.gpu_backend import (
@@ -22,7 +22,10 @@ class TestGPUBackendEnum:
 
 class TestDetectGPU:
     def test_detect_gpu_returns_none_when_no_libs(self):
-        with patch.dict("sys.modules", {"cupy": None, "pycuda": None, "pyopencl": None, "metal": None, "torch": None}):
+        with patch.dict(
+            "sys.modules",
+            {"cupy": None, "pycuda": None, "pyopencl": None, "metal": None, "torch": None},
+        ):
             result = detect_gpu()
             assert result == GPUBackend.NONE
 

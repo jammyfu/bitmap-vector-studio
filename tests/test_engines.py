@@ -169,7 +169,9 @@ class TestAutoTraceEngine:
         with patch("shutil.which", return_value="/usr/bin/autotrace"):
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
-                engine.convert(inp, out, {"color_count": 8, "despeckle_level": 2, "corner_threshold": 90})
+                engine.convert(
+                    inp, out, {"color_count": 8, "despeckle_level": 2, "corner_threshold": 90}
+                )
 
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -299,7 +301,9 @@ class TestEngineBenchmark:
                     mock_potrace.side_effect = write_svg
                     mock_autotrace.side_effect = write_svg
 
-                    results = benchmark.compare_engines(inp, engines=["vtracer", "potrace", "autotrace"])
+                    results = benchmark.compare_engines(
+                        inp, engines=["vtracer", "potrace", "autotrace"]
+                    )
 
         assert len(results) == 3
         names = {r["engine"] for r in results}

@@ -1,11 +1,11 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch as patch
 
 import pytest
 
 from vector_studio.security import (
-    ALLOWED_EXTENSIONS,
-    DANGEROUS_SVG_TAGS,
+    ALLOWED_EXTENSIONS as ALLOWED_EXTENSIONS,
+    DANGEROUS_SVG_TAGS as DANGEROUS_SVG_TAGS,
     FileHashChecker,
     InputValidator,
     SVGSanitizer,
@@ -72,6 +72,7 @@ class TestInputValidatorValidateImageFile:
 
     def test_file_too_large(self, tmp_path: Path):
         from vector_studio.security import MAX_FILE_SIZE
+
         big = tmp_path / "big.png"
         big.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * (MAX_FILE_SIZE + 1))
         with pytest.raises(SecurityError, match="文件过大"):
@@ -157,7 +158,7 @@ class TestSVGSanitizer:
         assert "viewBox" in clean
 
     def test_is_safe_detects_dangerous_content(self):
-        assert not SVGSanitizer.is_safe('<svg><script>alert(1)</script></svg>')
+        assert not SVGSanitizer.is_safe("<svg><script>alert(1)</script></svg>")
         assert SVGSanitizer.is_safe('<svg><path d="M0 0"/></svg>')
 
     def test_handles_malformed_svg(self):
@@ -186,3 +187,20 @@ class TestFileHashChecker:
         file.write_bytes(b"x" * 100_000)
         h = FileHashChecker.compute_hash(file)
         assert len(h) == 64
+
+
+def test_file_below_symlinked_directory_is_rejected(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "image.png").write_bytes(b"image")
+    link = tmp_path / "linked"
+    link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(SecurityError, match="不允许符号链接"):
+        InputValidator.validate_file_path(link / "image.png")
+
+
+def test_dangling_symlink_is_rejected_even_for_output(tmp_path):
+    link = tmp_path / "output.png"
+    link.symlink_to(tmp_path / "missing.png")
+    with pytest.raises(SecurityError, match="不允许符号链接"):
+        InputValidator.validate_file_path(link, must_exist=False, allow_write=True)

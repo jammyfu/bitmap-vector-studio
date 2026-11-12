@@ -42,7 +42,8 @@ dev = [
   # Starlette 1.x, which additionally imports httpx2. Runtime deps stay unchanged.
   "httpx>=0.27,<0.29",
   "httpx2>=2.0; python_version >= '3.11'",
-  "ruff>=0.5",
+  # Match the Ruff version already recorded in uv.lock.
+  "ruff==0.15.16",
 ]
 api = [
   "fastapi>=0.110",

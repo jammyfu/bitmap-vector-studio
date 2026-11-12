@@ -40,7 +40,9 @@ def prepare_input(
         img = ImageOps.exif_transpose(img)
 
         if options.max_input_side and max(img.size) > options.max_input_side:
-            img.thumbnail((options.max_input_side, options.max_input_side), Image.Resampling.LANCZOS)
+            img.thumbnail(
+                (options.max_input_side, options.max_input_side), Image.Resampling.LANCZOS
+            )
 
         # Smart background removal for logos
         if smart_remove_bg:
@@ -65,7 +67,9 @@ def prepare_input(
             if options.alpha_background is None:
                 img = rgba
             else:
-                background = Image.new("RGBA", rgba.size, _hex_to_rgb(options.alpha_background) + (255,))
+                background = Image.new(
+                    "RGBA", rgba.size, _hex_to_rgb(options.alpha_background) + (255,)
+                )
                 background.alpha_composite(rgba)
                 img = background.convert("RGB")
         else:

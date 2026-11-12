@@ -1,6 +1,6 @@
-from dataclasses import replace
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from dataclasses import replace as replace
+from pathlib import Path as Path
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 

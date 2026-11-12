@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime as datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock as MagicMock
 
 import pytest
 

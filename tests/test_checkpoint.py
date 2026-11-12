@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
+import json as json
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch as patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.checkpoint import CheckpointManager, _deserialize_task, _serialize_task
 from vector_studio.models import TraceOptions, TraceResult
@@ -37,8 +37,12 @@ class TestCheckpointManagerSaveLoad:
 
     def test_save_overwrites_existing(self, tmp_path):
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
-        mgr.save_checkpoint("q1", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())])
-        mgr.save_checkpoint("q1", [ConversionTask("t2", Path("b.png"), Path("b.svg"), TraceOptions())])
+        mgr.save_checkpoint(
+            "q1", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())]
+        )
+        mgr.save_checkpoint(
+            "q1", [ConversionTask("t2", Path("b.png"), Path("b.svg"), TraceOptions())]
+        )
         loaded = mgr.load_checkpoint("q1")
         assert loaded is not None
         assert len(loaded) == 1
@@ -48,8 +52,12 @@ class TestCheckpointManagerSaveLoad:
 class TestCheckpointManagerListDelete:
     def test_list_checkpoints(self, tmp_path):
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
-        mgr.save_checkpoint("a", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())])
-        mgr.save_checkpoint("b", [ConversionTask("t2", Path("b.png"), Path("b.svg"), TraceOptions())])
+        mgr.save_checkpoint(
+            "a", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())]
+        )
+        mgr.save_checkpoint(
+            "b", [ConversionTask("t2", Path("b.png"), Path("b.svg"), TraceOptions())]
+        )
         items = mgr.list_checkpoints()
         assert len(items) == 2
         ids = {i["queue_id"] for i in items}
@@ -57,7 +65,9 @@ class TestCheckpointManagerListDelete:
 
     def test_delete_checkpoint(self, tmp_path):
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
-        mgr.save_checkpoint("del", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())])
+        mgr.save_checkpoint(
+            "del", [ConversionTask("t1", Path("a.png"), Path("a.svg"), TraceOptions())]
+        )
         assert mgr.delete_checkpoint("del") is True
         assert mgr.load_checkpoint("del") is None
         assert mgr.delete_checkpoint("del") is False

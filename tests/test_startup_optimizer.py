@@ -1,6 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import patch as patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.startup_optimizer import StartupOptimizer, StartupProfiler
 

@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
-import hashlib
+import hashlib as hashlib
 import json
 import urllib.request
+import urllib as urllib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any as Any
 
 
 @dataclass
@@ -88,11 +89,13 @@ class LocalStorage(CloudStorage):
             for f in search_dir.rglob("*"):
                 if f.is_file():
                     rel = f.relative_to(self.base_dir)
-                    results.append({
-                        "key": str(rel),
-                        "size": f.stat().st_size,
-                        "modified": f.stat().st_mtime,
-                    })
+                    results.append(
+                        {
+                            "key": str(rel),
+                            "size": f.stat().st_size,
+                            "modified": f.stat().st_mtime,
+                        }
+                    )
         return results
 
     def exists(self, remote_key: str) -> bool:
@@ -104,9 +107,7 @@ class S3Storage(CloudStorage):
 
     def __init__(self, config: StorageConfig):
         self.config = config
-        self._local_fallback = LocalStorage(
-            Path.home() / ".bitmap_vector_studio" / "cloud" / "s3"
-        )
+        self._local_fallback = LocalStorage(Path.home() / ".bitmap_vector_studio" / "cloud" / "s3")
 
     def upload(self, local_path: Path, remote_key: str) -> str:
         # 如果没有boto3，使用本地回退
@@ -178,9 +179,7 @@ class OSSStorage(CloudStorage):
 
     def __init__(self, config: StorageConfig):
         self.config = config
-        self._local_fallback = LocalStorage(
-            Path.home() / ".bitmap_vector_studio" / "cloud" / "oss"
-        )
+        self._local_fallback = LocalStorage(Path.home() / ".bitmap_vector_studio" / "cloud" / "oss")
 
     def upload(self, local_path: Path, remote_key: str) -> str:
         try:
@@ -249,9 +248,7 @@ class COSStorage(CloudStorage):
 
     def __init__(self, config: StorageConfig):
         self.config = config
-        self._local_fallback = LocalStorage(
-            Path.home() / ".bitmap_vector_studio" / "cloud" / "cos"
-        )
+        self._local_fallback = LocalStorage(Path.home() / ".bitmap_vector_studio" / "cloud" / "cos")
 
     def upload(self, local_path: Path, remote_key: str) -> str:
         try:
@@ -319,9 +316,7 @@ class COSStorage(CloudStorage):
             )
             client = CosS3Client(cos_config)
             full_prefix = f"{self.config.prefix}/{prefix}".lstrip("/")
-            response = client.list_objects(
-                Bucket=self.config.bucket, Prefix=full_prefix
-            )
+            response = client.list_objects(Bucket=self.config.bucket, Prefix=full_prefix)
             contents = response.get("Contents", [])
             return [
                 {
@@ -345,9 +340,7 @@ class COSStorage(CloudStorage):
             )
             client = CosS3Client(cos_config)
             full_key = f"{self.config.prefix}/{remote_key}".lstrip("/")
-            response = client.object_exists(
-                Bucket=self.config.bucket, Key=full_key
-            )
+            response = client.object_exists(Bucket=self.config.bucket, Key=full_key)
             return response
         except ImportError:
             return self._local_fallback.exists(remote_key)
@@ -433,9 +426,7 @@ class StorageManager:
 
         return uploaded
 
-    def sync_from_cloud(
-        self, storage_name: str, remote_prefix: str, local_dir: Path
-    ) -> list[Path]:
+    def sync_from_cloud(self, storage_name: str, remote_prefix: str, local_dir: Path) -> list[Path]:
         """同步云端到本地."""
         storage = self.get_storage(storage_name)
         downloaded = []
@@ -448,7 +439,7 @@ class StorageManager:
             try:
                 rel = str(key_path.relative_to(prefix_path))
             except ValueError:
-                rel = remote_key[len(remote_prefix):].lstrip("/\\")
+                rel = remote_key[len(remote_prefix) :].lstrip("/\\")
             local_path = local_dir / rel
             local_path.parent.mkdir(parents=True, exist_ok=True)
             storage.download(remote_key, local_path)

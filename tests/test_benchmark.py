@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.models import TraceResult
 
@@ -89,6 +89,7 @@ class TestPerformanceBenchmark:
         monitor = PerformanceMonitor()
         img = tmp_path / "img.png"
         from PIL import Image
+
         Image.new("RGB", (6000, 6000)).save(img)
         suggestions = monitor.suggest_optimization(img)
         assert isinstance(suggestions, list)
@@ -99,6 +100,7 @@ class TestPerformanceBenchmark:
 
         img = tmp_path / "big.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
         fake_stat = MagicMock()
         fake_stat.st_size = 15 * 1024 * 1024  # 15 MB
@@ -110,6 +112,7 @@ class TestPerformanceBenchmark:
 
         img = tmp_path / "small.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
         assert not StreamingImageProcessor._should_stream(img)
 
@@ -146,7 +149,10 @@ class TestGPUBackendMock:
     def test_detect_gpu_none_when_no_libs(self):
         from vector_studio.gpu_backend import detect_gpu, GPUBackend
 
-        with patch.dict("sys.modules", {"cupy": None, "pycuda": None, "torch": None, "pyopencl": None, "metal": None}):
+        with patch.dict(
+            "sys.modules",
+            {"cupy": None, "pycuda": None, "torch": None, "pyopencl": None, "metal": None},
+        ):
             backend = detect_gpu()
         assert backend == GPUBackend.NONE
 
@@ -258,6 +264,7 @@ class TestBenchmarkMore:
 
         img = tmp_path / "big.png"
         from PIL import Image
+
         Image.new("RGB", (6000, 6000)).save(img)
         assert StreamingImageProcessor._should_stream(img)
 
@@ -266,5 +273,6 @@ class TestBenchmarkMore:
 
         img = tmp_path / "small.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
         assert not StreamingImageProcessor._should_stream(img)

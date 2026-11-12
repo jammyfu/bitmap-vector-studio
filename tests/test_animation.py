@@ -16,6 +16,7 @@ from vector_studio.animation import (
 # Fixtures
 # ------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_svg(tmp_path: Path) -> Path:
     svg = tmp_path / "sample.svg"
@@ -24,7 +25,7 @@ def sample_svg(tmp_path: Path) -> Path:
         '<path id="p1" d="M0 0 L100 100" stroke="black"/>'
         '<path id="p2" d="M100 0 L0 100" stroke="red"/>'
         '<rect id="r1" x="10" y="10" width="20" height="20" fill="#00ff00"/>'
-        '</svg>',
+        "</svg>",
         encoding="utf-8",
     )
     return svg
@@ -39,10 +40,10 @@ def complex_svg(tmp_path: Path) -> Path:
         '<path d="M0 0 L100 100" fill="#ff0000"/>'
         '<path d="M10 10 L90 90" fill="#ff0000"/>'
         '<rect x="50" y="50" width="20" height="20" fill="#00ff00"/>'
-        '</g>'
+        "</g>"
         '<circle cx="100" cy="100" r="30" fill="#0000ff"/>'
         '<polygon points="0,0 50,0 25,50" fill="#ffff00"/>'
-        '</svg>',
+        "</svg>",
         encoding="utf-8",
     )
     return svg
@@ -51,6 +52,7 @@ def complex_svg(tmp_path: Path) -> Path:
 # ------------------------------------------------------------------
 # SVGAnimation tests
 # ------------------------------------------------------------------
+
 
 def test_svg_animation_init(sample_svg: Path):
     anim = SVGAnimation(sample_svg)
@@ -109,6 +111,7 @@ def test_svg_animation_add_morph(sample_svg: Path):
 # LottieExporter tests
 # ------------------------------------------------------------------
 
+
 def test_lottie_exporter_init(complex_svg: Path):
     exporter = LottieExporter(complex_svg)
     assert exporter.svg_path == complex_svg
@@ -152,6 +155,7 @@ def test_lottie_exporter_export_gif(complex_svg: Path, tmp_path: Path):
 # AnimationPreset tests
 # ------------------------------------------------------------------
 
+
 def test_animation_preset_dataclass():
     preset = AnimationPreset(name="test", animations=[{"type": "fade"}])
     assert preset.name == "test"
@@ -170,6 +174,7 @@ def test_list_presets():
 # ------------------------------------------------------------------
 # AnimationBuilder tests
 # ------------------------------------------------------------------
+
 
 def test_animation_builder_load_svg(sample_svg: Path):
     builder = AnimationBuilder().load_svg(sample_svg)
@@ -212,48 +217,28 @@ def test_animation_builder_build(sample_svg: Path):
 
 def test_animation_builder_export_smil(sample_svg: Path, tmp_path: Path):
     out = tmp_path / "anim.svg"
-    result = (
-        AnimationBuilder()
-        .load_svg(sample_svg)
-        .apply_preset("draw")
-        .export("smil", out)
-    )
+    result = AnimationBuilder().load_svg(sample_svg).apply_preset("draw").export("smil", out)
     assert result == out
     assert out.exists()
 
 
 def test_animation_builder_export_css(sample_svg: Path, tmp_path: Path):
     out = tmp_path / "anim.html"
-    result = (
-        AnimationBuilder()
-        .load_svg(sample_svg)
-        .apply_preset("reveal")
-        .export("css", out)
-    )
+    result = AnimationBuilder().load_svg(sample_svg).apply_preset("reveal").export("css", out)
     assert result == out
     assert out.exists()
 
 
 def test_animation_builder_export_lottie(complex_svg: Path, tmp_path: Path):
     out = tmp_path / "anim.json"
-    result = (
-        AnimationBuilder()
-        .load_svg(complex_svg)
-        .apply_preset("draw")
-        .export("lottie", out)
-    )
+    result = AnimationBuilder().load_svg(complex_svg).apply_preset("draw").export("lottie", out)
     assert result == out
     assert out.exists()
 
 
 def test_animation_builder_export_gif(complex_svg: Path, tmp_path: Path):
     out = tmp_path / "anim.gif"
-    result = (
-        AnimationBuilder()
-        .load_svg(complex_svg)
-        .apply_preset("reveal")
-        .export("gif", out)
-    )
+    result = AnimationBuilder().load_svg(complex_svg).apply_preset("reveal").export("gif", out)
     assert result == out
     assert out.exists()
 
@@ -273,6 +258,7 @@ def test_animation_builder_build_without_svg():
 # ------------------------------------------------------------------
 # Edge cases
 # ------------------------------------------------------------------
+
 
 def test_svg_animation_invalid_svg(tmp_path: Path):
     bad = tmp_path / "bad.svg"
@@ -305,7 +291,9 @@ def test_animation_builder_chaining(sample_svg: Path, tmp_path: Path):
         AnimationBuilder()
         .load_svg(sample_svg)
         .apply_preset("draw")
-        .add_animation(type="color", element_selector="path", from_color="#000", to_color="#fff", duration=1.0)
+        .add_animation(
+            type="color", element_selector="path", from_color="#000", to_color="#fff", duration=1.0
+        )
         .export("smil", out)
     )
     assert result == out

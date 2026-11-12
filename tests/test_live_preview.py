@@ -73,7 +73,9 @@ class TestLivePreviewEngine:
         mock_result.svg_path = out_svg
 
         engine = LivePreviewEngine(max_size=200)
-        with patch("vector_studio.live_preview.trace_image", return_value=mock_result) as mock_trace:
+        with patch(
+            "vector_studio.live_preview.trace_image", return_value=mock_result
+        ) as mock_trace:
             preview_path, elapsed = engine.generate_preview(img, TraceOptions())
 
         assert preview_path.exists()
@@ -93,7 +95,9 @@ class TestLivePreviewEngine:
         mock_result.svg_path = out_svg
 
         engine = LivePreviewEngine(max_size=100)
-        with patch("vector_studio.live_preview.trace_image", return_value=mock_result) as mock_trace:
+        with patch(
+            "vector_studio.live_preview.trace_image", return_value=mock_result
+        ) as mock_trace:
             path1, elapsed1 = engine.generate_preview(img, TraceOptions())
             path2, elapsed2 = engine.generate_preview(img, TraceOptions())
 
