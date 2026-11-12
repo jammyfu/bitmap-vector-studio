@@ -351,7 +351,7 @@ def _option_overrides(**kwargs):
     return {key: value for key, value in kwargs.items() if value is not None}
 
 
-def _load_config(config_path: Path | None) -> Config:
+def _load_config(config_path: Optional[Path]) -> Config:
     """Load configuration from an explicit path or the default location."""
     if config_path is not None:
         return Config.load(config_path)
@@ -460,14 +460,14 @@ def _print_result(result: Any, quiet: bool, verbose: bool, score: bool = False) 
 
 def _run_single_convert(
     input_path: Path,
-    output: Path | None,
-    preset: str | None,
+    output: Optional[Path],
+    preset: Optional[str],
     format: str,
     optimize_level: str,
     quiet: bool,
     verbose: bool,
-    config_path: Path | None = None,
-    plugin: list[str] | None = None,
+    config_path: Optional[Path] = None,
+    plugin: Optional[list[str]] = None,
     **kwargs: Any,
 ) -> Any:
     """Run a single-file conversion with smart preset recommendation."""
@@ -1531,7 +1531,7 @@ def plugin_docs(
 
 @plugin_market_app.command("list")
 def plugin_market_list(
-    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category."),
     sort_by: str = typer.Option(
         "rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."
     ),
@@ -1568,7 +1568,7 @@ def plugin_market_list(
 @plugin_market_app.command("search")
 def plugin_market_search(
     query: str = typer.Argument(..., help="Search query."),
-    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category."),
     sort_by: str = typer.Option(
         "rating", "--sort", "-s", help="Sort by: rating, downloads, name, newest."
     ),
@@ -1850,7 +1850,7 @@ def market_search(
 @market_app.command("install")
 def market_install(
     preset_id: str = typer.Argument(..., help="Preset ID to install."),
-    name: str | None = typer.Option(None, "--name", "-n", help="Local name override."),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Local name override."),
 ) -> None:
     """Install a preset from the market."""
     from .market import PresetMarket
@@ -1867,7 +1867,7 @@ def market_install(
 @market_app.command("publish")
 def market_publish(
     preset_name: str = typer.Argument(..., help="Local preset name to publish."),
-    token: str | None = typer.Option(None, "--token", help="GitHub personal access token."),
+    token: Optional[str] = typer.Option(None, "--token", help="GitHub personal access token."),
 ) -> None:
     """Publish a local preset to the market."""
     from .market import PresetMarket
@@ -2628,7 +2628,7 @@ def workspace_delete(
 
 
 def _get_cloud_manager(
-    backend: str | None = None, base_url: str = "http://localhost:8000"
+    backend: Optional[str] = None, base_url: str = "http://localhost:8000"
 ) -> CloudSyncManager:
     """Build a CloudSyncManager from CLI options."""
     if backend == "gist":
@@ -3561,7 +3561,7 @@ def enterprise_audit_log(
 ) -> None:
     """Show the audit log for a workspace."""
     ws_dir = Path.home() / ".bitmap_vector_studio" / "workspaces"
-    target: Path | None = None
+    target: Optional[Path] = None
     if workspace_id:
         target = ws_dir / f"{workspace_id}.json"
     else:
@@ -3629,8 +3629,8 @@ def enterprise_sso_configure(
 
 @template_app.command("list")
 def template_list(
-    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category."),
-    query: str | None = typer.Option(None, "--query", "-q", help="Search query."),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category."),
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Search query."),
 ) -> None:
     """List available templates from the marketplace."""
     market = TemplateMarket()
@@ -4493,7 +4493,7 @@ def security_sanitize(
     svg: Path = typer.Argument(
         ..., exists=True, dir_okay=False, readable=True, help="SVG file to sanitize."
     ),
-    output: Path | None = typer.Option(
+    output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output path for sanitized SVG."
     ),
 ) -> None:
@@ -4515,8 +4515,8 @@ def security_sanitize(
 
 @audit_app.command("log")
 def audit_log(
-    user: str | None = typer.Option(None, "--user", "-u", help="Filter by user."),
-    action: str | None = typer.Option(None, "--action", "-a", help="Filter by action."),
+    user: Optional[str] = typer.Option(None, "--user", "-u", help="Filter by user."),
+    action: Optional[str] = typer.Option(None, "--action", "-a", help="Filter by action."),
     limit: int = typer.Option(
         50, "--limit", "-l", min=1, max=500, help="Maximum number of entries."
     ),
@@ -4670,10 +4670,10 @@ def notify_test(
 @search_app.command("history")
 def search_history(
     query: str = typer.Argument("", help="Search query."),
-    status: str | None = typer.Option(
+    status: Optional[str] = typer.Option(
         None, "--status", help="Filter by status: completed, failed."
     ),
-    preset: str | None = typer.Option(None, "--preset", "-p", help="Filter by preset name."),
+    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="Filter by preset name."),
     limit: int = typer.Option(20, "--limit", "-l", min=1, max=100, help="Maximum results."),
 ) -> None:
     """Search conversion history."""
@@ -4926,7 +4926,7 @@ def tag_search(
 @tag_app.command("suggest")
 def tag_suggest(
     file_path: str = typer.Argument(..., help="File path."),
-    preset: str | None = typer.Option(None, "--preset", "-p", help="Preset name for context."),
+    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="Preset name for context."),
 ) -> None:
     """Suggest tags for a file."""
     from .tag_manager import TagManager
@@ -4942,7 +4942,7 @@ def tag_suggest(
 @tag_app.command("auto")
 def tag_auto(
     file_path: str = typer.Argument(..., help="File path."),
-    preset: str | None = typer.Option(None, "--preset", "-p", help="Preset name for context."),
+    preset: Optional[str] = typer.Option(None, "--preset", "-p", help="Preset name for context."),
 ) -> None:
     """Auto-tag a file based on its features."""
     from .tag_manager import TagManager
@@ -4965,12 +4965,12 @@ def storage_add(
     name: str = typer.Argument(..., help="Storage configuration name."),
     provider: str = typer.Option(..., "--provider", "-p", help="Provider: local, s3, oss, cos."),
     bucket: str = typer.Option(..., "--bucket", "-b", help="Bucket name or local directory path."),
-    region: str | None = typer.Option(None, "--region", "-r", help="Region (for s3, cos)."),
-    endpoint: str | None = typer.Option(
+    region: Optional[str] = typer.Option(None, "--region", "-r", help="Region (for s3, cos)."),
+    endpoint: Optional[str] = typer.Option(
         None, "--endpoint", "-e", help="Endpoint URL (for oss, cos)."
     ),
-    access_key: str | None = typer.Option(None, "--access-key", "-a", help="Access key."),
-    secret_key: str | None = typer.Option(None, "--secret-key", "-s", help="Secret key."),
+    access_key: Optional[str] = typer.Option(None, "--access-key", "-a", help="Access key."),
+    secret_key: Optional[str] = typer.Option(None, "--secret-key", "-s", help="Secret key."),
     prefix: str = typer.Option("", "--prefix", help="Key prefix."),
 ) -> None:
     """Add a cloud storage configuration."""
@@ -5025,7 +5025,7 @@ def storage_upload(
         ..., exists=True, dir_okay=False, readable=True, help="File to upload."
     ),
     storage_name: str = typer.Option(..., "--storage", "-s", help="Storage configuration name."),
-    remote_key: str | None = typer.Option(
+    remote_key: Optional[str] = typer.Option(
         None, "--key", "-k", help="Remote key (defaults to file name)."
     ),
 ) -> None:

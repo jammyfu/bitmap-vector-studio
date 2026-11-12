@@ -3,6 +3,8 @@
 将模板批量应用到多个图片，支持进度跟踪和结果收集.
 """
 
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable

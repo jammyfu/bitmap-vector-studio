@@ -3,6 +3,8 @@
 通过mDNS/UDP广播自动发现局域网内的Worker节点.
 """
 
+from __future__ import annotations
+
 import json
 import socket
 import threading

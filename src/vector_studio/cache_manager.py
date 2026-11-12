@@ -6,6 +6,8 @@
 - L3: 持久化缓存 (SQLite)
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import sqlite3 as sqlite3

@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 try:
     from fastapi import (
@@ -62,16 +62,16 @@ from .search_engine import HistorySearch
 # Global state
 # ---------------------------------------------------------------------------
 
-_api_temp_dir: Path | None = None
+_api_temp_dir: Optional[Path] = None
 _api_temp_lock = threading.Lock()
 
-_task_queue: TaskQueue | None = None
+_task_queue: Optional[TaskQueue] = None
 _queue_lock = threading.Lock()
 
-_share_manager: CloudSyncManager | None = None
+_share_manager: Optional[CloudSyncManager] = None
 _share_lock = threading.Lock()
 
-_render_farm: RenderFarm | None = None
+_render_farm: Optional[RenderFarm] = None
 _farm_lock = threading.Lock()
 
 
@@ -154,11 +154,11 @@ class StatusResponse(BaseModel):
     task_id: str
     status: str
     progress: float
-    result: dict[str, Any] | None = None
-    error: str | None = None
-    created_at: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    result: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 class PresetInfo(BaseModel):
@@ -226,29 +226,29 @@ class RoomStateResponse(BaseModel):
     owner: str
     created_at: str
     params: dict[str, Any]
-    preview: Any | None = None
+    preview: Optional[Any] = None
     files: list[dict[str, Any]]
-    last_convert: dict[str, Any] | None = None
+    last_convert: Optional[dict[str, Any]] = None
     client_count: int
     operation_count: int
     next_version: int
 
 
 class OperationRequest(BaseModel):
-    op_id: str | None = None
+    op_id: Optional[str] = None
     client_id: str
     type: str
     data: dict[str, Any] = {}
-    version: int | None = None
+    version: Optional[int] = None
 
 
 class OperationResponse(BaseModel):
     op_id: str
     status: str
-    version: int | None = None
-    state: dict[str, Any] | None = None
-    reason: str | None = None
-    expected_version: int | None = None
+    version: Optional[int] = None
+    state: Optional[dict[str, Any]] = None
+    reason: Optional[str] = None
+    expected_version: Optional[int] = None
 
 
 class HistoryResponse(BaseModel):
@@ -272,11 +272,11 @@ class FarmTaskSubmitResponse(BaseModel):
 class FarmTaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    input_path: str | None = None
-    output_path: str | None = None
-    assigned_worker: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    input_path: Optional[str] = None
+    output_path: Optional[str] = None
+    assigned_worker: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 class FarmWorkerRegisterRequest(BaseModel):
@@ -313,7 +313,7 @@ class FarmHeartbeatResponse(BaseModel):
 class WebhookRegisterRequest(BaseModel):
     url: str
     channel: str = "webhook"
-    events: list[str] | None = None
+    events: Optional[list[str]] = None
 
 
 class WebhookRegisterResponse(BaseModel):
@@ -806,7 +806,7 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
     * ``{"event": "ping"}`` – keep-alive
     """
     await websocket.accept()
-    client_id: str | None = None
+    client_id: Optional[str] = None
     manager = await get_collab_manager()
 
     try:
@@ -1103,8 +1103,8 @@ async def list_webhooks():
 @app.get("/search/history", response_model=SearchHistoryResponse)
 async def search_history(
     q: str = "",
-    status: str | None = None,
-    preset: str | None = None,
+    status: Optional[str] = None,
+    preset: Optional[str] = None,
     limit: int = 20,
 ):
     """Search conversion history."""
