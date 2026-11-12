@@ -218,7 +218,12 @@ class ReleaseNotesGenerator:
                     entry += f" (`{commit['hash'][:7]}`)"
                 unknown.append(entry)
 
-        for header in sorted(grouped.keys(), key=lambda h: list(cls.TYPE_EMOJI.values()).index(h) if h in cls.TYPE_EMOJI.values() else 999):
+        for header in sorted(
+            grouped.keys(),
+            key=lambda h: (
+                list(cls.TYPE_EMOJI.values()).index(h) if h in cls.TYPE_EMOJI.values() else 999
+            ),
+        ):
             lines.append(f"## {header}")
             lines.append("")
             for entry in grouped[header]:

@@ -13,7 +13,7 @@ from typing import Any
 
 from PIL import Image
 
-from .models import TraceOptions, TraceResult
+from .models import TraceOptions as TraceOptions, TraceResult
 from .plugin_interface import Plugin
 
 
@@ -87,7 +87,9 @@ class PluginValidator:
         for cls_obj in classes:
             for attr in cls.REQUIRED_ATTRS:
                 if not getattr(cls_obj, attr, None):
-                    errors.append(f"Class '{cls_obj.__name__}' missing required attribute '{attr}'.")
+                    errors.append(
+                        f"Class '{cls_obj.__name__}' missing required attribute '{attr}'."
+                    )
 
             # Hook signature checks
             for hook in ("preprocess", "postprocess", "on_convert_complete"):
@@ -208,7 +210,12 @@ class PluginDebugger:
             return {"passed": False, "hook_results": {}, "total_seconds": 0.0, "errors": [str(exc)]}
 
         if not classes:
-            return {"passed": False, "hook_results": {}, "total_seconds": 0.0, "errors": ["No Plugin subclass found."]}
+            return {
+                "passed": False,
+                "hook_results": {},
+                "total_seconds": 0.0,
+                "errors": ["No Plugin subclass found."],
+            }
 
         inst = classes[0]()
         options: dict[str, Any] = {}
@@ -234,9 +241,13 @@ class PluginDebugger:
                 svg = Path("/tmp/_plugin_debug_test.svg")
                 # Use a temp path if possible, otherwise fallback
                 import tempfile
+
                 with tempfile.TemporaryDirectory() as td:
                     svg = Path(td) / "test.svg"
-                    svg.write_text('<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>', encoding="utf-8")
+                    svg.write_text(
+                        '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>',
+                        encoding="utf-8",
+                    )
                     result = inst.postprocess(svg, options)
                     if not isinstance(result, Path):
                         errors.append("postprocess did not return a Path.")
@@ -249,7 +260,10 @@ class PluginDebugger:
             hook_results["postprocess"] = "skipped"
 
         # on_convert_complete
-        if hasattr(type(inst), "on_convert_complete") and type(inst).on_convert_complete is not Plugin.on_convert_complete:
+        if (
+            hasattr(type(inst), "on_convert_complete")
+            and type(inst).on_convert_complete is not Plugin.on_convert_complete
+        ):
             try:
                 mock_result = TraceResult(
                     input_path=Path("/tmp/in.png"),
@@ -292,7 +306,11 @@ class PluginDebugger:
             return {"hook_times": {}, "peak_memory_kb": 0.0, "errors": [str(exc)]}
 
         if not classes:
-            return {"hook_times": {}, "peak_memory_kb": 0.0, "errors": ["No Plugin subclass found."]}
+            return {
+                "hook_times": {},
+                "peak_memory_kb": 0.0,
+                "errors": ["No Plugin subclass found."],
+            }
 
         inst = classes[0]()
         options: dict[str, Any] = {}
@@ -315,9 +333,13 @@ class PluginDebugger:
         # postprocess
         if hasattr(type(inst), "postprocess") and type(inst).postprocess is not Plugin.postprocess:
             import tempfile
+
             with tempfile.TemporaryDirectory() as td:
                 svg = Path(td) / "test.svg"
-                svg.write_text('<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>', encoding="utf-8")
+                svg.write_text(
+                    '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>',
+                    encoding="utf-8",
+                )
                 t0 = time.perf_counter()
                 try:
                     inst.postprocess(svg, options)
@@ -329,7 +351,10 @@ class PluginDebugger:
             hook_times["postprocess"] = 0.0
 
         # on_convert_complete
-        if hasattr(type(inst), "on_convert_complete") and type(inst).on_convert_complete is not Plugin.on_convert_complete:
+        if (
+            hasattr(type(inst), "on_convert_complete")
+            and type(inst).on_convert_complete is not Plugin.on_convert_complete
+        ):
             mock_result = TraceResult(
                 input_path=Path("/tmp/in.png"),
                 svg_path=Path("/tmp/out.svg"),
@@ -485,7 +510,9 @@ class {class_name}(Plugin):
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "", name)
-        class_name = "".join(part.capitalize() for part in safe_name.replace("-", "_").split("_")) + "Plugin"
+        class_name = (
+            "".join(part.capitalize() for part in safe_name.replace("-", "_").split("_")) + "Plugin"
+        )
         file_name = safe_name.replace("-", "_") + "_plugin.py"
         plugin_file = output_dir / file_name
 
@@ -518,7 +545,7 @@ class {class_name}(Plugin):
 
         # Generate a minimal test file
         test_file = output_dir / f"test_{safe_name.replace('-', '_')}_plugin.py"
-        test_content = f'''\
+        test_content = f"""\
 from pathlib import Path
 from typing import Any
 
@@ -544,7 +571,7 @@ class Test{class_name}:
         # result = plugin.preprocess(img, {{}})
         # assert isinstance(result, Image.Image)
         pass
-'''
+"""
         test_file.write_text(test_content, encoding="utf-8")
         return plugin_file
 
@@ -578,7 +605,9 @@ class Test{class_name}:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "", name)
-        class_name = "".join(part.capitalize() for part in safe_name.replace("-", "_").split("_")) + "Plugin"
+        class_name = (
+            "".join(part.capitalize() for part in safe_name.replace("-", "_").split("_")) + "Plugin"
+        )
         file_name = safe_name.replace("-", "_") + "_plugin.py"
         plugin_file = output_dir / file_name
 
@@ -592,23 +621,29 @@ class Test{class_name}:
         """Build method stubs for the requested hooks."""
         lines: list[str] = []
         if "preprocess" in hooks:
-            lines.append('    def preprocess(self, image: Image.Image, options: dict[str, Any]) -> Image.Image:')
+            lines.append(
+                "    def preprocess(self, image: Image.Image, options: dict[str, Any]) -> Image.Image:"
+            )
             lines.append('        """Pre-process the input image."""')
-            lines.append('        # TODO: implement preprocessing logic')
-            lines.append('        return image')
-            lines.append('')
+            lines.append("        # TODO: implement preprocessing logic")
+            lines.append("        return image")
+            lines.append("")
         if "postprocess" in hooks:
-            lines.append('    def postprocess(self, svg_path: Path, options: dict[str, Any]) -> Path:')
+            lines.append(
+                "    def postprocess(self, svg_path: Path, options: dict[str, Any]) -> Path:"
+            )
             lines.append('        """Post-process the generated SVG."""')
-            lines.append('        # TODO: implement postprocessing logic')
-            lines.append('        return svg_path')
-            lines.append('')
+            lines.append("        # TODO: implement postprocessing logic")
+            lines.append("        return svg_path")
+            lines.append("")
         if "on_convert_complete" in hooks:
-            lines.append('    def on_convert_complete(self, result: TraceResult, options: dict[str, Any]) -> None:')
+            lines.append(
+                "    def on_convert_complete(self, result: TraceResult, options: dict[str, Any]) -> None:"
+            )
             lines.append('        """Handle conversion completion."""')
-            lines.append('        # TODO: implement completion logic')
-            lines.append('        pass')
-            lines.append('')
+            lines.append("        # TODO: implement completion logic")
+            lines.append("        pass")
+            lines.append("")
         return "\n".join(lines)
 
 
@@ -667,7 +702,7 @@ class PluginDocsGenerator:
         lines.append("## Usage")
         lines.append("")
         lines.append("Enable the plugin via CLI:")
-        lines.append(f"```bash")
+        lines.append("```bash")
         lines.append(f"vector-studio trace input.png --plugin {cls_obj.name}")
         lines.append("```")
         lines.append("")
@@ -809,7 +844,7 @@ class {class_name}(Plugin):
         # 测试文件
         test_file = plugin_dir / f"test_{package_id}.py"
         test_file.write_text(
-            f'''import pytest
+            f"""import pytest
 from pathlib import Path
 from PIL import Image
 from {package_id} import {class_name}
@@ -831,7 +866,7 @@ def test_postprocess(plugin, tmp_path):
     svg.write_text("<svg></svg>")
     result = plugin.postprocess(svg, {{}})
     assert result is not None
-''',
+""",
             encoding="utf-8",
         )
 

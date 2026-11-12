@@ -5,7 +5,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps, ImageChops
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
 # ONNXModelManager
 # ---------------------------------------------------------------------------
 
+
 class ONNXModelManager:
     """Manages local ONNX model files: listing, downloading, and loading."""
 
@@ -91,12 +92,14 @@ class ONNXModelManager:
         for name, meta in MODEL_REGISTRY.items():
             path = self._model_path(name)
             if path.exists():
-                results.append({
-                    "name": name,
-                    "path": str(path),
-                    "description": meta["description"],
-                    "size_mb": meta["size_mb"],
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "path": str(path),
+                        "description": meta["description"],
+                        "size_mb": meta["size_mb"],
+                    }
+                )
         return results
 
     def is_model_available(self, model_name: str) -> bool:
@@ -139,9 +142,7 @@ class ONNXModelManager:
             meta = MODEL_REGISTRY.get(model_name)
             if meta is None:
                 valid = ", ".join(sorted(MODEL_REGISTRY))
-                raise ValueError(
-                    f"Unknown model '{model_name}'. Available: {valid}."
-                )
+                raise ValueError(f"Unknown model '{model_name}'. Available: {valid}.")
             url = meta["url"]
 
         dest = self._model_path(model_name)
@@ -173,8 +174,7 @@ class ONNXModelManager:
         """
         if not _ONNX_AVAILABLE or ort is None:
             raise RuntimeError(
-                "ONNX Runtime is not installed. "
-                "Install it with: pip install onnxruntime"
+                "ONNX Runtime is not installed. Install it with: pip install onnxruntime"
             )
         try:
             return ort.InferenceSession(str(model_path))
@@ -189,6 +189,7 @@ class ONNXModelManager:
 # ---------------------------------------------------------------------------
 # ImageSegmenter
 # ---------------------------------------------------------------------------
+
 
 class ImageSegmenter:
     """Segment images using a lightweight UNet ONNX model."""
@@ -300,6 +301,7 @@ class ImageSegmenter:
 # ---------------------------------------------------------------------------
 # StyleTransfer
 # ---------------------------------------------------------------------------
+
 
 class StyleTransfer:
     """Apply artistic style transfer using ONNX models."""
@@ -437,6 +439,7 @@ class StyleTransfer:
 # SuperResolution
 # ---------------------------------------------------------------------------
 
+
 class SuperResolution:
     """Upscale images using an ESRGAN ONNX model."""
 
@@ -517,6 +520,7 @@ class SuperResolution:
 # AIProcessor
 # ---------------------------------------------------------------------------
 
+
 class AIProcessor:
     """Unified entry point for local ONNX-based image processing."""
 
@@ -593,6 +597,3 @@ try:
     import numpy as np
 except Exception:  # pragma: no cover
     np = None  # type: ignore[assignment]
-
-# ImageChops is used by the fallback paths; import here to keep the file self-contained.
-from PIL import ImageChops

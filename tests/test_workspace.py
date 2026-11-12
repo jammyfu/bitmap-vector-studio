@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import json
+import json as json
 import time
-from pathlib import Path
+from pathlib import Path as Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.models import TraceOptions
 from vector_studio.workspace import (
     CrashRecovery,
     Workspace,
     WorkspaceManager,
-    _crash_file_path,
+    _crash_file_path as _crash_file_path,
 )
 
 
@@ -136,9 +136,7 @@ class TestWorkspaceManagerAutoSave:
 class TestCrashRecovery:
     def test_save_and_check_crash_recovery(self, tmp_path, monkeypatch):
         crash_path = tmp_path / "crash.json"
-        monkeypatch.setattr(
-            "vector_studio.workspace._crash_file_path", lambda: crash_path
-        )
+        monkeypatch.setattr("vector_studio.workspace._crash_file_path", lambda: crash_path)
         recovery = CrashRecovery()
         ws = Workspace(open_files=["crash.png"])
         recovery.save_crash_state(ws)
@@ -149,17 +147,13 @@ class TestCrashRecovery:
 
     def test_check_crash_recovery_none_when_missing(self, tmp_path, monkeypatch):
         crash_path = tmp_path / "crash.json"
-        monkeypatch.setattr(
-            "vector_studio.workspace._crash_file_path", lambda: crash_path
-        )
+        monkeypatch.setattr("vector_studio.workspace._crash_file_path", lambda: crash_path)
         recovery = CrashRecovery()
         assert recovery.check_crash_recovery() is None
 
     def test_clear_crash_state(self, tmp_path, monkeypatch):
         crash_path = tmp_path / "crash.json"
-        monkeypatch.setattr(
-            "vector_studio.workspace._crash_file_path", lambda: crash_path
-        )
+        monkeypatch.setattr("vector_studio.workspace._crash_file_path", lambda: crash_path)
         recovery = CrashRecovery()
         recovery.save_crash_state(Workspace())
         assert crash_path.exists()
@@ -169,8 +163,6 @@ class TestCrashRecovery:
 
     def test_clear_crash_state_idempotent(self, tmp_path, monkeypatch):
         crash_path = tmp_path / "crash.json"
-        monkeypatch.setattr(
-            "vector_studio.workspace._crash_file_path", lambda: crash_path
-        )
+        monkeypatch.setattr("vector_studio.workspace._crash_file_path", lambda: crash_path)
         recovery = CrashRecovery()
         assert recovery.clear_crash_state() is False

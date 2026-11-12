@@ -7,13 +7,14 @@ optimistic locking, and WebSocket broadcasting.
 from __future__ import annotations
 
 import asyncio
-import time
+import time as time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as field
 from typing import Any
 
 try:
     from fastapi import WebSocket, WebSocketDisconnect
+
     _HAS_FASTAPI = True
 except ImportError:  # pragma: no cover
     WebSocket = Any  # type: ignore[misc,assignment]
@@ -102,12 +103,13 @@ class CollabRoom:
             "files": [],
         }
         self.operation_log: list[Operation] = []
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
         self._next_version = 1
 
     @staticmethod
     def _now_iso() -> str:
         from datetime import datetime, timezone
+
         return datetime.now(timezone.utc).isoformat()
 
     async def broadcast(
@@ -154,6 +156,9 @@ class CollabRoom:
             Confirmation payload containing ``op_id``, ``version``,
             and the updated room state snapshot.
         """
+        # Python 3.9 binds locks eagerly; initialize inside the running loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             if op.version != self._next_version:
                 return {
@@ -206,6 +211,7 @@ class CollabRoom:
             Deep copy of the room state dictionary.
         """
         import copy
+
         return {
             "room_id": self.room_id,
             "owner": self.owner,
@@ -283,7 +289,7 @@ class CollabManager:
 
     def __init__(self) -> None:
         self.rooms: dict[str, CollabRoom] = {}
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
 
     async def create_room(self, owner: str) -> str:
         """Create a new collaboration room.
@@ -299,6 +305,9 @@ class CollabManager:
             The generated room identifier.
         """
         room_id = str(uuid.uuid4())[:8]
+        # Python 3.9 binds locks eagerly; initialize inside the running loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             self.rooms[room_id] = CollabRoom(room_id=room_id, owner=owner)
         return room_id
@@ -330,6 +339,9 @@ class CollabManager:
         KeyError
             If the room does not exist.
         """
+        # Python 3.9 binds locks eagerly; initialize inside the running loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             room = self.rooms[room_id]
         await room.add_client(client_id, websocket)
@@ -348,6 +360,9 @@ class CollabManager:
         client_id:
             Client to remove.
         """
+        # Python 3.9 binds locks eagerly; initialize inside the running loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             room = self.rooms.get(room_id)
         if room is None:
@@ -397,19 +412,24 @@ class CollabManager:
         bool
             ``True`` if the room existed and was removed.
         """
+        # Python 3.9 binds locks eagerly; initialize inside the running loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             return self.rooms.pop(room_id, None) is not None
 
 
 # Global singleton used by the API layer.
 _collab_manager: CollabManager | None = None
-_manager_lock = asyncio.Lock()
+_manager_lock: asyncio.Lock | None = None
 
 
 async def get_collab_manager() -> CollabManager:
     """Return the global :class:`CollabManager` singleton."""
-    global _collab_manager
+    global _collab_manager, _manager_lock
     if _collab_manager is None:
+        if _manager_lock is None:
+            _manager_lock = asyncio.Lock()
         async with _manager_lock:
             if _collab_manager is None:
                 _collab_manager = CollabManager()

@@ -70,6 +70,7 @@ class MockWebSocket:
 
 class _MockDisconnect(Exception):
     """Custom exception to simulate a WebSocket disconnect in tests."""
+
     pass
 
 
@@ -312,6 +313,7 @@ class TestCollabWebSocket:
         ws.queue_message({"event": "ping"})
 
         from vector_studio.api import collab_websocket
+
         try:
             asyncio.run(collab_websocket(ws, rid))
         except ConnectionResetError:
@@ -330,16 +332,19 @@ class TestCollabWebSocket:
 
         ws = MockWebSocket()
         ws.queue_message({"event": "join", "client_id": "c1"})
-        ws.queue_message({
-            "event": "operation",
-            "op": {
-                "type": "param_change",
-                "data": {"params": {"preset": "logo"}},
-                "version": 1,
-            },
-        })
+        ws.queue_message(
+            {
+                "event": "operation",
+                "op": {
+                    "type": "param_change",
+                    "data": {"params": {"preset": "logo"}},
+                    "version": 1,
+                },
+            }
+        )
 
         from vector_studio.api import collab_websocket
+
         try:
             asyncio.run(collab_websocket(ws, rid))
         except ConnectionResetError:
@@ -356,12 +361,16 @@ class TestCollabWebSocket:
         ws.queue_message({"event": "join", "client_id": "c1"})
 
         from vector_studio.api import collab_websocket
+
         try:
             asyncio.run(collab_websocket(ws, "missing-room"))
         except ConnectionResetError:
             pass
 
-        assert any(m.get("event") == "error" and "Room not found" in m.get("detail", "") for m in ws.sent_messages)
+        assert any(
+            m.get("event") == "error" and "Room not found" in m.get("detail", "")
+            for m in ws.sent_messages
+        )
         assert ws.closed is True
 
     def test_websocket_operation_before_join(self):
@@ -369,18 +378,24 @@ class TestCollabWebSocket:
         rid = asyncio.run(mgr.create_room("alice"))
 
         ws = MockWebSocket()
-        ws.queue_message({
-            "event": "operation",
-            "op": {"type": "param_change", "data": {}, "version": 1},
-        })
+        ws.queue_message(
+            {
+                "event": "operation",
+                "op": {"type": "param_change", "data": {}, "version": 1},
+            }
+        )
 
         from vector_studio.api import collab_websocket
+
         try:
             asyncio.run(collab_websocket(ws, rid))
         except ConnectionResetError:
             pass
 
-        assert any(m.get("event") == "error" and "Send 'join' first" in m.get("detail", "") for m in ws.sent_messages)
+        assert any(
+            m.get("event") == "error" and "Send 'join' first" in m.get("detail", "")
+            for m in ws.sent_messages
+        )
 
 
 class TestCollabCli:
@@ -391,11 +406,13 @@ class TestCollabCli:
         runner = CliRunner()
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = json.dumps({
-                "room_id": "abc123",
-                "owner": "alice",
-                "created_at": "2024-01-01T00:00:00",
-            }).encode("utf-8")
+            mock_resp.read.return_value = json.dumps(
+                {
+                    "room_id": "abc123",
+                    "owner": "alice",
+                    "created_at": "2024-01-01T00:00:00",
+                }
+            ).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_resp
             result = runner.invoke(app, ["collab", "create", "--owner", "alice"])
         assert result.exit_code == 0
@@ -409,13 +426,15 @@ class TestCollabCli:
         runner = CliRunner()
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = json.dumps({
-                "room_id": "abc123",
-                "owner": "alice",
-                "client_count": 2,
-                "operation_count": 5,
-                "next_version": 6,
-            }).encode("utf-8")
+            mock_resp.read.return_value = json.dumps(
+                {
+                    "room_id": "abc123",
+                    "owner": "alice",
+                    "client_count": 2,
+                    "operation_count": 5,
+                    "next_version": 6,
+                }
+            ).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_resp
             result = runner.invoke(app, ["collab", "join", "abc123"])
         assert result.exit_code == 0
@@ -429,14 +448,16 @@ class TestCollabCli:
         runner = CliRunner()
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = json.dumps({
-                "room_id": "abc123",
-                "owner": "alice",
-                "created_at": "2024-01-01T00:00:00",
-                "client_count": 1,
-                "operation_count": 0,
-                "next_version": 1,
-            }).encode("utf-8")
+            mock_resp.read.return_value = json.dumps(
+                {
+                    "room_id": "abc123",
+                    "owner": "alice",
+                    "created_at": "2024-01-01T00:00:00",
+                    "client_count": 1,
+                    "operation_count": 0,
+                    "next_version": 1,
+                }
+            ).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_resp
             result = runner.invoke(app, ["collab", "status", "abc123"])
         assert result.exit_code == 0
@@ -450,12 +471,14 @@ class TestCollabCli:
         runner = CliRunner()
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = json.dumps({
-                "operations": [
-                    {"op_id": "op1", "client_id": "c1", "type": "param_change", "version": 1},
-                    {"op_id": "op2", "client_id": "c2", "type": "preview_update", "version": 2},
-                ],
-            }).encode("utf-8")
+            mock_resp.read.return_value = json.dumps(
+                {
+                    "operations": [
+                        {"op_id": "op1", "client_id": "c1", "type": "param_change", "version": 1},
+                        {"op_id": "op2", "client_id": "c2", "type": "preview_update", "version": 2},
+                    ],
+                }
+            ).encode("utf-8")
             mock_urlopen.return_value.__enter__.return_value = mock_resp
             result = runner.invoke(app, ["collab", "history", "abc123"])
         assert result.exit_code == 0
@@ -469,13 +492,16 @@ class TestCollabCli:
         import urllib.error
 
         runner = CliRunner()
-        with patch("urllib.request.urlopen", side_effect=urllib.error.HTTPError(
-            url="http://localhost:8000/collab/rooms/bad",
-            code=404,
-            msg="Not Found",
-            hdrs={},
-            fp=None,
-        )):
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.HTTPError(
+                url="http://localhost:8000/collab/rooms/bad",
+                code=404,
+                msg="Not Found",
+                hdrs={},
+                fp=None,
+            ),
+        ):
             result = runner.invoke(app, ["collab", "join", "bad"])
         assert result.exit_code == 1
         assert "not found" in result.output.lower() or "API error" in result.output

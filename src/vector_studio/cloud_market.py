@@ -5,7 +5,7 @@ import logging
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime as datetime, timezone as timezone
 from pathlib import Path
 from typing import Any
 

@@ -31,6 +31,7 @@ def _from_numpy(arr: Any, mode: str) -> Image.Image:
 # Convolution helpers (NumPy-based, no OpenCV)
 # ---------------------------------------------------------------------------
 
+
 def _apply_kernel(img: Image.Image, kernel: Any) -> Image.Image:
     """Apply a 2D convolution kernel to a grayscale or RGB image using NumPy."""
     if not _HAS_NUMPY:
@@ -67,6 +68,7 @@ def _convolve2d(arr: Any, kernel: Any) -> Any:
 # ---------------------------------------------------------------------------
 # Public enhancement API
 # ---------------------------------------------------------------------------
+
 
 def edge_enhance(img: Image.Image, strength: float = 1.0) -> Image.Image:
     """Enhance edges using an unsharp-mask style convolution.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent } from '../../test/render'
 import MainCanvas from '../MainCanvas'
 
 describe('MainCanvas', () => {
@@ -24,7 +24,7 @@ describe('MainCanvas', () => {
 
   it('calls onDropFiles when files dropped', () => {
     const mock = vi.fn()
-    const { container } = render(
+    render(
       <MainCanvas
         originalImage={null}
         resultSvg={undefined}
@@ -41,7 +41,7 @@ describe('MainCanvas', () => {
       item: (index: number) => (index === 0 ? file : null),
       0: file,
       [Symbol.iterator]: function* () {
-        for (let i = 0; i < this.length; i++) yield this[i as unknown as keyof typeof this]
+        yield file
       },
     } as unknown as FileList
 
@@ -73,8 +73,8 @@ describe('MainCanvas', () => {
       />
     )
     fireEvent.click(screen.getByText('叠加'))
-    expect(screen.getByAltText('Original')).toBeInTheDocument()
-    expect(screen.getByAltText('Result')).toBeInTheDocument()
+    expect(screen.getByAltText('原图')).toBeInTheDocument()
+    expect(screen.getByAltText('矢量结果')).toBeInTheDocument()
   })
 
   it('zooms in and out', () => {

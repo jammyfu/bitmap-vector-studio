@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
+import time as time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path as Path
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError as HTTPError
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _http_json_request(url: str, method: str = "GET", data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+def _http_json_request(
+    url: str,
+    method: str = "GET",
+    data: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Perform a simple HTTP request and parse the JSON response."""
     body = json.dumps(data, ensure_ascii=False).encode("utf-8") if data else None
     req_headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -53,7 +58,9 @@ class SyncClient:
         ``None``.
     """
 
-    def __init__(self, server_url: str = "http://localhost:8000", device_id: str | None = None) -> None:
+    def __init__(
+        self, server_url: str = "http://localhost:8000", device_id: str | None = None
+    ) -> None:
         self.server_url = server_url.rstrip("/")
         self.device_id = device_id or str(uuid.uuid4())
         self._device_info: dict[str, Any] = {
@@ -81,23 +88,27 @@ class SyncClient:
     def _local_workspaces(self) -> list[dict[str, Any]]:
         """Load local workspaces from disk."""
         from .workspace import WorkspaceManager
+
         manager = WorkspaceManager()
         return manager.list_workspaces()
 
     def _local_presets(self) -> list[dict[str, Any]]:
         """Load local presets from disk."""
         from .preset_manager import list_user_presets
+
         raw = list_user_presets()
         return [{"name": k, **v} for k, v in raw.items()]
 
     def _local_config(self) -> dict[str, Any]:
         """Load local configuration from disk."""
         from .config import Config
+
         return Config.load().to_dict()
 
     def _local_history(self) -> list[dict[str, Any]]:
         """Load local conversion history from disk."""
         from .history import get_recent_tasks
+
         return get_recent_tasks(limit=100)
 
     # ------------------------------------------------------------------
@@ -118,7 +129,11 @@ class SyncClient:
             remote = _http_json_request(
                 f"{self.server_url}/sync/pull",
                 method="POST",
-                data={"device_id": self.device_id, "data_type": "workspaces", "last_sync": "1970-01-01T00:00:00+00:00"},
+                data={
+                    "device_id": self.device_id,
+                    "data_type": "workspaces",
+                    "last_sync": "1970-01-01T00:00:00+00:00",
+                },
             )
         except Exception as exc:
             logger.warning("Failed to pull workspaces: %s", exc)
@@ -143,7 +158,11 @@ class SyncClient:
             remote = _http_json_request(
                 f"{self.server_url}/sync/pull",
                 method="POST",
-                data={"device_id": self.device_id, "data_type": "presets", "last_sync": "1970-01-01T00:00:00+00:00"},
+                data={
+                    "device_id": self.device_id,
+                    "data_type": "presets",
+                    "last_sync": "1970-01-01T00:00:00+00:00",
+                },
             )
         except Exception as exc:
             logger.warning("Failed to pull presets: %s", exc)
@@ -168,7 +187,11 @@ class SyncClient:
             remote = _http_json_request(
                 f"{self.server_url}/sync/pull",
                 method="POST",
-                data={"device_id": self.device_id, "data_type": "config", "last_sync": "1970-01-01T00:00:00+00:00"},
+                data={
+                    "device_id": self.device_id,
+                    "data_type": "config",
+                    "last_sync": "1970-01-01T00:00:00+00:00",
+                },
             )
         except Exception as exc:
             logger.warning("Failed to pull config: %s", exc)
@@ -193,7 +216,11 @@ class SyncClient:
             remote = _http_json_request(
                 f"{self.server_url}/sync/pull",
                 method="POST",
-                data={"device_id": self.device_id, "data_type": "history", "last_sync": "1970-01-01T00:00:00+00:00"},
+                data={
+                    "device_id": self.device_id,
+                    "data_type": "history",
+                    "last_sync": "1970-01-01T00:00:00+00:00",
+                },
             )
         except Exception as exc:
             logger.warning("Failed to pull history: %s", exc)

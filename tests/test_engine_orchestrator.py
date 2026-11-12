@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.engine_orchestrator import EngineOrchestrator
@@ -16,11 +16,16 @@ class TestEngineOrchestratorAnalyze:
         img_path = tmp_path / "photo.png"
         # Use a noisy image to avoid scan classification
         import random
+
         img = Image.new("RGB", (2000, 1500))
         pixels = img.load()
         for i in range(2000):
             for j in range(1500):
-                pixels[i, j] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                pixels[i, j] = (
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                )
         img.save(img_path, format="PNG")
         analysis = orch.analyze_image(img_path)
         assert analysis["image_type"] == "photo"
@@ -52,9 +57,16 @@ class TestEngineOrchestratorAnalyze:
         Image.new("RGB", (100, 100)).save(img_path, format="PNG")
         analysis = orch.analyze_image(img_path)
         expected_keys = {
-            "image_type", "complexity", "color_count", "edge_density",
-            "aspect_ratio", "is_likely_logo", "is_likely_photo",
-            "is_likely_scan", "width", "height",
+            "image_type",
+            "complexity",
+            "color_count",
+            "edge_density",
+            "aspect_ratio",
+            "is_likely_logo",
+            "is_likely_photo",
+            "is_likely_scan",
+            "width",
+            "height",
         }
         assert expected_keys.issubset(analysis.keys())
 
@@ -65,11 +77,16 @@ class TestEngineOrchestratorRecommend:
         img_path = tmp_path / "photo.png"
         # Use a noisy image to avoid scan classification
         import random
+
         img = Image.new("RGB", (2000, 1500))
         pixels = img.load()
         for i in range(2000):
             for j in range(1500):
-                pixels[i, j] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                pixels[i, j] = (
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                )
         img.save(img_path, format="PNG")
         pipeline = orch.recommend_pipeline(img_path)
         steps = [p["step"] for p in pipeline]
@@ -103,11 +120,16 @@ class TestEngineOrchestratorRecommend:
         img_path = tmp_path / "complex.png"
         # Create a noisy image to avoid scan classification
         import random
+
         img = Image.new("RGB", (500, 500))
         pixels = img.load()
         for i in range(500):
             for j in range(500):
-                pixels[i, j] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                pixels[i, j] = (
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                )
         img.save(img_path, format="PNG")
         pipeline = orch.recommend_pipeline(img_path)
         assert len(pipeline) == 1
@@ -235,7 +257,9 @@ class TestEngineOrchestratorRunPipeline:
             stats={},
         )
 
-        with patch("vector_studio.engine_orchestrator.trace_image", return_value=mock_result) as mock_trace:
+        with patch(
+            "vector_studio.engine_orchestrator.trace_image", return_value=mock_result
+        ) as mock_trace:
             orch.run_pipeline(
                 img_path,
                 [{"step": "vectorize", "engine": "vtracer", "kwargs": {}}],

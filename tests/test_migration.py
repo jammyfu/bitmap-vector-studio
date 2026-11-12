@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.migration import MigrationManager
 
@@ -59,6 +59,9 @@ class TestMigrationManager:
         mgr = MigrationManager(data_dir=tmp_path)
         mgr.migrate()
         logs = mgr.migrate()
-        assert any("Already at the latest" not in line for line in logs) or mgr.get_current_version() == 3
+        assert (
+            any("Already at the latest" not in line for line in logs)
+            or mgr.get_current_version() == 3
+        )
         # Second migrate should just update version again since version file is rewritten
         assert mgr.get_current_version() == 3

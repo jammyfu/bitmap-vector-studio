@@ -43,9 +43,9 @@ class ConversionReport:
 | 输出大小 | {self.output_size_bytes:.1f} KB |
 | 压缩比 | {self.compression_ratio:.1f}x |
 | 使用预设 | {self.preset_used} |
-| 质量评分 | {self.quality_score or 'N/A'} |
-| 路径数 | {self.path_count or 'N/A'} |
-| 颜色数 | {self.color_count or 'N/A'} |
+| 质量评分 | {self.quality_score or "N/A"} |
+| 路径数 | {self.path_count or "N/A"} |
+| 颜色数 | {self.color_count or "N/A"} |
 | 耗时 | {self.duration_seconds:.2f}s |
 | 时间 | {self.timestamp} |
 """
@@ -113,9 +113,7 @@ class ReportGenerator:
         self.output_dir = output_dir or Path.home() / ".bitmap_vector_studio" / "reports"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_report(
-        self, report: ConversionReport | BatchReport, format: str = "json"
-    ) -> Path:
+    def save_report(self, report: ConversionReport | BatchReport, format: str = "json") -> Path:
         """保存报告."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if isinstance(report, ConversionReport):

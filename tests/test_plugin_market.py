@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.plugin_market import PluginMarket, PluginPackage
 

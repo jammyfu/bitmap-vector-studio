@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent } from '../../test/render'
 import SmartRecommend from '../SmartRecommend'
 
 describe('SmartRecommend', () => {
@@ -20,7 +20,7 @@ describe('SmartRecommend', () => {
       <SmartRecommend recommendedPreset="photo" confidence={0.85} />
     )
     expect(screen.getByText(/智能推荐：photo预设/)).toBeInTheDocument()
-    expect(screen.getByText('85%')).toBeInTheDocument()
+    expect(screen.getByText('智能推荐：photo预设（置信度 85%）')).toBeInTheDocument()
   })
 
   it('calls onApply when apply button clicked', () => {

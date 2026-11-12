@@ -4,7 +4,7 @@ import json
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from .models import TraceOptions
 from .presets import options_from_preset
 from .task_queue import TaskQueue
-from .tracer import SUPPORTED_EXTENSIONS, trace_image
+from .tracer import SUPPORTED_EXTENSIONS, trace_image as trace_image
 
 
 @dataclass
@@ -317,8 +317,7 @@ class RenderFarm:
         """
         with self._lock:
             candidates = [
-                w for w in self._workers.values()
-                if w.is_alive() and w.current_load < w.capacity
+                w for w in self._workers.values() if w.is_alive() and w.current_load < w.capacity
             ]
         if not candidates:
             return None
@@ -413,7 +412,8 @@ class DistributedBatch:
             List of chunks, each chunk is a list of image paths.
         """
         images = [
-            path for path in input_dir.iterdir()
+            path
+            for path in input_dir.iterdir()
             if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
         ]
         images.sort()
@@ -465,7 +465,9 @@ class DistributedBatch:
         return task_ids
 
     @staticmethod
-    def collect_results(task_ids: list[str], farm: RenderFarm, timeout: float | None = None) -> list[Path]:
+    def collect_results(
+        task_ids: list[str], farm: RenderFarm, timeout: float | None = None
+    ) -> list[Path]:
         """Poll the farm until all *task_ids* reach a terminal state.
 
         Parameters
@@ -503,6 +505,7 @@ class DistributedBatch:
 # ---------------------------------------------------------------------------
 # Simple worker HTTP server
 # ---------------------------------------------------------------------------
+
 
 class _WorkerHandler(BaseHTTPRequestHandler):
     """Minimal HTTP handler for a render-farm worker node."""

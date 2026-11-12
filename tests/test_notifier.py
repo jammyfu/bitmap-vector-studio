@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 
-from vector_studio.notifier import Notifier, NotifyChannel, NotifyConfig
+from vector_studio.notifier import Notifier, NotifyChannel, NotifyConfig as NotifyConfig
 
 
 class TestNotifierConfig:
@@ -144,7 +144,7 @@ class TestNotifierSend:
             mock_resp.status = 200
             mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
             mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
-            results = notifier.notify("convert.error", {"file": "test.png"})
+            _results = notifier.notify("convert.error", {"file": "test.png"})
 
         call_args = mock_urlopen.call_args
         req = call_args[0][0]

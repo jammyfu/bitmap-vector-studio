@@ -8,13 +8,23 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 try:
-    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+    from fastapi import (
+        BackgroundTasks,
+        FastAPI,
+        File as File,
+        Form,
+        HTTPException,
+        UploadFile,
+        WebSocket,
+        WebSocketDisconnect,
+    )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse as JSONResponse
     from pydantic import BaseModel
+
     _HAS_FASTAPI = True
 except ImportError as exc:
     raise RuntimeError(
@@ -22,11 +32,19 @@ except ImportError as exc:
         "'pip install bitmap-vector-studio[api]'"
     ) from exc
 
+from .health_check import (
+    HealthChecker,
+    check_disk_space,
+    check_memory,
+    check_python_deps,
+    check_vtracer,
+)
+from .metrics import get_metrics
 from . import __version__
 from .cloud_sync import CloudSyncManager, LocalServerBackend
 from .collaboration import (
-    CollabManager,
-    CollabRoom,
+    CollabManager as CollabManager,
+    CollabRoom as CollabRoom,
     Operation,
     get_collab_manager,
 )
@@ -44,16 +62,16 @@ from .search_engine import HistorySearch
 # Global state
 # ---------------------------------------------------------------------------
 
-_api_temp_dir: Path | None = None
+_api_temp_dir: Optional[Path] = None
 _api_temp_lock = threading.Lock()
 
-_task_queue: TaskQueue | None = None
+_task_queue: Optional[TaskQueue] = None
 _queue_lock = threading.Lock()
 
-_share_manager: CloudSyncManager | None = None
+_share_manager: Optional[CloudSyncManager] = None
 _share_lock = threading.Lock()
 
-_render_farm: RenderFarm | None = None
+_render_farm: Optional[RenderFarm] = None
 _farm_lock = threading.Lock()
 
 
@@ -114,9 +132,6 @@ def _cleanup_api_temp() -> None:
         _share_manager = None
 
 
-from .health_check import HealthChecker, check_disk_space, check_memory, check_python_deps, check_vtracer
-from .metrics import get_metrics
-
 # 初始化健康检查器
 _health_checker = HealthChecker()
 _health_checker.register("disk", lambda: check_disk_space())
@@ -129,6 +144,7 @@ _health_checker.register("vtracer", lambda: check_vtracer())
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class ConvertAsyncResponse(BaseModel):
     task_id: str
     status: str
@@ -138,11 +154,11 @@ class StatusResponse(BaseModel):
     task_id: str
     status: str
     progress: float
-    result: dict[str, Any] | None = None
-    error: str | None = None
-    created_at: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    result: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 class PresetInfo(BaseModel):
@@ -198,6 +214,7 @@ class ShareQrResponse(BaseModel):
 # Collaboration Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class RoomCreateResponse(BaseModel):
     room_id: str
     owner: str
@@ -209,29 +226,29 @@ class RoomStateResponse(BaseModel):
     owner: str
     created_at: str
     params: dict[str, Any]
-    preview: Any | None = None
+    preview: Optional[Any] = None
     files: list[dict[str, Any]]
-    last_convert: dict[str, Any] | None = None
+    last_convert: Optional[dict[str, Any]] = None
     client_count: int
     operation_count: int
     next_version: int
 
 
 class OperationRequest(BaseModel):
-    op_id: str | None = None
+    op_id: Optional[str] = None
     client_id: str
     type: str
     data: dict[str, Any] = {}
-    version: int | None = None
+    version: Optional[int] = None
 
 
 class OperationResponse(BaseModel):
     op_id: str
     status: str
-    version: int | None = None
-    state: dict[str, Any] | None = None
-    reason: str | None = None
-    expected_version: int | None = None
+    version: Optional[int] = None
+    state: Optional[dict[str, Any]] = None
+    reason: Optional[str] = None
+    expected_version: Optional[int] = None
 
 
 class HistoryResponse(BaseModel):
@@ -246,6 +263,7 @@ class RoomListResponse(BaseModel):
 # Render farm Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class FarmTaskSubmitResponse(BaseModel):
     task_id: str
     status: str
@@ -254,11 +272,11 @@ class FarmTaskSubmitResponse(BaseModel):
 class FarmTaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    input_path: str | None = None
-    output_path: str | None = None
-    assigned_worker: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    input_path: Optional[str] = None
+    output_path: Optional[str] = None
+    assigned_worker: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 class FarmWorkerRegisterRequest(BaseModel):
@@ -291,10 +309,11 @@ class FarmHeartbeatResponse(BaseModel):
 # Webhook Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class WebhookRegisterRequest(BaseModel):
     url: str
     channel: str = "webhook"
-    events: list[str] | None = None
+    events: Optional[list[str]] = None
 
 
 class WebhookRegisterResponse(BaseModel):
@@ -313,6 +332,7 @@ class WebhookListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Search Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class SearchHistoryResponse(BaseModel):
     results: list[dict[str, Any]]
@@ -341,6 +361,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_options(options: str) -> dict[str, Any]:
     """Parse the *options* JSON string into a dictionary."""
@@ -399,6 +420,7 @@ def _run_sync_conversion(
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post(
     "/convert",
@@ -665,6 +687,7 @@ async def liveness_check():
 # Share endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.post(
     "/share",
     response_model=ShareResponse,
@@ -770,6 +793,7 @@ async def get_share_qr(share_id: str):
 # Collaboration endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.websocket("/ws/collab/{room_id}")
 async def collab_websocket(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for real-time collaboration in a room.
@@ -782,7 +806,7 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
     * ``{"event": "ping"}`` – keep-alive
     """
     await websocket.accept()
-    client_id: str | None = None
+    client_id: Optional[str] = None
     manager = await get_collab_manager()
 
     try:
@@ -798,12 +822,14 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
                     await websocket.close()
                     return
                 await manager.join_room(room_id, client_id, websocket)
-                await websocket.send_json({
-                    "event": "joined",
-                    "room_id": room_id,
-                    "client_id": client_id,
-                    "state": room.get_state_snapshot(),
-                })
+                await websocket.send_json(
+                    {
+                        "event": "joined",
+                        "room_id": room_id,
+                        "client_id": client_id,
+                        "state": room.get_state_snapshot(),
+                    }
+                )
 
             elif event == "operation":
                 if client_id is None:
@@ -834,7 +860,7 @@ async def collab_websocket(websocket: WebSocket, room_id: str):
     except WebSocketDisconnect:
         if client_id:
             await manager.leave_room(room_id, client_id)
-    except Exception as exc:  # pragma: no cover
+    except Exception:  # pragma: no cover
         if client_id:
             await manager.leave_room(room_id, client_id)
         raise
@@ -929,6 +955,7 @@ async def list_rooms():
 # ---------------------------------------------------------------------------
 # Render farm endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post("/farm/submit", response_model=FarmTaskSubmitResponse)
 async def submit_farm_task(
@@ -1026,6 +1053,7 @@ async def get_farm_status():
 # Webhook endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.post("/webhooks", response_model=WebhookRegisterResponse)
 async def register_webhook(request: WebhookRegisterRequest):
     """Register a new webhook notification."""
@@ -1071,11 +1099,12 @@ async def list_webhooks():
 # Search endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.get("/search/history", response_model=SearchHistoryResponse)
 async def search_history(
     q: str = "",
-    status: str | None = None,
-    preset: str | None = None,
+    status: Optional[str] = None,
+    preset: Optional[str] = None,
     limit: int = 20,
 ):
     """Search conversion history."""

@@ -9,7 +9,7 @@ from typing import Any
 
 from PIL import Image
 
-from .models import TraceOptions, TraceResult
+from .models import TraceOptions, TraceResult as TraceResult
 from .tracer import trace_image
 
 

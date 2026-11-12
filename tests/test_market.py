@@ -1,6 +1,6 @@
 import json
 import os
-from pathlib import Path
+from pathlib import Path as Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +14,7 @@ from vector_studio.market import (
     MultiBackend,
     PresetMarket,
     _load_ratings,
-    _save_ratings,
+    _save_ratings as _save_ratings,
 )
 from vector_studio.models import TraceOptions
 
@@ -24,6 +24,7 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _isolated_stores(monkeypatch, tmp_path):
@@ -42,6 +43,7 @@ def _isolated_stores(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # MarketBackend & MultiBackend
 # ---------------------------------------------------------------------------
+
 
 class TestMarketBackend:
     def test_market_backend_is_abstract(self):
@@ -99,6 +101,7 @@ class TestMarketBackend:
 # ---------------------------------------------------------------------------
 # GitHubGistBackend
 # ---------------------------------------------------------------------------
+
 
 class TestGitHubGistBackend:
     def test_gist_backend_list_presets_from_description(self):
@@ -193,6 +196,7 @@ class TestGitHubGistBackend:
 # GitHubRepoBackend
 # ---------------------------------------------------------------------------
 
+
 class TestGitHubRepoBackend:
     def test_repo_backend_list_presets(self):
         """Repo backend lists only .json files as presets."""
@@ -229,6 +233,7 @@ class TestGitHubRepoBackend:
 # ---------------------------------------------------------------------------
 # PresetMarket
 # ---------------------------------------------------------------------------
+
 
 class TestPresetMarket:
     def test_preset_market_discover_presets(self):
@@ -348,6 +353,7 @@ class TestPresetMarket:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 class TestMarketCLI:
     def test_cli_market_list(self):

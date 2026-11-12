@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.models import TraceOptions
@@ -9,8 +9,8 @@ from vector_studio.performance import (
     LazyModuleLoader,
     PerformanceMonitor,
     StreamingImageProcessor,
-    _detect_gpu,
-    _GPUBackend,
+    _detect_gpu as _detect_gpu,
+    _GPUBackend as _GPUBackend,
 )
 
 
@@ -34,8 +34,12 @@ class TestPerformanceMonitor:
 
     def test_estimate_conversion_time_scales_with_options(self):
         monitor = PerformanceMonitor()
-        base_opts = TraceOptions(colormode="binary", mode="polygon", color_precision=1, max_iterations=1)
-        high_opts = TraceOptions(colormode="color", mode="spline", color_precision=8, max_iterations=50)
+        base_opts = TraceOptions(
+            colormode="binary", mode="polygon", color_precision=1, max_iterations=1
+        )
+        high_opts = TraceOptions(
+            colormode="color", mode="spline", color_precision=8, max_iterations=50
+        )
         base_est = monitor.estimate_conversion_time((1000, 1000), base_opts)
         high_est = monitor.estimate_conversion_time((1000, 1000), high_opts)
         assert high_est > base_est

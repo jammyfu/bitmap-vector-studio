@@ -4,15 +4,15 @@ import math
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
+from typing import Any as Any
 
 from .svg_tools import (
     _extract_all_colors,
     _extract_colors_from_element,
     _get_local_name,
-    _parse_color,
+    _parse_color as _parse_color,
     optimize_svg_file,
-    optimize_svg_text,
+    optimize_svg_text as optimize_svg_text,
     svg_stats,
 )
 
@@ -171,6 +171,7 @@ def _find_parent(root: ET.Element, child: ET.Element) -> ET.Element | None:
 
 def _color_distance(c1: str, c2: str) -> float:
     """Compute Euclidean distance between two ``#rrggbb`` colors."""
+
     def _to_rgb(c: str) -> tuple[int, int, int]:
         c = c.lstrip("#")
         return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
@@ -270,7 +271,9 @@ def merge_similar_colors(
             # Remove inline style fill to avoid conflict.
             style = elem.get("style", "")
             if style:
-                parts = [p for p in style.split(";") if p.strip().lower().startswith("fill") is False]
+                parts = [
+                    p for p in style.split(";") if p.strip().lower().startswith("fill") is False
+                ]
                 if parts:
                     elem.set("style", ";".join(parts))
                 else:
@@ -400,7 +403,10 @@ def _simplify_d(d: str, tolerance: float, places: int) -> str:
             elif cmd in "Tt":
                 result.append(_reduce_decimals(str(x), places))
                 result.append(_reduce_decimals(str(y), places))
-                current_pos = (x if cmd == "T" else current_pos[0] + x, y if cmd == "T" else current_pos[1] + y)
+                current_pos = (
+                    x if cmd == "T" else current_pos[0] + x,
+                    y if cmd == "T" else current_pos[1] + y,
+                )
         elif cmd in "Hh":
             if i >= len(tokens):
                 break
@@ -523,7 +529,9 @@ def svg_quality_score(svg_path: Path) -> dict[str, float]:
     paths = stats.get("paths", 0)
 
     try:
-        sorted_colors, counts = _extract_all_colors(svg_path.read_text(encoding="utf-8", errors="replace"))
+        sorted_colors, counts = _extract_all_colors(
+            svg_path.read_text(encoding="utf-8", errors="replace")
+        )
         color_count = len(sorted_colors)
     except Exception:
         color_count = 0

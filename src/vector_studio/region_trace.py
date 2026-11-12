@@ -5,7 +5,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any as Any
 
 from PIL import Image, ImageDraw
 
@@ -59,7 +59,9 @@ def crop_region(input_path: Path, region: RegionSelector, output_path: Path) -> 
 
     with Image.open(input_path) as img:
         if region.shape == "rect":
-            cropped = img.crop((region.x, region.y, region.x + region.width, region.y + region.height))
+            cropped = img.crop(
+                (region.x, region.y, region.x + region.width, region.y + region.height)
+            )
         elif region.shape == "circle":
             bbox = (region.x, region.y, region.x + region.width, region.y + region.height)
             cropped = img.crop(bbox).convert("RGBA")

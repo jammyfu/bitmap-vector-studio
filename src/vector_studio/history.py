@@ -172,14 +172,19 @@ def _records_to_csv(records: list[dict[str, Any]], out_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         for record in records:
-            flat = {k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for k, v in record.items()}
+            flat = {
+                k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v
+                for k, v in record.items()
+            }
             writer.writerow(flat)
 
 
 def _records_to_markdown(records: list[dict[str, Any]], out_path: Path) -> None:
     """Write *records* to a Markdown file as a table."""
     if not records:
-        out_path.write_text("# Bitmap Vector Studio History Report\n\nNo records.\n", encoding="utf-8")
+        out_path.write_text(
+            "# Bitmap Vector Studio History Report\n\nNo records.\n", encoding="utf-8"
+        )
         return
     headers = list(records[0].keys())
     lines: list[str] = [
@@ -243,4 +248,6 @@ def get_task_options(task_id: str) -> TraceOptions:
     try:
         return TraceOptions(**filtered)
     except TypeError as exc:
-        raise ValueError(f"Stored options are incompatible with current TraceOptions: {exc}") from exc
+        raise ValueError(
+            f"Stored options are incompatible with current TraceOptions: {exc}"
+        ) from exc

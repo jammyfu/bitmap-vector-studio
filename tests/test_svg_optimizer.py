@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 
 from vector_studio.svg_optimizer import (
     merge_same_color_paths,
@@ -50,9 +50,7 @@ class TestMergeSameColorPaths:
     def test_leaves_single_path_unchanged(self, tmp_path: Path):
         svg = tmp_path / "single.svg"
         svg.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg">'
-            '<path d="M0 0" fill="red"/>'
-            "</svg>",
+            '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" fill="red"/></svg>',
             encoding="utf-8",
         )
         merge_same_color_paths(svg)
@@ -73,7 +71,7 @@ class TestMergeSimilarColors:
         merge_similar_colors(svg, threshold=10)
         text = svg.read_text(encoding="utf-8")
         # #ff0000 and #ff0001 are distance 1, so they should merge
-        fills = [line for line in text.splitlines() if 'fill=' in line]
+        fills = [line for line in text.splitlines() if "fill=" in line]
         unique_fills = set()
         for line in fills:
             m = line.split('fill="')[1].split('"')[0]
@@ -84,9 +82,7 @@ class TestMergeSimilarColors:
         svg = tmp_path / "in.svg"
         out = tmp_path / "out.svg"
         svg.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg">'
-            '<path d="M0 0" fill="#ff0000"/>'
-            "</svg>",
+            '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" fill="#ff0000"/></svg>',
             encoding="utf-8",
         )
         merge_similar_colors(svg, out, threshold=5)
@@ -110,9 +106,7 @@ class TestSimplifyPathData:
     def test_collapses_short_segments(self, tmp_path: Path):
         svg = tmp_path / "short.svg"
         svg.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg">'
-            '<path d="M0 0 L0.1 0.1 L10 10"/>'
-            "</svg>",
+            '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L0.1 0.1 L10 10"/></svg>',
             encoding="utf-8",
         )
         simplify_path_data(svg, tolerance=1.0)
@@ -138,7 +132,7 @@ class TestSvgQualityScore:
     def test_large_complex_svg(self, tmp_path: Path):
         svg = tmp_path / "large.svg"
         paths = "\n".join(
-            f'<path d="M{i} 0 L{i+1} 1" fill="#{i:02x}{(i*2)%256:02x}{(i*3)%256:02x}"/>'
+            f'<path d="M{i} 0 L{i + 1} 1" fill="#{i:02x}{(i * 2) % 256:02x}{(i * 3) % 256:02x}"/>'
             for i in range(300)
         )
         svg.write_text(
@@ -186,9 +180,7 @@ class TestOptimizeSvgComprehensive:
         svg = tmp_path / "in.svg"
         out = tmp_path / "out.svg"
         svg.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg">'
-            '<path d="M0 0" fill="red"/>'
-            "</svg>",
+            '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" fill="red"/></svg>',
             encoding="utf-8",
         )
         optimize_svg_comprehensive(svg, out)

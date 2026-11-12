@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 from PIL import Image
@@ -62,7 +63,9 @@ class TestCropRegion:
         Image.new("RGB", (100, 100), color=(0, 0, 255)).save(img)
         out = tmp_path / "crop.png"
         points = [(10, 10), (60, 10), (35, 60)]
-        region = RegionSelector(x=10, y=10, width=50, height=50, shape="polygon", polygon_points=points)
+        region = RegionSelector(
+            x=10, y=10, width=50, height=50, shape="polygon", polygon_points=points
+        )
         result = crop_region(img, region, out)
         assert result == out
         with Image.open(out) as im:
@@ -86,7 +89,9 @@ class TestTraceRegion:
         )
 
         region = RegionSelector(x=0, y=0, width=50, height=50)
-        with patch("vector_studio.region_trace.trace_image", return_value=mock_result) as mock_trace:
+        with patch.object(
+            import_module("vector_studio.region_trace"), "trace_image", return_value=mock_result
+        ) as mock_trace:
             result = trace_region(img, region, out_svg, TraceOptions())
 
         assert result.svg_path == out_svg
@@ -120,7 +125,7 @@ class TestMergeRegionSvg:
         assert out.exists()
         text = out.read_text(encoding="utf-8")
         assert "region-trace" in text
-        assert 'translate(10, 20)' in text
+        assert "translate(10, 20)" in text
 
     def test_merge_invalid_original_raises(self, tmp_path: Path):
         bad = tmp_path / "bad.svg"
@@ -151,7 +156,9 @@ class TestRegionTrace:
             return mock_result
 
         region = RegionSelector(x=10, y=10, width=30, height=30)
-        with patch("vector_studio.region_trace.trace_image", side_effect=side_effect) as mock_trace:
+        with patch.object(
+            import_module("vector_studio.region_trace"), "trace_image", side_effect=side_effect
+        ) as mock_trace:
             result = region_trace(img, region, out, TraceOptions())
 
         assert result.svg_path == out
@@ -182,7 +189,9 @@ class TestRegionTrace:
             return mock_result
 
         region = RegionSelector(x=5, y=5, width=20, height=20)
-        with patch("vector_studio.region_trace.trace_image", side_effect=side_effect):
+        with patch.object(
+            import_module("vector_studio.region_trace"), "trace_image", side_effect=side_effect
+        ):
             result = region_trace(img, region, out, TraceOptions(), original_svg=original_svg)
 
         assert result.svg_path == out

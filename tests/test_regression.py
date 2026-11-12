@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vector_studio.models import TraceOptions, TraceResult
+from vector_studio.models import TraceOptions, TraceResult as TraceResult
 from vector_studio.tracer import trace_image
 
 
@@ -62,6 +62,7 @@ class TestRegressionBugFixes:
     def test_empty_svg_stats_does_not_crash(self, tmp_path: Path):
         """Regression: svg_stats on empty/malformed SVG must not crash."""
         from vector_studio.svg_tools import svg_stats
+
         empty_svg = tmp_path / "empty.svg"
         empty_svg.write_text("<svg></svg>")
         stats = svg_stats(empty_svg)
@@ -71,6 +72,7 @@ class TestRegressionBugFixes:
     def test_config_load_malformed_returns_defaults(self, tmp_path: Path):
         """Regression: malformed config file must not crash, return defaults."""
         from vector_studio.config import Config
+
         bad = tmp_path / "bad.json"
         bad.write_text("not json")
         cfg = Config.load(bad)
@@ -140,9 +142,16 @@ class TestVersionCompatibility:
         opts = TraceOptions()
         kwargs = opts.vtracer_kwargs()
         expected_keys = {
-            "colormode", "hierarchical", "mode", "filter_speckle",
-            "color_precision", "layer_difference", "corner_threshold",
-            "length_threshold", "max_iterations", "splice_threshold",
+            "colormode",
+            "hierarchical",
+            "mode",
+            "filter_speckle",
+            "color_precision",
+            "layer_difference",
+            "corner_threshold",
+            "length_threshold",
+            "max_iterations",
+            "splice_threshold",
             "path_precision",
         }
         assert set(kwargs.keys()) == expected_keys
@@ -159,12 +168,14 @@ class TestVersionCompatibility:
     def test_preset_names_unchanged(self):
         """Ensure built-in preset names remain available."""
         from vector_studio.presets import PRESETS
+
         expected = {"bw", "poster", "photo", "logo", "pixel_art", "scan"}
         assert expected.issubset(set(PRESETS.keys()))
 
     def test_plugin_interface_hooks_unchanged(self):
         """Ensure Plugin base class hooks remain stable."""
         from vector_studio.plugin_interface import Plugin
+
         assert hasattr(Plugin, "preprocess")
         assert hasattr(Plugin, "postprocess")
         assert hasattr(Plugin, "on_convert_complete")
@@ -174,12 +185,15 @@ class TestRegressionMore:
     def test_streaming_mode_does_not_crash_on_small_image(self, tmp_path: Path):
         """Regression: stream=True on small images should still work."""
         from PIL import Image
+
         img = tmp_path / "small.png"
         Image.new("RGB", (100, 100)).save(img)
         out = tmp_path / "out.svg"
         out.write_text("<svg></svg>")
 
-        with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=False):
+        with patch(
+            "vector_studio.performance.StreamingImageProcessor._should_stream", return_value=False
+        ):
             with patch("vector_studio.tracer.prepare_input") as mock_prepare:
                 mock_prepare.return_value = tmp_path / "normalized.png"
                 Image.new("RGB", (10, 10)).save(mock_prepare.return_value)
@@ -238,11 +252,12 @@ class TestRegressionMore:
         kwargs = opts.vtracer_kwargs()
         assert "posterize" not in kwargs or kwargs.get("posterize") is None
 
-    def test_cli_batch_with_zero_images_exits_cleanly(self, tmp_path: Path):
+    def test_cli_batch_with_zero_images_exits_cleanly(self, tmp_path: Path, monkeypatch):
         """Regression: batch on empty dir must exit 0, not crash."""
         from vector_studio.cli import app
         from typer.testing import CliRunner
 
+        monkeypatch.setenv("BVS_LANG", "en-US")
         runner = CliRunner()
         result = runner.invoke(app, ["batch", str(tmp_path), str(tmp_path / "out")])
         assert result.exit_code == 0
@@ -251,8 +266,9 @@ class TestRegressionMore:
     def test_svg_stats_on_malformed_xml(self, tmp_path: Path):
         """Regression: svg_stats on malformed XML must not crash."""
         from vector_studio.svg_tools import svg_stats
+
         bad_svg = tmp_path / "bad.svg"
-        bad_svg.write_text("<svg><path d=\"M0 0\"><not-closed>")
+        bad_svg.write_text('<svg><path d="M0 0"><not-closed>')
         stats = svg_stats(bad_svg)
         assert isinstance(stats, dict)
         assert "paths" in stats

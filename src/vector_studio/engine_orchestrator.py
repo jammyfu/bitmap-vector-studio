@@ -9,7 +9,7 @@ from typing import Any
 from PIL import Image, ImageStat
 
 from .ai_onnx import AIProcessor
-from .engines import EngineRegistry, VTracerEngine
+from .engines import EngineRegistry, VTracerEngine as VTracerEngine
 from .models import TraceOptions, TraceResult
 from .tracer import trace_image
 
@@ -65,7 +65,9 @@ class EngineOrchestrator:
                 or (width < 256 and height < 256 and color_count < 8)
             )
             is_likely_photo = color_count > 64 and stddev > 20 and width * height > 300_000
-            is_likely_scan = stddev < 40 and edge_density < 0.2 and color_count < 48 and width * height > 100_000
+            is_likely_scan = (
+                stddev < 40 and edge_density < 0.2 and color_count < 48 and width * height > 100_000
+            )
 
             # Complexity score (0-100)
             complexity = min(100, int(color_count / 2 + edge_density * 100))
@@ -118,49 +120,65 @@ class EngineOrchestrator:
         pipeline: list[dict[str, Any]] = []
 
         if image_type == "photo":
-            pipeline.append({
-                "step": "ai_upscale",
-                "task": "upscale",
-                "kwargs": {"scale": 2},
-            })
-            pipeline.append({
-                "step": "ai_style",
-                "task": "style_transfer",
-                "kwargs": {"style": "sketch"},
-            })
-            pipeline.append({
-                "step": "vectorize",
-                "engine": "vtracer",
-                "kwargs": {},
-            })
+            pipeline.append(
+                {
+                    "step": "ai_upscale",
+                    "task": "upscale",
+                    "kwargs": {"scale": 2},
+                }
+            )
+            pipeline.append(
+                {
+                    "step": "ai_style",
+                    "task": "style_transfer",
+                    "kwargs": {"style": "sketch"},
+                }
+            )
+            pipeline.append(
+                {
+                    "step": "vectorize",
+                    "engine": "vtracer",
+                    "kwargs": {},
+                }
+            )
         elif image_type == "logo":
-            pipeline.append({
-                "step": "ai_segment",
-                "task": "segment",
-                "kwargs": {},
-            })
-            pipeline.append({
-                "step": "vectorize",
-                "engine": "potrace",
-                "kwargs": {},
-            })
+            pipeline.append(
+                {
+                    "step": "ai_segment",
+                    "task": "segment",
+                    "kwargs": {},
+                }
+            )
+            pipeline.append(
+                {
+                    "step": "vectorize",
+                    "engine": "potrace",
+                    "kwargs": {},
+                }
+            )
         elif image_type == "scan":
-            pipeline.append({
-                "step": "ai_enhance",
-                "task": "auto_enhance",
-                "kwargs": {"scale": 2},
-            })
-            pipeline.append({
-                "step": "vectorize",
-                "engine": "vtracer",
-                "kwargs": {},
-            })
+            pipeline.append(
+                {
+                    "step": "ai_enhance",
+                    "task": "auto_enhance",
+                    "kwargs": {"scale": 2},
+                }
+            )
+            pipeline.append(
+                {
+                    "step": "vectorize",
+                    "engine": "vtracer",
+                    "kwargs": {},
+                }
+            )
         else:
-            pipeline.append({
-                "step": "vectorize",
-                "engine": "vtracer",
-                "kwargs": {},
-            })
+            pipeline.append(
+                {
+                    "step": "vectorize",
+                    "engine": "vtracer",
+                    "kwargs": {},
+                }
+            )
 
         return pipeline
 
@@ -209,7 +227,9 @@ class EngineOrchestrator:
                         if current_image.mode in ("P", "RGBA", "L", "1"):
                             current_image.save(step_file, format="PNG", optimize=True)
                         else:
-                            current_image.convert("RGB").save(step_file, format="PNG", optimize=True)
+                            current_image.convert("RGB").save(
+                                step_file, format="PNG", optimize=True
+                            )
                         current_path = step_file
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("Pipeline step '%s' failed: %s", step_name, exc)
@@ -224,7 +244,9 @@ class EngineOrchestrator:
                         if current_image.mode in ("P", "RGBA", "L", "1"):
                             current_image.save(current_path, format="PNG", optimize=True)
                         else:
-                            current_image.convert("RGB").save(current_path, format="PNG", optimize=True)
+                            current_image.convert("RGB").save(
+                                current_path, format="PNG", optimize=True
+                            )
 
                     result = trace_image(
                         current_path,

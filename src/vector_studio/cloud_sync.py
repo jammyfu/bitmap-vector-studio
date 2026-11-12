@@ -5,7 +5,7 @@ import io
 import json
 import os
 import threading
-import time
+import time as time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 # QR code is an optional dependency.
 try:
     import qrcode
-    from PIL import Image
+    from PIL import Image as Image
 
     _HAS_QRCODE = True
 except Exception:  # pragma: no cover
@@ -30,6 +30,7 @@ from PIL import Image as PILImage, ImageDraw
 # ---------------------------------------------------------------------------
 # Abstract backend
 # ---------------------------------------------------------------------------
+
 
 class CloudBackend(ABC):
     """Abstract base class for cloud storage backends."""
@@ -73,6 +74,7 @@ class CloudBackend(ABC):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _generate_fallback_qr(url: str) -> bytes:
     """Create a simple PNG image containing the URL as text (fallback QR)."""
@@ -122,6 +124,7 @@ def _http_request_bytes(
 # ---------------------------------------------------------------------------
 # GitHub Gist backend
 # ---------------------------------------------------------------------------
+
 
 class GitHubGistBackend(CloudBackend):
     """Store SVG files as GitHub Gists.
@@ -229,6 +232,7 @@ class GitHubGistBackend(CloudBackend):
 # ---------------------------------------------------------------------------
 # Local server backend
 # ---------------------------------------------------------------------------
+
 
 class LocalServerBackend(CloudBackend):
     """Store shared files locally and serve them via the API server.
@@ -370,6 +374,7 @@ class LocalServerBackend(CloudBackend):
 # ---------------------------------------------------------------------------
 # Cloud sync manager
 # ---------------------------------------------------------------------------
+
 
 class CloudSyncManager:
     """High-level manager for sharing SVG files via a cloud backend.

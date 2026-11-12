@@ -12,7 +12,7 @@ except Exception:  # pragma: no cover
     np = None  # type: ignore[assignment]
     _HAS_NUMPY = False
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageFilter as ImageFilter, ImageOps
 
 
 def _to_numpy(img: Image.Image) -> Any:
@@ -37,6 +37,7 @@ def _clamp(value: float, low: float = 0.0, high: float = 255.0) -> int:
 # ---------------------------------------------------------------------------
 # smart_background
 # ---------------------------------------------------------------------------
+
 
 def detect_background_color(img: Image.Image) -> str | None:
     """Detect the most likely background color by sampling border pixels.

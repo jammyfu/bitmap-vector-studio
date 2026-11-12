@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import importlib.util
+import importlib as importlib
 import json
 import logging
-import os
-import subprocess
-import sys
+import os as os
+import subprocess as subprocess
+import sys as sys
 import threading
-import time
-from dataclasses import dataclass, field
+import time as time
+from dataclasses import dataclass as dataclass, field as field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable as Callable, TYPE_CHECKING
 
 from .models import TraceOptions, TraceResult
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Optional watchdog import
 # ---------------------------------------------------------------------------
 try:
-    from watchdog.events import FileSystemEvent, FileSystemEventHandler
+    from watchdog.events import FileSystemEvent as FileSystemEvent, FileSystemEventHandler
     from watchdog.observers import Observer
 
     _WATCHDOG_AVAILABLE = True
@@ -38,6 +39,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _default_checkpoint_dir() -> Path:
     """Return the default checkpoint directory."""
@@ -107,6 +109,7 @@ def _serialize_task(task: ConversionTask) -> dict[str, Any]:
 def _deserialize_task(data: dict[str, Any]) -> ConversionTask:
     """Reconstruct a ConversionTask from a plain dictionary."""
     from .task_queue import ConversionTask
+
     task = ConversionTask(
         task_id=data["task_id"],
         input_path=Path(data["input_path"]),
@@ -140,6 +143,7 @@ def _deserialize_task(data: dict[str, Any]) -> ConversionTask:
 # ---------------------------------------------------------------------------
 # CheckpointManager
 # ---------------------------------------------------------------------------
+
 
 class CheckpointManager:
     """Manages persistent checkpoints for batch conversion tasks.

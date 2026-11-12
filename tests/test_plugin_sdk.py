@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any as Any
 
 import pytest
-from PIL import Image
+from PIL import Image as Image
 
-from vector_studio.models import TraceResult
-from vector_studio.plugin_interface import Plugin
+from vector_studio.models import TraceResult as TraceResult
+from vector_studio.plugin_interface import Plugin as Plugin
 from vector_studio.plugin_sdk import (
     PluginDebugger,
     PluginDocsGenerator,
@@ -154,7 +154,7 @@ class TestPluginScaffold:
         assert path.exists()
         content = path.read_text(encoding="utf-8")
         assert "class MyPluginPlugin" in content
-        assert "name = \"my-plugin\"" in content
+        assert 'name = "my-plugin"' in content
         assert "def preprocess" in content
         assert "def postprocess" in content
         test_file = tmp_path / "test_my_plugin_plugin.py"
@@ -165,7 +165,7 @@ class TestPluginScaffold:
         assert path.exists()
         content = path.read_text(encoding="utf-8")
         assert "class WmPlugin" in content
-        assert "name = \"wm\"" in content
+        assert 'name = "wm"' in content
         assert "postprocess" in content
 
     def test_scaffold_unknown_template_raises(self, tmp_path: Path):
@@ -224,8 +224,8 @@ class TestPluginSDK:
         assert main_file.exists()
         content = main_file.read_text(encoding="utf-8")
         assert "class MyPlugin" in content
-        assert 'name = \"my_plugin\"' in content
-        assert 'version = \"1.2.0\"' in content
+        assert 'name = "my_plugin"' in content
+        assert 'version = "1.2.0"' in content
         assert "Author Name" in content
         assert "A test plugin" in content
 

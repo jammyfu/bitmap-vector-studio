@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 
@@ -9,8 +9,8 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from vector_studio.api import app, _cleanup_api_temp, _get_queue
-from vector_studio.models import TraceOptions, TraceResult
+from vector_studio.api import app, _cleanup_api_temp as _cleanup_api_temp, _get_queue
+from vector_studio.models import TraceOptions as TraceOptions, TraceResult
 
 client = TestClient(app)
 
@@ -141,16 +141,20 @@ class TestAsyncConvertEndpoint:
 
     def test_download_not_completed(self, tmp_path: Path):
         q = _get_queue()
-        with patch.object(q, "get_status", return_value={
-            "task_id": "test-123",
-            "status": "pending",
-            "progress": 0.0,
-            "result": None,
-            "error": None,
-            "created_at": "2024-01-01T00:00:00",
-            "started_at": None,
-            "completed_at": None,
-        }):
+        with patch.object(
+            q,
+            "get_status",
+            return_value={
+                "task_id": "test-123",
+                "status": "pending",
+                "progress": 0.0,
+                "result": None,
+                "error": None,
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "completed_at": None,
+            },
+        ):
             response = client.get("/download/test-123/svg")
 
         assert response.status_code == 400
@@ -313,8 +317,13 @@ class TestShareEndpoints:
     def test_get_shared_svg_local(self, tmp_path: Path):
         from vector_studio.cloud_sync import LocalServerBackend
         from datetime import datetime, timezone, timedelta
+
         backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
-        backend._shares["abc"] = {"filename": "test.svg", "content_type": "image/svg+xml", "expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        backend._shares["abc"] = {
+            "filename": "test.svg",
+            "content_type": "image/svg+xml",
+            "expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        }
         (tmp_path / "abc").write_text("<svg></svg>")
         with patch("vector_studio.api._get_share_manager") as mock_mgr:
             mock_mgr.return_value.backend = backend
@@ -325,8 +334,13 @@ class TestShareEndpoints:
     def test_get_shared_svg_expired(self, tmp_path: Path):
         from vector_studio.cloud_sync import LocalServerBackend
         from datetime import datetime, timezone, timedelta
+
         backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
-        backend._shares["abc"] = {"filename": "test.svg", "content_type": "image/svg+xml", "expire_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()}
+        backend._shares["abc"] = {
+            "filename": "test.svg",
+            "content_type": "image/svg+xml",
+            "expire_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+        }
         (tmp_path / "abc").write_text("<svg></svg>")
         with patch("vector_studio.api._get_share_manager") as mock_mgr:
             mock_mgr.return_value.backend = backend
@@ -349,7 +363,9 @@ class TestShareEndpoints:
 
     def test_list_shares(self, tmp_path: Path):
         with patch("vector_studio.api._get_share_manager") as mock_mgr:
-            mock_mgr.return_value.get_shared_files.return_value = [{"share_id": "abc", "url": "http://localhost/abc"}]
+            mock_mgr.return_value.get_shared_files.return_value = [
+                {"share_id": "abc", "url": "http://localhost/abc"}
+            ]
             response = client.get("/shares")
         assert response.status_code == 200
         assert len(response.json()["shares"]) == 1
@@ -357,8 +373,11 @@ class TestShareEndpoints:
     def test_get_share_qr(self, tmp_path: Path):
         from vector_studio.cloud_sync import LocalServerBackend
         from datetime import datetime, timezone, timedelta
+
         backend = LocalServerBackend(storage_dir=tmp_path, base_url="http://localhost:8000")
-        backend._shares["abc"] = {"expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        backend._shares["abc"] = {
+            "expire_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        }
         with patch("vector_studio.api._get_share_manager") as mock_mgr:
             mock_mgr.return_value.backend = backend
             with patch.object(backend, "get_qr_code", return_value=b"pngdata"):
@@ -439,7 +458,9 @@ class TestDownloadPdfPng:
                 "completed_at": None,
             },
         ):
-            with patch("vector_studio.api.export_svg_to_pdf", side_effect=RuntimeError("no cairosvg")):
+            with patch(
+                "vector_studio.api.export_svg_to_pdf", side_effect=RuntimeError("no cairosvg")
+            ):
                 response = client.get("/download/test-123/pdf")
         assert response.status_code == 500
         assert "PDF export failed" in response.json()["detail"]
@@ -477,8 +498,9 @@ class TestShareEndpointsMore:
 
     def test_share_qr_not_found(self):
         from vector_studio.cloud_sync import LocalServerBackend
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime as datetime, timezone as timezone, timedelta as timedelta
         import tempfile
+
         tmpdir = Path(tempfile.mkdtemp())
         backend = LocalServerBackend(storage_dir=tmpdir, base_url="http://localhost:8000")
         # Do NOT add "abc" to shares so it returns 404
@@ -498,7 +520,9 @@ class TestShareEndpointsMore:
                 "qr_code": "base64data",
             }
             with svg.open("rb") as f:
-                response = client.post("/share?expire_hours=48", files={"file": ("test.svg", f, "image/svg+xml")})
+                response = client.post(
+                    "/share?expire_hours=48", files={"file": ("test.svg", f, "image/svg+xml")}
+                )
         assert response.status_code == 200
         assert response.json()["file_id"] == "abc"
 

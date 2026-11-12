@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.plugin_hotreload import (
     PluginEvent,

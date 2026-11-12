@@ -30,7 +30,9 @@ class VectorEngine(ABC):
     supported_outputs: list[str] = [".svg"]
 
     @abstractmethod
-    def convert(self, input_path: Path, output_path: Path, options: dict[str, Any]) -> dict[str, Any]:
+    def convert(
+        self, input_path: Path, output_path: Path, options: dict[str, Any]
+    ) -> dict[str, Any]:
         """Convert a raster image to SVG.
 
         Parameters
@@ -116,7 +118,9 @@ class VTracerEngine(VectorEngine):
     version = "1.0"
     supported_formats = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"]
 
-    def convert(self, input_path: Path, output_path: Path, options: dict[str, Any]) -> dict[str, Any]:
+    def convert(
+        self, input_path: Path, output_path: Path, options: dict[str, Any]
+    ) -> dict[str, Any]:
         """Convert using VTracer Python binding or CLI fallback.
 
         Parameters
@@ -169,7 +173,9 @@ class PotraceEngine(VectorEngine):
     def is_available(cls) -> bool:
         return shutil.which("potrace") is not None
 
-    def convert(self, input_path: Path, output_path: Path, options: dict[str, Any]) -> dict[str, Any]:
+    def convert(
+        self, input_path: Path, output_path: Path, options: dict[str, Any]
+    ) -> dict[str, Any]:
         """Convert using potrace CLI.
 
         Steps:
@@ -243,7 +249,9 @@ class AutoTraceEngine(VectorEngine):
     def is_available(cls) -> bool:
         return shutil.which("autotrace") is not None
 
-    def convert(self, input_path: Path, output_path: Path, options: dict[str, Any]) -> dict[str, Any]:
+    def convert(
+        self, input_path: Path, output_path: Path, options: dict[str, Any]
+    ) -> dict[str, Any]:
         """Convert using autotrace CLI.
 
         Runs ``autotrace -output-file output.svg input.png`` with optional
@@ -422,7 +430,7 @@ class EngineRegistry:
                 # RGBA with few colours often indicates a logo
                 if mode == "RGBA":
                     # Quick sample: convert to palette and count colours
-                    sample = img.convert("P", palette=Image.ADAPTIVE, colors=256)
+                    _sample = img.convert("P", palette=Image.ADAPTIVE, colors=256)
                     # This is a rough proxy; real detection would need more work
                     return "logo"
                 # Large images with many colours are usually photos
@@ -464,21 +472,19 @@ class EngineBenchmark:
         """
         options = options or {}
         if engines is None:
-            engines = [
-                info["name"]
-                for info in self.registry.list_engines()
-                if info["available"]
-            ]
+            engines = [info["name"] for info in self.registry.list_engines() if info["available"]]
 
         results: list[dict[str, Any]] = []
         for name in engines:
             engine = self.registry.get_engine(name)
             if not engine.is_available():
-                results.append({
-                    "engine": name,
-                    "available": False,
-                    "error": "Engine not available",
-                })
+                results.append(
+                    {
+                        "engine": name,
+                        "available": False,
+                        "error": "Engine not available",
+                    }
+                )
                 continue
             try:
                 bench = engine.benchmark(input_path, options)
@@ -492,11 +498,13 @@ class EngineBenchmark:
                 bench["quality_score"] = round((size_score + path_score) / 2, 1)
                 results.append(bench)
             except Exception as exc:
-                results.append({
-                    "engine": name,
-                    "available": True,
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "engine": name,
+                        "available": True,
+                        "error": str(exc),
+                    }
+                )
 
         # Sort by elapsed time, keeping errors at the end
         def sort_key(r: dict[str, Any]) -> tuple[bool, float]:
@@ -533,8 +541,10 @@ class EngineBenchmark:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         images = [
-            p for p in input_dir.iterdir()
-            if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+            p
+            for p in input_dir.iterdir()
+            if p.is_file()
+            and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
         ]
 
         per_image: dict[str, list[dict[str, Any]]] = {}

@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence as Sequence
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,7 @@ class EditorInfo:
 # Platform helpers
 # ---------------------------------------------------------------------------
 
+
 def _current_platform() -> str:
     """Return a normalized platform name."""
     system = platform.system()
@@ -48,6 +49,7 @@ def _current_platform() -> str:
 # ---------------------------------------------------------------------------
 # Windows registry helpers
 # ---------------------------------------------------------------------------
+
 
 def _winreg_read_install_path(key_path: str, value_name: str = "InstallPath") -> Path | None:
     """Try to read an installation directory from the Windows registry."""
@@ -78,7 +80,9 @@ def _winreg_read_uninstall_display_name(subkey: str) -> str | None:
     hives = [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]
     for hive in hives:
         try:
-            with winreg.OpenKey(hive, f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{subkey}") as key:
+            with winreg.OpenKey(
+                hive, f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{subkey}"
+            ) as key:
                 name, _ = winreg.QueryValueEx(key, "DisplayName")
                 if name and isinstance(name, str):
                     return name
@@ -93,12 +97,24 @@ def _winreg_read_uninstall_display_name(subkey: str) -> str | None:
 
 WINDOWS_COMMON_PATHS: dict[str, list[Path]] = {
     "illustrator": [
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator 2024\Support Files\Contents\Windows\Illustrator.exe"),
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator 2023\Support Files\Contents\Windows\Illustrator.exe"),
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator 2022\Support Files\Contents\Windows\Illustrator.exe"),
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator 2021\Support Files\Contents\Windows\Illustrator.exe"),
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator 2020\Support Files\Contents\Windows\Illustrator.exe"),
-        Path(r"C:\Program Files\Adobe\Adobe Illustrator CC 2019\Support Files\Contents\Windows\Illustrator.exe"),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator 2024\Support Files\Contents\Windows\Illustrator.exe"
+        ),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator 2023\Support Files\Contents\Windows\Illustrator.exe"
+        ),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator 2022\Support Files\Contents\Windows\Illustrator.exe"
+        ),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator 2021\Support Files\Contents\Windows\Illustrator.exe"
+        ),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator 2020\Support Files\Contents\Windows\Illustrator.exe"
+        ),
+        Path(
+            r"C:\Program Files\Adobe\Adobe Illustrator CC 2019\Support Files\Contents\Windows\Illustrator.exe"
+        ),
     ],
     "inkscape": [
         Path(r"C:\Program Files\Inkscape\bin\inkscape.exe"),
@@ -335,6 +351,7 @@ def get_default_editor() -> EditorInfo | None:
 # Opening files
 # ---------------------------------------------------------------------------
 
+
 class EditorNotFoundError(RuntimeError):
     """Raised when the requested editor is not available on the system."""
 
@@ -369,7 +386,7 @@ def _open_on_windows(svg_path: Path, editor: EditorInfo) -> None:
     # we use ``startfile`` when possible, otherwise Popen with shell.
     try:
         os.startfile(str(svg_path))
-    except OSError as exc:
+    except OSError:
         # Fallback: open via the executable with the file as argument.
         subprocess.Popen([str(exe), str(svg_path)], shell=False)
 

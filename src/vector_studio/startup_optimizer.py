@@ -4,10 +4,10 @@ import importlib
 import logging
 import sys
 import time
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable
+from contextlib import contextmanager as contextmanager
+from dataclasses import dataclass, field as field
+from pathlib import Path as Path
+from typing import Any, Callable as Callable
 
 logger = logging.getLogger(__name__)
 

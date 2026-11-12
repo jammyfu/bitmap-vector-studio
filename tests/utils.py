@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import time
+import time as time
+from vector_studio.models import TraceResult
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 
 def make_fake_image(path: Path, size: tuple[int, int] = (100, 100), mode: str = "RGB") -> Path:
@@ -85,7 +86,6 @@ def assert_svg_exists(path: Path) -> None:
     assert "<svg" in text, f"File does not contain <svg tag: {path}"
 
 
-
 def make_fake_prepare_input_side_effect(normalized_path: Path | None = None):
     """Return a side_effect callable for mocking tracer.prepare_input.
 
@@ -121,12 +121,13 @@ def patch_trace_image_for_test(
             result = trace_image(img, out)
     """
     from contextlib import ExitStack
-    from vector_studio.models import TraceResult
+    from vector_studio.models import TraceResult as TraceResult
 
     stack = ExitStack()
 
     def _fake_prepare(input_path, normalized_input, options, **kwargs):
         from PIL import Image
+
         normalized_input = Path(normalized_input)
         normalized_input.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (10, 10)).save(normalized_input)
@@ -148,7 +149,9 @@ def patch_trace_image_for_test(
     if create_eps:
         eps = tmp_path / "out.eps"
         eps.write_bytes(b"eps")
-        stack.enter_context(patch("vector_studio.tracer.export_svg_to_eps_with_inkscape", return_value=eps))
+        stack.enter_context(
+            patch("vector_studio.tracer.export_svg_to_eps_with_inkscape", return_value=eps)
+        )
 
     return stack
 

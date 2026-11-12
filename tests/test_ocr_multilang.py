@@ -1,7 +1,7 @@
-from pathlib import Path
+from pathlib import Path as Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.ai_ocr import (
@@ -226,6 +226,27 @@ class TestOcrLanguagesModule:
         assert check_language_available("chi_sim") is False
 
     def test_ocr_language_config_completeness(self):
-        required_keys = {"name", "tesseract_code", "font_family", "writing_mode", "preprocess", "direction"}
+        required_keys = {
+            "name",
+            "tesseract_code",
+            "font_family",
+            "writing_mode",
+            "preprocess",
+            "direction",
+        }
         for code, cfg in OCR_LANGUAGE_CONFIG.items():
             assert required_keys.issubset(set(cfg.keys())), f"{code} missing keys"
+
+
+def test_multilang_empty_ocr_results_preserve_region_and_language():
+    image = Image.new("RGB", (50, 50), color="gray")
+    regions = [{"bbox": [10, 10, 30, 20], "confidence": 0.9}]
+    fake = MagicMock()
+    fake.image_to_data.return_value = {"text": []}
+    with (
+        patch.dict("sys.modules", {"pytesseract": fake, "easyocr": None}),
+        patch("vector_studio.ai_ocr.check_language_available", return_value=True),
+    ):
+        result = recognize_text_multilang(image, regions=regions, lang="eng")
+    assert result == [{"bbox": [10, 10, 30, 20], "confidence": 0.9, "text": "", "lang": "eng"}]
+    assert regions == [{"bbox": [10, 10, 30, 20], "confidence": 0.9}]

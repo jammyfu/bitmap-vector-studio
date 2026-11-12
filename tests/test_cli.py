@@ -1,3 +1,4 @@
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -77,21 +78,36 @@ class TestTraceCommand:
         )
 
         with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
-            runner.invoke(app, [
-                "trace", str(img),
-                "--colormode", "binary",
-                "--filter-speckle", "8",
-                "--color-precision", "4",
-                "--layer-difference", "32",
-                "--corner-threshold", "90",
-                "--length-threshold", "5.5",
-                "--max-iterations", "20",
-                "--splice-threshold", "60",
-                "--path-precision", "5",
-                "--denoise",
-                "--posterize", "4",
-                "--max-input-side", "1024",
-            ])
+            runner.invoke(
+                app,
+                [
+                    "trace",
+                    str(img),
+                    "--colormode",
+                    "binary",
+                    "--filter-speckle",
+                    "8",
+                    "--color-precision",
+                    "4",
+                    "--layer-difference",
+                    "32",
+                    "--corner-threshold",
+                    "90",
+                    "--length-threshold",
+                    "5.5",
+                    "--max-iterations",
+                    "20",
+                    "--splice-threshold",
+                    "60",
+                    "--path-precision",
+                    "5",
+                    "--denoise",
+                    "--posterize",
+                    "4",
+                    "--max-input-side",
+                    "1024",
+                ],
+            )
 
         passed_options = mock_trace.call_args[0][2]
         assert passed_options.colormode == "binary"
@@ -194,12 +210,16 @@ class TestTraceCommand:
         )
 
         with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
-            result = runner.invoke(app, [
-                "trace", str(img),
-                "--export-pdf",
-                "--export-png",
-                "--export-eps",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "trace",
+                    str(img),
+                    "--export-pdf",
+                    "--export-png",
+                    "--export-eps",
+                ],
+            )
 
         assert mock_trace.call_args[1]["export_pdf"] is True
         assert mock_trace.call_args[1]["export_png"] is True
@@ -224,7 +244,9 @@ class TestTraceCommand:
 
         with patch("vector_studio.cli.trace_image", return_value=mock_result):
             with patch("vector_studio.cli.open_with_editor") as mock_open:
-                result = runner.invoke(app, ["trace", str(img), "--output", str(svg), "--open", "inkscape"])
+                result = runner.invoke(
+                    app, ["trace", str(img), "--output", str(svg), "--open", "inkscape"]
+                )
 
         assert result.exit_code == 0
         mock_open.assert_called_once_with(svg, "inkscape")
@@ -265,7 +287,9 @@ class TestTraceCommand:
         )
 
         with patch("vector_studio.cli.trace_image", return_value=mock_result):
-            with patch("vector_studio.cli.open_with_default_editor", side_effect=RuntimeError("boom")):
+            with patch(
+                "vector_studio.cli.open_with_default_editor", side_effect=RuntimeError("boom")
+            ):
                 result = runner.invoke(app, ["trace", str(img), "--output", str(svg), "--open", ""])
 
         assert result.exit_code == 0
@@ -273,10 +297,14 @@ class TestTraceCommand:
 
 
 class TestBatchCommand:
-    def test_batch_no_images_warns(self, tmp_path):
+    @pytest.mark.parametrize(
+        "locale, expected", [("en-US", "No supported images found"), ("zh-CN", "未找到支持的图片")]
+    )
+    def test_batch_no_images_warns(self, tmp_path, monkeypatch, locale, expected):
+        monkeypatch.setenv("BVS_LANG", locale)
         result = runner.invoke(app, ["batch", str(tmp_path), str(tmp_path / "out")])
         assert result.exit_code == 0
-        assert "No supported images found" in result.output
+        assert expected in result.output
 
     def test_batch_converts_images(self, tmp_path):
         input_dir = tmp_path / "input"
@@ -368,11 +396,16 @@ class TestBatchCommand:
         mock_result.svg_path = output_dir / "img.svg"
 
         with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
-            runner.invoke(app, [
-                "batch", str(input_dir), str(output_dir),
-                "--export-pdf",
-                "--export-png",
-            ])
+            runner.invoke(
+                app,
+                [
+                    "batch",
+                    str(input_dir),
+                    str(output_dir),
+                    "--export-pdf",
+                    "--export-png",
+                ],
+            )
 
         assert mock_trace.call_args[1]["export_pdf"] is True
         assert mock_trace.call_args[1]["export_png"] is True
@@ -415,7 +448,7 @@ class TestSearchCommand:
         img.write_bytes(b"fake image")
         out_dir = tmp_path / "out"
 
-        mock_result = TraceResult(
+        _mock_result = TraceResult(
             input_path=img,
             svg_path=out_dir / "quick_logo_001.svg",
             engine="python-vtracer",
@@ -423,9 +456,13 @@ class TestSearchCommand:
             stats={"paths": 5},
         )
 
-        with patch("vector_studio.cli.quick_search", return_value=("logo", out_dir / "best.svg", 42.0)) as mock_search:
+        with patch(
+            "vector_studio.cli.quick_search", return_value=("logo", out_dir / "best.svg", 42.0)
+        ) as mock_search:
             with patch("vector_studio.cli.svg_stats", return_value={"paths": 5}):
-                result = runner.invoke(app, ["search", str(img), "--output-dir", str(out_dir), "--quick"])
+                result = runner.invoke(
+                    app, ["search", str(img), "--output-dir", str(out_dir), "--quick"]
+                )
 
         assert result.exit_code == 0
         mock_search.assert_called_once()
@@ -439,9 +476,14 @@ class TestSearchCommand:
 
         best_opts = TraceOptions(color_precision=6, filter_speckle=2)
 
-        with patch("vector_studio.cli.search_best_params", return_value=(best_opts, out_dir / "best.svg", 55.0, [])) as mock_search:
+        with patch(
+            "vector_studio.cli.search_best_params",
+            return_value=(best_opts, out_dir / "best.svg", 55.0, []),
+        ) as mock_search:
             with patch("vector_studio.cli.svg_stats", return_value={"paths": 5}):
-                result = runner.invoke(app, ["search", str(img), "--output-dir", str(out_dir), "--max", "10"])
+                result = runner.invoke(
+                    app, ["search", str(img), "--output-dir", str(out_dir), "--max", "10"]
+                )
 
         assert result.exit_code == 0
         mock_search.assert_called_once()
@@ -465,7 +507,9 @@ class TestQueueCommands:
 
         with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
             with patch("vector_studio.history.record_task") as mock_record:
-                result = runner.invoke(app, ["queue", "add", str(img), "--output", str(out), "--preset", "logo"])
+                result = runner.invoke(
+                    app, ["queue", "add", str(img), "--output", str(out), "--preset", "logo"]
+                )
 
         assert result.exit_code == 0
         assert "Done" in result.output
@@ -505,7 +549,9 @@ class TestBatchWorkers:
         )
 
         with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
-            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2"])
+            result = runner.invoke(
+                app, ["batch", str(input_dir), str(output_dir), "--workers", "2"]
+            )
 
         assert result.exit_code == 0
         assert "ok" in result.output
@@ -517,7 +563,9 @@ class TestBatchWorkers:
         (input_dir / "img.png").write_bytes(b"fake")
 
         with patch("vector_studio.cli.trace_image", side_effect=RuntimeError("boom")):
-            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2", "--retry", "1"])
+            result = runner.invoke(
+                app, ["batch", str(input_dir), str(output_dir), "--workers", "2", "--retry", "1"]
+            )
 
         assert result.exit_code == 1
         assert "failed" in result.output
@@ -562,7 +610,7 @@ class TestLivePreviewOption:
         out = tmp_path / "out.svg"
         out.write_text("<svg></svg>")
 
-        mock_result = TraceResult(
+        _mock_result = TraceResult(
             input_path=img,
             svg_path=out,
             engine="python-vtracer",
@@ -595,8 +643,12 @@ class TestRegionOption:
             stats={"paths": 3},
         )
 
-        with patch("vector_studio.region_trace.region_trace", return_value=mock_result) as mock_region:
-            result = runner.invoke(app, ["trace", str(img), "--output", str(out), "--region", "10,20,30,40"])
+        with patch.object(
+            import_module("vector_studio.region_trace"), "region_trace", return_value=mock_result
+        ) as mock_region:
+            result = runner.invoke(
+                app, ["trace", str(img), "--output", str(out), "--region", "10,20,30,40"]
+            )
 
         assert result.exit_code == 0
         assert "Done" in result.output
@@ -626,6 +678,7 @@ class TestRegionOption:
 class TestBenchmarkCommand:
     def test_benchmark_runs(self, tmp_path):
         from PIL import Image
+
         img = tmp_path / "img.png"
         Image.new("RGB", (100, 100)).save(img)
         mock_result = TraceResult(
@@ -644,6 +697,7 @@ class TestBenchmarkCommand:
 
     def test_benchmark_with_gpu(self, tmp_path):
         from PIL import Image
+
         img = tmp_path / "img.png"
         Image.new("RGB", (100, 100)).save(img)
         mock_result = TraceResult(
@@ -659,6 +713,7 @@ class TestBenchmarkCommand:
 
     def test_benchmark_with_stream(self, tmp_path):
         from PIL import Image
+
         img = tmp_path / "img.png"
         Image.new("RGB", (100, 100)).save(img)
         mock_result = TraceResult(
@@ -676,6 +731,7 @@ class TestBenchmarkCommand:
 class TestConfigCommands:
     def test_config_show(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config(default_preset="logo")
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
@@ -685,6 +741,7 @@ class TestConfigCommands:
 
     def test_config_show_invalid(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config(default_optimize_level="super")
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
@@ -713,55 +770,72 @@ class TestConfigCommands:
 
     def test_config_set(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
-        result = runner.invoke(app, ["config", "set", "default_preset", "logo", "--path", str(config_path)])
+        result = runner.invoke(
+            app, ["config", "set", "default_preset", "logo", "--path", str(config_path)]
+        )
         assert result.exit_code == 0
         loaded = Config.load(config_path)
         assert loaded.default_preset == "logo"
 
     def test_config_set_unknown_key(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
-        result = runner.invoke(app, ["config", "set", "bad_key", "value", "--path", str(config_path)])
+        result = runner.invoke(
+            app, ["config", "set", "bad_key", "value", "--path", str(config_path)]
+        )
         assert result.exit_code == 1
         assert "Unknown config key" in result.output
 
     def test_config_set_bool(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
-        result = runner.invoke(app, ["config", "set", "smart_remove_bg", "true", "--path", str(config_path)])
+        result = runner.invoke(
+            app, ["config", "set", "smart_remove_bg", "true", "--path", str(config_path)]
+        )
         assert result.exit_code == 0
         loaded = Config.load(config_path)
         assert loaded.smart_remove_bg is True
 
     def test_config_set_int(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
-        result = runner.invoke(app, ["config", "set", "max_workers", "8", "--path", str(config_path)])
+        result = runner.invoke(
+            app, ["config", "set", "max_workers", "8", "--path", str(config_path)]
+        )
         assert result.exit_code == 0
         loaded = Config.load(config_path)
         assert loaded.max_workers == 8
 
     def test_config_set_list(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
-        result = runner.invoke(app, ["config", "set", "enabled_plugins", "watermark,resize", "--path", str(config_path)])
+        result = runner.invoke(
+            app,
+            ["config", "set", "enabled_plugins", "watermark,resize", "--path", str(config_path)],
+        )
         assert result.exit_code == 0
         loaded = Config.load(config_path)
         assert loaded.enabled_plugins == ["watermark", "resize"]
 
     def test_config_validate(self, tmp_path):
         from vector_studio.config import Config
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
@@ -774,12 +848,17 @@ class TestPluginCommands:
     def test_plugin_list(self):
         result = runner.invoke(app, ["plugin", "list"])
         assert result.exit_code == 0
-        assert "watermark" in result.output or "resize" in result.output or "No plugins" in result.output
+        assert (
+            "watermark" in result.output
+            or "resize" in result.output
+            or "No plugins" in result.output
+        )
 
     def test_plugin_enable_disable(self, tmp_path):
         from vector_studio.config import Config
         from vector_studio.plugins import PluginManager
         from vector_studio.builtin_plugins.watermark_plugin import WatermarkPlugin
+
         cfg = Config()
         config_path = tmp_path / "config.json"
         cfg.save(config_path)
@@ -817,7 +896,10 @@ class TestPluginCommands:
 
 class TestWorkspaceCommands:
     def test_workspace_list_empty(self):
-        with patch("vector_studio.workspace._default_workspace_dir", return_value=Path("/tmp/nonexistent_workspaces")):
+        with patch(
+            "vector_studio.workspace._default_workspace_dir",
+            return_value=Path("/tmp/nonexistent_workspaces"),
+        ):
             result = runner.invoke(app, ["workspace", "list"])
         assert result.exit_code == 0
         assert "No saved workspaces" in result.output or "Workspace" in result.output
@@ -835,7 +917,10 @@ class TestWorkspaceCommands:
             assert "logo" in result.output
 
     def test_workspace_load_missing(self):
-        with patch("vector_studio.workspace._default_workspace_dir", return_value=Path("/tmp/nonexistent_workspaces")):
+        with patch(
+            "vector_studio.workspace._default_workspace_dir",
+            return_value=Path("/tmp/nonexistent_workspaces"),
+        ):
             result = runner.invoke(app, ["workspace", "load", "missing_ws"])
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
@@ -850,7 +935,10 @@ class TestWorkspaceCommands:
             assert "Deleted" in result.output
 
     def test_workspace_delete_missing(self):
-        with patch("vector_studio.workspace._default_workspace_dir", return_value=Path("/tmp/nonexistent_workspaces")):
+        with patch(
+            "vector_studio.workspace._default_workspace_dir",
+            return_value=Path("/tmp/nonexistent_workspaces"),
+        ):
             result = runner.invoke(app, ["workspace", "delete", "missing_ws"])
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
@@ -860,8 +948,12 @@ class TestOcrCommands:
     def test_ocr_detect(self, tmp_path):
         img = tmp_path / "img.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
-        with patch("vector_studio.ai_ocr.detect_text_regions", return_value=[{"bbox": [0,0,10,10], "confidence": 0.9}]):
+        with patch(
+            "vector_studio.ai_ocr.detect_text_regions",
+            return_value=[{"bbox": [0, 0, 10, 10], "confidence": 0.9}],
+        ):
             result = runner.invoke(app, ["ocr", "detect", str(img)])
         assert result.exit_code == 0
         assert "Text regions" in result.output or "regions" in result.output
@@ -869,16 +961,26 @@ class TestOcrCommands:
     def test_ocr_detect_vertical(self, tmp_path):
         img = tmp_path / "img.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
-        with patch("vector_studio.ai_ocr.detect_vertical_text", return_value=[{"bbox": [0,0,10,10], "confidence": 0.9, "vertical": True}]):
+        with patch(
+            "vector_studio.ai_ocr.detect_vertical_text",
+            return_value=[{"bbox": [0, 0, 10, 10], "confidence": 0.9, "vertical": True}],
+        ):
             result = runner.invoke(app, ["ocr", "detect", str(img), "--vertical"])
         assert result.exit_code == 0
 
     def test_ocr_recognize(self, tmp_path):
         img = tmp_path / "img.png"
         from PIL import Image
+
         Image.new("RGB", (100, 100)).save(img)
-        with patch("vector_studio.ai_ocr.recognize_text_multilang", return_value=[{"text": "hello", "bbox": [0,0,10,10], "confidence": 0.9, "lang": "eng"}]):
+        with patch(
+            "vector_studio.ai_ocr.recognize_text_multilang",
+            return_value=[
+                {"text": "hello", "bbox": [0, 0, 10, 10], "confidence": 0.9, "lang": "eng"}
+            ],
+        ):
             result = runner.invoke(app, ["ocr", "recognize", str(img)])
         assert result.exit_code == 0
         assert "OCR results" in result.output or "hello" in result.output
@@ -933,7 +1035,9 @@ class TestMarketCommands:
 
     def test_market_info_failure(self):
         with patch("vector_studio.market.PresetMarket") as mock_market:
-            mock_market.return_value.backend.download_preset.side_effect = RuntimeError("network error")
+            mock_market.return_value.backend.download_preset.side_effect = RuntimeError(
+                "network error"
+            )
             result = runner.invoke(app, ["market", "info", "bad_id"])
         assert result.exit_code == 1
         assert "Failed to fetch" in result.output
@@ -992,9 +1096,18 @@ class TestContribCommand:
 
 class TestEngineCommands:
     def test_engine_list(self):
-        with patch("vector_studio.engines.EngineRegistry.list_engines", return_value=[
-            {"name": "vtracer", "version": "1.0", "available": True, "supported_formats": [".png"], "supported_outputs": [".svg"]},
-        ]):
+        with patch(
+            "vector_studio.engines.EngineRegistry.list_engines",
+            return_value=[
+                {
+                    "name": "vtracer",
+                    "version": "1.0",
+                    "available": True,
+                    "supported_formats": [".png"],
+                    "supported_outputs": [".svg"],
+                },
+            ],
+        ):
             result = runner.invoke(app, ["engine", "list"])
         assert result.exit_code == 0
         assert "vtracer" in result.output
@@ -1002,8 +1115,11 @@ class TestEngineCommands:
     def test_engine_info(self):
         mock_engine = MagicMock()
         mock_engine.get_info.return_value = {
-            "name": "vtracer", "version": "1.0", "available": True,
-            "supported_formats": [".png"], "supported_outputs": [".svg"],
+            "name": "vtracer",
+            "version": "1.0",
+            "available": True,
+            "supported_formats": [".png"],
+            "supported_outputs": [".svg"],
         }
         with patch("vector_studio.engines.EngineRegistry.get_engine", return_value=mock_engine):
             result = runner.invoke(app, ["engine", "info", "vtracer"])
@@ -1011,7 +1127,9 @@ class TestEngineCommands:
         assert "vtracer" in result.output
 
     def test_engine_info_missing(self):
-        with patch("vector_studio.engines.EngineRegistry.get_engine", side_effect=ValueError("unknown")):
+        with patch(
+            "vector_studio.engines.EngineRegistry.get_engine", side_effect=ValueError("unknown")
+        ):
             result = runner.invoke(app, ["engine", "info", "bad_engine"])
         assert result.exit_code == 1
         assert "unknown" in result.output.lower() or "Error" in result.output
@@ -1019,9 +1137,18 @@ class TestEngineCommands:
     def test_engine_benchmark(self, tmp_path):
         img = tmp_path / "img.png"
         img.write_bytes(b"fake")
-        with patch("vector_studio.engines.EngineBenchmark.compare_engines", return_value=[
-            {"engine": "vtracer", "elapsed_seconds": 0.5, "file_bytes": 100, "paths": 3, "quality_score": 80},
-        ]):
+        with patch(
+            "vector_studio.engines.EngineBenchmark.compare_engines",
+            return_value=[
+                {
+                    "engine": "vtracer",
+                    "elapsed_seconds": 0.5,
+                    "file_bytes": 100,
+                    "paths": 3,
+                    "quality_score": 80,
+                },
+            ],
+        ):
             result = runner.invoke(app, ["engine", "benchmark", str(img)])
         assert result.exit_code == 0
         assert "vtracer" in result.output
@@ -1038,7 +1165,9 @@ class TestEngineCommands:
             elapsed_seconds=0.5,
             stats={"paths": 3},
         )
-        with patch("vector_studio.engines.EngineRegistry.get_best_engine", return_value=mock_engine):
+        with patch(
+            "vector_studio.engines.EngineRegistry.get_best_engine", return_value=mock_engine
+        ):
             with patch("vector_studio.cli.trace_image", return_value=mock_result):
                 result = runner.invoke(app, ["engine", "auto", str(img)])
         assert result.exit_code == 0
@@ -1049,11 +1178,28 @@ class TestEngineCommandsMore:
     def test_engine_benchmark_with_multiple_engines(self, tmp_path):
         img = tmp_path / "img.png"
         img.write_bytes(b"fake")
-        with patch("vector_studio.engines.EngineBenchmark.compare_engines", return_value=[
-            {"engine": "vtracer", "elapsed_seconds": 0.5, "file_bytes": 100, "paths": 3, "quality_score": 80},
-            {"engine": "potrace", "elapsed_seconds": 0.3, "file_bytes": 80, "paths": 2, "quality_score": 75},
-        ]):
-            result = runner.invoke(app, ["engine", "benchmark", str(img), "--engine", "vtracer", "--engine", "potrace"])
+        with patch(
+            "vector_studio.engines.EngineBenchmark.compare_engines",
+            return_value=[
+                {
+                    "engine": "vtracer",
+                    "elapsed_seconds": 0.5,
+                    "file_bytes": 100,
+                    "paths": 3,
+                    "quality_score": 80,
+                },
+                {
+                    "engine": "potrace",
+                    "elapsed_seconds": 0.3,
+                    "file_bytes": 80,
+                    "paths": 2,
+                    "quality_score": 75,
+                },
+            ],
+        ):
+            result = runner.invoke(
+                app, ["engine", "benchmark", str(img), "--engine", "vtracer", "--engine", "potrace"]
+            )
         assert result.exit_code == 0
         assert "vtracer" in result.output
         assert "potrace" in result.output
@@ -1137,7 +1283,9 @@ class TestCliEngineFlagOnTrace:
             stats={},
         )
         with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
-            result = runner.invoke(app, ["trace", str(img), "--ai-simplify", "--simplify-type", "photo"])
+            result = runner.invoke(
+                app, ["trace", str(img), "--ai-simplify", "--simplify-type", "photo"]
+            )
         assert result.exit_code == 0
         assert mock_trace.call_args[1]["ai_simplify"] is True
         assert mock_trace.call_args[1]["simplify_type"] == "photo"
@@ -1147,6 +1295,7 @@ class TestAICommands:
     def test_ai_segment_command(self, tmp_path):
         img = tmp_path / "input.png"
         from PIL import Image
+
         Image.new("RGB", (50, 50)).save(img, format="PNG")
         result = runner.invoke(app, ["ai", "segment", str(img)])
         assert result.exit_code == 0
@@ -1157,6 +1306,7 @@ class TestAICommands:
     def test_ai_style_command(self, tmp_path):
         img = tmp_path / "input.png"
         from PIL import Image
+
         Image.new("RGB", (50, 50)).save(img, format="PNG")
         result = runner.invoke(app, ["ai", "style", str(img), "--style", "sketch"])
         assert result.exit_code == 0
@@ -1167,6 +1317,7 @@ class TestAICommands:
     def test_ai_upscale_command(self, tmp_path):
         img = tmp_path / "input.png"
         from PIL import Image
+
         Image.new("RGB", (50, 50)).save(img, format="PNG")
         result = runner.invoke(app, ["ai", "upscale", str(img), "--scale", "2"])
         assert result.exit_code == 0
@@ -1182,7 +1333,8 @@ class TestAICommands:
 
     def test_ai_download_command(self, tmp_path):
         from vector_studio.ai_onnx import ONNXModelManager
-        manager = ONNXModelManager(models_dir=tmp_path)
+
+        _manager = ONNXModelManager(models_dir=tmp_path)
         fake_url = "http://example.com/fake.onnx"
 
         def fake_urlretrieve(url, filename):
@@ -1204,7 +1356,10 @@ class TestAICommands:
             stats={},
         )
         with patch("vector_studio.cli.trace_image", return_value=mock_result) as mock_trace:
-            result = runner.invoke(app, ["trace", str(img), "--ai-pipeline", "upscale", "--ai-pipeline", "style_transfer"])
+            result = runner.invoke(
+                app,
+                ["trace", str(img), "--ai-pipeline", "upscale", "--ai-pipeline", "style_transfer"],
+            )
         assert result.exit_code == 0
         passed_pipeline = mock_trace.call_args[1]["ai_pipeline"]
         assert passed_pipeline == ["upscale", "style_transfer"]

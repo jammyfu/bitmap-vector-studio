@@ -1,5 +1,5 @@
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path as Path
 
 import pytest
 
@@ -190,18 +190,30 @@ class TestTraceOptionsVtracerCliArgs:
         args = sample_trace_options.vtracer_cli_args(input_path, output_path)
         assert isinstance(args, list)
         assert args == [
-            "--input", str(input_path),
-            "--output", str(output_path),
-            "--colormode", "color",
-            "--hierarchical", "stacked",
-            "--mode", "spline",
-            "--filter_speckle", "4",
-            "--color_precision", "6",
-            "--gradient_step", "16",
-            "--corner_threshold", "60",
-            "--segment_length", "4.0",
-            "--splice_threshold", "45",
-            "--path_precision", "3",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--colormode",
+            "color",
+            "--hierarchical",
+            "stacked",
+            "--mode",
+            "spline",
+            "--filter_speckle",
+            "4",
+            "--color_precision",
+            "6",
+            "--gradient_step",
+            "16",
+            "--corner_threshold",
+            "60",
+            "--segment_length",
+            "4.0",
+            "--splice_threshold",
+            "45",
+            "--path_precision",
+            "3",
         ]
 
     def test_cli_args_binary_colormode_maps_to_bw(self, tmp_path):

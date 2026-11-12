@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 
@@ -29,8 +29,10 @@ class TestFigmaPlugin:
         class FakeResponse:
             def read(self):
                 return fake_svg
+
             def __enter__(self):
                 return self
+
             def __exit__(self, *args):
                 pass
 
@@ -106,7 +108,7 @@ class TestDesignTokenSync:
             '<svg viewBox="0 0 100 100" width="100" height="100">'
             '<rect fill="#ff0000" stroke="rgb(0, 128, 0)"/>'
             '<text style="font-family: Arial;" x="10" y="20">Hello</text>'
-            '</svg>'
+            "</svg>"
         )
         sync = DesignTokenSync()
         tokens = sync.extract_tokens(svg)

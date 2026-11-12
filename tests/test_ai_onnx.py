@@ -89,6 +89,7 @@ class TestImageSegmenter:
 
         # Create a real numpy-like array for the output
         import numpy as np
+
         fake_mask = np.random.rand(256, 256).astype(np.float32)
         fake_session.run.return_value = [fake_mask]
 

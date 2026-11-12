@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
+import json as json
 import math
 import re
-import struct
+import struct as struct
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -58,10 +58,7 @@ class SVG3D:
     @staticmethod
     def _matmul(m: list[list[float]], v: list[float]) -> list[float]:
         """Multiply a 4×4 matrix with a 4-element column vector."""
-        return [
-            sum(m[i][j] * v[j] for j in range(4))
-            for i in range(4)
-        ]
+        return [sum(m[i][j] * v[j] for j in range(4)) for i in range(4)]
 
     @staticmethod
     def _svg_transform_from_matrix(m: list[list[float]]) -> str:
@@ -440,19 +437,19 @@ class ARPreview:
 
         # Build a minimal USDA description
         usda = (
-            '#usda 1.0\n'
+            "#usda 1.0\n"
             'def Xform "SvgModel"\n'
-            '{\n'
+            "{\n"
             '    def Mesh "plane"\n'
-            '    {\n'
-            '        float3[] extent = [(-0.5, -0.5, 0), (0.5, 0.5, 0)]\n'
-            '        int[] faceVertexCounts = [4]\n'
-            '        int[] faceVertexIndices = [0, 1, 2, 3]\n'
-            '        point3f[] points = [(-0.5, -0.5, 0), (0.5, -0.5, 0), (0.5, 0.5, 0), (-0.5, 0.5, 0)]\n'
-            '        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)]\n'
+            "    {\n"
+            "        float3[] extent = [(-0.5, -0.5, 0), (0.5, 0.5, 0)]\n"
+            "        int[] faceVertexCounts = [4]\n"
+            "        int[] faceVertexIndices = [0, 1, 2, 3]\n"
+            "        point3f[] points = [(-0.5, -0.5, 0), (0.5, -0.5, 0), (0.5, 0.5, 0), (-0.5, 0.5, 0)]\n"
+            "        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)]\n"
             '        uniform token subdivisionScheme = "none"\n'
-            '    }\n'
-            '}\n'
+            "    }\n"
+            "}\n"
         )
 
         # USDZ is a zip containing .usdc and texture files

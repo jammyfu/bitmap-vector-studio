@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as MagicMock, patch
 
 import pytest
 
@@ -205,8 +205,8 @@ class TestTaskQueueWait:
         )
 
         q = TaskQueue(max_workers=2)
-        tid1 = q.add_task(img, out, TraceOptions())
-        tid2 = q.add_task(img, out.with_name("out2.svg"), TraceOptions())
+        _tid1 = q.add_task(img, out, TraceOptions())
+        _tid2 = q.add_task(img, out.with_name("out2.svg"), TraceOptions())
 
         with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
             q.start()

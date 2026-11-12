@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import pytest
+import pytest as pytest
 from PIL import Image
 
 from vector_studio.smart_recommend import (

@@ -50,7 +50,9 @@ class FigmaPlugin:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
-    def _post_file(self, endpoint: str, data: bytes, content_type: str = "application/json") -> dict[str, Any]:
+    def _post_file(
+        self, endpoint: str, data: bytes, content_type: str = "application/json"
+    ) -> dict[str, Any]:
         """Execute an authenticated POST request with raw bytes."""
         url = f"{self._API_BASE}{endpoint}"
         req = urllib.request.Request(
@@ -153,15 +155,19 @@ class FigmaPlugin:
             for style in data.get("meta", {}).get("styles", []):
                 style_type = style.get("style_type", "")
                 if style_type == "FILL":
-                    tokens["colors"].append({
-                        "name": style.get("name", "unnamed"),
-                        "key": style.get("node_id", ""),
-                    })
+                    tokens["colors"].append(
+                        {
+                            "name": style.get("name", "unnamed"),
+                            "key": style.get("node_id", ""),
+                        }
+                    )
                 elif style_type == "TEXT":
-                    tokens["typography"].append({
-                        "name": style.get("name", "unnamed"),
-                        "key": style.get("node_id", ""),
-                    })
+                    tokens["typography"].append(
+                        {
+                            "name": style.get("name", "unnamed"),
+                            "key": style.get("node_id", ""),
+                        }
+                    )
             return tokens
         except Exception as exc:
             raise RuntimeError(f"Failed to sync tokens from Figma: {exc}") from exc
@@ -332,7 +338,7 @@ class DesignTokenSync:
 
         fonts: set[str] = set()
         for m in self._FONT_RE.finditer(text):
-            fonts.add(m.group(1).strip().strip('"\''))
+            fonts.add(m.group(1).strip().strip("\"'"))
 
         spacing: set[str] = set()
         for m in self._SIZE_RE.finditer(text):

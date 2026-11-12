@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest as pytest
 
 from vector_studio.models import TraceOptions
 from vector_studio.render_farm import (
@@ -13,7 +13,7 @@ from vector_studio.render_farm import (
     RenderFarm,
     RenderTask,
     WorkerNode,
-    WorkerServer,
+    WorkerServer as WorkerServer,
     start_worker_server,
 )
 
@@ -253,10 +253,12 @@ class TestWorkerServer:
         port = server.server_address[1]
         server_thread = MagicMock()
         import threading
+
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         try:
             import urllib.request
+
             url = f"http://127.0.0.1:{port}/worker/heartbeat"
             req = urllib.request.Request(url, method="POST")
             with urllib.request.urlopen(req, timeout=2) as resp:
@@ -270,10 +272,12 @@ class TestWorkerServer:
         server = start_worker_server("127.0.0.1", 0, capacity=2)
         port = server.server_address[1]
         import threading
+
         t = threading.Thread(target=server.serve_forever, daemon=True)
         t.start()
         try:
             import urllib.request
+
             url = f"http://127.0.0.1:{port}/worker/status"
             with urllib.request.urlopen(url, timeout=2) as resp:
                 data = json.loads(resp.read().decode("utf-8"))

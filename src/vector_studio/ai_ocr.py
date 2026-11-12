@@ -14,10 +14,10 @@ except Exception:  # pragma: no cover
     np = None  # type: ignore[assignment]
     _HAS_NUMPY = False
 
-from PIL import Image, ImageFilter, ImageStat
+from PIL import Image, ImageFilter, ImageStat as ImageStat
 
 from .ocr_languages import (
-    OCR_LANGUAGE_CONFIG,
+    OCR_LANGUAGE_CONFIG as OCR_LANGUAGE_CONFIG,
     check_language_available,
     get_language_config,
     normalize_language_code,
@@ -161,17 +161,17 @@ def detect_text_regions(img: Image.Image, min_aspect: float = 1.0) -> list[dict]
                 density = float(region_edges.mean())
             else:
                 region_pixels = [
-                    pixels[y * w + x]
-                    for y in range(y0, y1 + 1)
-                    for x in range(x0, x1 + 1)
+                    pixels[y * w + x] for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)
                 ]
                 density = sum(region_pixels) / (255.0 * len(region_pixels))
 
             confidence = min(1.0, density * 5.0 + 0.3)
-            regions.append({
-                "bbox": [int(x0), int(y0), int(rw), int(rh)],
-                "confidence": round(confidence, 3),
-            })
+            regions.append(
+                {
+                    "bbox": [int(x0), int(y0), int(rw), int(rh)],
+                    "confidence": round(confidence, 3),
+                }
+            )
 
     # Merge overlapping regions
     regions = _merge_regions(regions)
@@ -254,12 +254,15 @@ def recognize_text(img: Image.Image, regions: list[dict] | None = None) -> list[
             if conf < 30:
                 continue
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-            ocr_results.append({
-                "text": text,
-                "bbox": [x, y, w, h],
-                "confidence": conf / 100.0,
-            })
-        return ocr_results
+            ocr_results.append(
+                {
+                    "text": text,
+                    "bbox": [x, y, w, h],
+                    "confidence": conf / 100.0,
+                }
+            )
+        if ocr_results:
+            return ocr_results
     except ImportError:
         pass
     except Exception as exc:
@@ -278,21 +281,23 @@ def recognize_text(img: Image.Image, regions: list[dict] | None = None) -> list[
             x, y = int(min(xs)), int(min(ys))
             w = int(max(xs) - x)
             h = int(max(ys) - y)
-            ocr_results.append({
-                "text": text,
-                "bbox": [x, y, w, h],
-                "confidence": float(conf),
-            })
-        return ocr_results
+            ocr_results.append(
+                {
+                    "text": text,
+                    "bbox": [x, y, w, h],
+                    "confidence": float(conf),
+                }
+            )
+        if ocr_results:
+            return ocr_results
     except ImportError:
         pass
     except Exception as exc:
         logger.debug("easyocr failed: %s", exc)
 
-    # Fallback: return heuristic regions without text content
-    for region in regions:
-        region["text"] = ""
-    return regions
+    # Keep supplied/heuristic geometry even when an installed engine finds no
+    # usable text. Do not mutate caller-owned regions while marking it unknown.
+    return [{**region, "text": ""} for region in regions]
 
 
 def recognize_text_multilang(
@@ -355,13 +360,16 @@ def recognize_text_multilang(
             if conf < 30:
                 continue
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-            ocr_results.append({
-                "text": text,
-                "bbox": [x, y, w, h],
-                "confidence": conf / 100.0,
-                "lang": lang,
-            })
-        return ocr_results
+            ocr_results.append(
+                {
+                    "text": text,
+                    "bbox": [x, y, w, h],
+                    "confidence": conf / 100.0,
+                    "lang": lang,
+                }
+            )
+        if ocr_results:
+            return ocr_results
     except ImportError:
         pass
     except Exception as exc:
@@ -492,7 +500,7 @@ def create_text_overlay_svg_multilang(
         else:
             attrs.append('text-anchor="start"')
 
-        fragments.append(f'  <text {" ".join(attrs)}>{display_text}</text>')
+        fragments.append(f"  <text {' '.join(attrs)}>{display_text}</text>")
 
     return "\n".join(fragments)
 

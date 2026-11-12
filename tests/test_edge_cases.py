@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import os as os
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -102,8 +102,11 @@ class TestConcurrency:
         with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
             from vector_studio.cli import app
             from typer.testing import CliRunner
+
             runner = CliRunner()
-            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2"])
+            result = runner.invoke(
+                app, ["batch", str(input_dir), str(output_dir), "--workers", "2"]
+            )
         assert result.exit_code == 0
 
 
@@ -116,8 +119,13 @@ class TestLargeFileHandling:
         out = tmp_path / "out.svg"
         out.write_text("<svg></svg>")
 
-        with patch("vector_studio.performance.StreamingImageProcessor._should_stream", return_value=True):
-            with patch("vector_studio.performance.StreamingImageProcessor.process_large_image", return_value=out):
+        with patch(
+            "vector_studio.performance.StreamingImageProcessor._should_stream", return_value=True
+        ):
+            with patch(
+                "vector_studio.performance.StreamingImageProcessor.process_large_image",
+                return_value=out,
+            ):
                 with patch("vector_studio.tracer.svg_stats", return_value={"paths": 3}):
                     with patch("vector_studio.tracer.optimize_svg_file"):
                         result = trace_image(img, out, stream=True)
@@ -132,12 +140,14 @@ class TestLargeFileHandling:
         fake_stat.st_size = 50 * 1024 * 1024  # 50 MB
         with patch("pathlib.Path.stat", return_value=fake_stat):
             from vector_studio.performance import StreamingImageProcessor
+
             assert StreamingImageProcessor._should_stream(img)
 
 
 class TestNetworkAndExternalFailures:
     def test_api_client_http_error(self, tmp_path: Path):
         from vector_studio.api_client import VectorStudioClient
+
         client = VectorStudioClient("http://localhost:9999")
         with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
             with pytest.raises(Exception):
@@ -145,6 +155,7 @@ class TestNetworkAndExternalFailures:
 
     def test_market_network_failure(self, tmp_path: Path):
         from vector_studio.market import PresetMarket
+
         market = PresetMarket()
         with patch("urllib.request.urlopen", side_effect=Exception("No network")):
             presets = market.discover_presets()
@@ -154,6 +165,7 @@ class TestNetworkAndExternalFailures:
 class TestMemoryAndResourceLimits:
     def test_memory_check_fallback(self):
         from vector_studio.performance import PerformanceMonitor
+
         monitor = PerformanceMonitor(max_memory_mb=512)
         with patch.dict("sys.modules", {"psutil": None}):
             mem = monitor.check_memory()
@@ -162,6 +174,7 @@ class TestMemoryAndResourceLimits:
 
     def test_lazy_module_loader_unload(self):
         from vector_studio.performance import LazyModuleLoader
+
         loader = LazyModuleLoader()
         with patch("importlib.import_module") as mock_import:
             mock_mod = MagicMock()
@@ -200,6 +213,7 @@ class TestEmptyAndCorruptFilesMore:
 class TestNetworkAndExternalFailuresMore:
     def test_api_client_timeout(self, tmp_path: Path):
         from vector_studio.api_client import VectorStudioClient
+
         client = VectorStudioClient("http://localhost:9999")
         with patch("urllib.request.urlopen", side_effect=Exception("Timeout")):
             with pytest.raises(Exception):
@@ -207,6 +221,7 @@ class TestNetworkAndExternalFailuresMore:
 
     def test_market_search_network_failure(self, tmp_path: Path):
         from vector_studio.market import PresetMarket
+
         market = PresetMarket()
         with patch("urllib.request.urlopen", side_effect=Exception("DNS error")):
             presets = market.search("logo")
@@ -268,15 +283,18 @@ class TestConcurrencyMore:
         with patch("vector_studio.task_queue.trace_image", return_value=mock_result):
             from vector_studio.cli import app
             from typer.testing import CliRunner
+
             runner = CliRunner()
-            result = runner.invoke(app, ["batch", str(input_dir), str(output_dir), "--workers", "2"])
+            result = runner.invoke(
+                app, ["batch", str(input_dir), str(output_dir), "--workers", "2"]
+            )
         assert result.exit_code == 0
 
 
 class TestMemoryAndResourceLimitsMore:
     def test_performance_monitor_estimate_large_image(self):
         from vector_studio.performance import PerformanceMonitor
-        from vector_studio.models import TraceOptions
+
         monitor = PerformanceMonitor()
         opts = TraceOptions(colormode="color", mode="spline")
         estimated = monitor.estimate_conversion_time((8000, 8000), opts)
@@ -285,6 +303,7 @@ class TestMemoryAndResourceLimitsMore:
 
     def test_lazy_module_loader_double_load(self):
         from vector_studio.performance import LazyModuleLoader
+
         loader = LazyModuleLoader()
         with patch("importlib.import_module") as mock_import:
             mock_mod = MagicMock()

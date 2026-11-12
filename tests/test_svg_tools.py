@@ -17,7 +17,9 @@ def test_optimize_svg_text_removes_comments_and_whitespace():
 
 def test_svg_stats(tmp_path: Path):
     svg = tmp_path / "sample.svg"
-    svg.write_text('<svg viewBox="0 0 10 10"><path d="M0 0"/><path d="M1 1"/></svg>', encoding="utf-8")
+    svg.write_text(
+        '<svg viewBox="0 0 10 10"><path d="M0 0"/><path d="M1 1"/></svg>', encoding="utf-8"
+    )
     optimize_svg_file(svg)
     stats = svg_stats(svg)
     assert stats["paths"] == 2

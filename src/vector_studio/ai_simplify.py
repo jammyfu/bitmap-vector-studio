@@ -12,7 +12,7 @@ except Exception:  # pragma: no cover
     np = None  # type: ignore[assignment]
     _HAS_NUMPY = False
 
-from PIL import Image, ImageFilter, ImageOps, ImageStat
+from PIL import Image, ImageFilter, ImageOps as ImageOps, ImageStat
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,9 @@ def _kmeans_quantize(img: Image.Image, k: int = 8, max_iter: int = 10) -> Image.
     """
     if not _HAS_NUMPY:
         # Pure-PIL fallback
-        return img.quantize(colors=max(2, min(k, 256)), method=Image.Quantize.MEDIANCUT).convert("RGB")
+        return img.quantize(colors=max(2, min(k, 256)), method=Image.Quantize.MEDIANCUT).convert(
+            "RGB"
+        )
 
     arr = _to_numpy(img).astype(np.float32)
     h, w = arr.shape[:2]
@@ -100,7 +102,9 @@ def _kmeans_quantize(img: Image.Image, k: int = 8, max_iter: int = 10) -> Image.
     return _from_numpy(quantized, "RGB")
 
 
-def semantic_simplify(img: Image.Image, color_clusters: int = 8, edge_preserve: bool = True) -> Image.Image:
+def semantic_simplify(
+    img: Image.Image, color_clusters: int = 8, edge_preserve: bool = True
+) -> Image.Image:
     """Simplify a complex photo into an illustration-like image.
 
     Steps:
@@ -204,7 +208,9 @@ def superpixel_simplify(img: Image.Image, n_segments: int = 100) -> Image.Image:
         return out
 
 
-def cartoon_effect(img: Image.Image, blur_radius: int = 5, edge_threshold: int = 100) -> Image.Image:
+def cartoon_effect(
+    img: Image.Image, blur_radius: int = 5, edge_threshold: int = 100
+) -> Image.Image:
     """Apply a cartoon-like effect to an image.
 
     Steps:

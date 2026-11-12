@@ -3,6 +3,8 @@
 将模板批量应用到多个图片，支持进度跟踪和结果收集.
 """
 
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
@@ -44,8 +46,9 @@ class BatchTemplateApplier:
 
         # 收集输入文件
         input_files = [
-            f for f in input_dir.iterdir()
-            if f.suffix.lower() in ('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp')
+            f
+            for f in input_dir.iterdir()
+            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp")
         ]
 
         results: list[Path] = []
@@ -53,8 +56,7 @@ class BatchTemplateApplier:
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
-                executor.submit(self._apply_single, template, f, output_dir): f
-                for f in input_files
+                executor.submit(self._apply_single, template, f, output_dir): f for f in input_files
             }
 
             completed = 0

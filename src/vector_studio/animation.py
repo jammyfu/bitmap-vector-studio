@@ -48,15 +48,33 @@ _PRESETS: dict[str, AnimationPreset] = {
     "pulse": AnimationPreset(
         name="pulse",
         animations=[
-            {"type": "color", "element_selector": "path", "from_color": "#ff0000", "to_color": "#ffaaaa", "duration": 1.0},
+            {
+                "type": "color",
+                "element_selector": "path",
+                "from_color": "#ff0000",
+                "to_color": "#ffaaaa",
+                "duration": 1.0,
+            },
             {"type": "fade", "element_selector": "path", "duration": 1.0},
         ],
     ),
     "color_cycle": AnimationPreset(
         name="color_cycle",
         animations=[
-            {"type": "color", "element_selector": "path", "from_color": "#ff0000", "to_color": "#00ff00", "duration": 2.0},
-            {"type": "color", "element_selector": "path", "from_color": "#00ff00", "to_color": "#0000ff", "duration": 2.0},
+            {
+                "type": "color",
+                "element_selector": "path",
+                "from_color": "#ff0000",
+                "to_color": "#00ff00",
+                "duration": 2.0,
+            },
+            {
+                "type": "color",
+                "element_selector": "path",
+                "from_color": "#00ff00",
+                "to_color": "#0000ff",
+                "duration": 2.0,
+            },
         ],
     ),
 }
@@ -104,8 +122,10 @@ def _path_length_approx(d: str) -> float:
         t = tokens[i]
         if t in "Mm":
             i += 1
-            x = float(tokens[i]); i += 1
-            y = float(tokens[i]); i += 1
+            x = float(tokens[i])
+            i += 1
+            y = float(tokens[i])
+            i += 1
             if t == "m":
                 current = (current[0] + x, current[1] + y)
             else:
@@ -113,21 +133,25 @@ def _path_length_approx(d: str) -> float:
             start = current
         elif t in "Ll":
             i += 1
-            x = float(tokens[i]); i += 1
-            y = float(tokens[i]); i += 1
+            x = float(tokens[i])
+            i += 1
+            y = float(tokens[i])
+            i += 1
             nx = current[0] + x if t == "l" else x
             ny = current[1] + y if t == "l" else y
             length += math.hypot(nx - current[0], ny - current[1])
             current = (nx, ny)
         elif t in "Hh":
             i += 1
-            x = float(tokens[i]); i += 1
+            x = float(tokens[i])
+            i += 1
             nx = current[0] + x if t == "h" else x
             length += abs(nx - current[0])
             current = (nx, current[1])
         elif t in "Vv":
             i += 1
-            y = float(tokens[i]); i += 1
+            y = float(tokens[i])
+            i += 1
             ny = current[1] + y if t == "v" else y
             length += abs(ny - current[1])
             current = (current[0], ny)
@@ -135,9 +159,11 @@ def _path_length_approx(d: str) -> float:
             i += 1
             # Skip control points and end point (6 numbers)
             if i + 5 < len(tokens):
-                x = float(tokens[i + 4]); y = float(tokens[i + 5])
+                x = float(tokens[i + 4])
+                y = float(tokens[i + 5])
                 if t == "c":
-                    x = current[0] + x; y = current[1] + y
+                    x = current[0] + x
+                    y = current[1] + y
                 length += math.hypot(x - current[0], y - current[1])
                 current = (x, y)
                 i += 6
@@ -215,12 +241,14 @@ class SVGAnimation:
         -------
         Self for chaining.
         """
-        self._animations.append({
-            "type": "draw",
-            "selector": path_selector,
-            "duration": duration,
-            "delay": delay,
-        })
+        self._animations.append(
+            {
+                "type": "draw",
+                "selector": path_selector,
+                "duration": duration,
+                "delay": delay,
+            }
+        )
         return self
 
     def add_fade_animation(
@@ -241,11 +269,13 @@ class SVGAnimation:
         -------
         Self for chaining.
         """
-        self._animations.append({
-            "type": "fade",
-            "selector": element_selector,
-            "duration": duration,
-        })
+        self._animations.append(
+            {
+                "type": "fade",
+                "selector": element_selector,
+                "duration": duration,
+            }
+        )
         return self
 
     def add_color_animation(
@@ -272,13 +302,15 @@ class SVGAnimation:
         -------
         Self for chaining.
         """
-        self._animations.append({
-            "type": "color",
-            "selector": element_selector,
-            "from_color": from_color,
-            "to_color": to_color,
-            "duration": duration,
-        })
+        self._animations.append(
+            {
+                "type": "color",
+                "selector": element_selector,
+                "from_color": from_color,
+                "to_color": to_color,
+                "duration": duration,
+            }
+        )
         return self
 
     def add_morph_animation(
@@ -302,12 +334,14 @@ class SVGAnimation:
         -------
         Self for chaining.
         """
-        self._animations.append({
-            "type": "morph",
-            "from_selector": from_path,
-            "to_selector": to_path,
-            "duration": duration,
-        })
+        self._animations.append(
+            {
+                "type": "morph",
+                "from_selector": from_path,
+                "to_selector": to_path,
+                "duration": duration,
+            }
+        )
         return self
 
     def _find_elements(self, selector: str) -> list[ET.Element]:
@@ -455,8 +489,8 @@ class SVGAnimation:
                     .{class_name} {{
                         stroke-dasharray: 1000;
                         stroke-dashoffset: 1000;
-                        animation: draw_{idx} {anim['duration']}s linear forwards;
-                        animation-delay: {anim.get('delay', 0.0)}s;
+                        animation: draw_{idx} {anim["duration"]}s linear forwards;
+                        animation-delay: {anim.get("delay", 0.0)}s;
                     }}
                     @keyframes draw_{idx} {{
                         to {{ stroke-dashoffset: 0; }}
@@ -468,7 +502,7 @@ class SVGAnimation:
                     f"""
                     .{class_name} {{
                         opacity: 0;
-                        animation: fade_{idx} {anim['duration']}s ease forwards;
+                        animation: fade_{idx} {anim["duration"]}s ease forwards;
                     }}
                     @keyframes fade_{idx} {{
                         to {{ opacity: 1; }}
@@ -479,11 +513,11 @@ class SVGAnimation:
                 css_rules.append(
                     f"""
                     .{class_name} {{
-                        animation: color_{idx} {anim['duration']}s ease forwards;
+                        animation: color_{idx} {anim["duration"]}s ease forwards;
                     }}
                     @keyframes color_{idx} {{
-                        from {{ fill: {anim['from_color']}; }}
-                        to {{ fill: {anim['to_color']}; }}
+                        from {{ fill: {anim["from_color"]}; }}
+                        to {{ fill: {anim["to_color"]}; }}
                     }}
                     """
                 )
@@ -495,7 +529,7 @@ class SVGAnimation:
 <meta charset="utf-8">
 <title>SVG Animation</title>
 <style>
-{''.join(css_rules)}
+{"".join(css_rules)}
 </style>
 </head>
 <body>
@@ -576,50 +610,8 @@ class LottieExporter:
             d = elem.get("d", "")
             if not d:
                 return None
-            shape["it"].append({
-                "ty": "sh",
-                "ks": {
-                    "a": 0,
-                    "k": {
-                        "i": [],
-                        "o": [],
-                        "v": [],
-                        "c": False,
-                    },
-                },
-                "nm": "Path",
-            })
-            # Store raw path data as a custom field for reference
-            shape["it"][0]["_svg_d"] = d
-        elif tag == "rect":
-            x = float(elem.get("x", "0"))
-            y = float(elem.get("y", "0"))
-            w = float(elem.get("width", "0"))
-            h = float(elem.get("height", "0"))
-            shape["it"].append({
-                "ty": "rc",
-                "d": 1,
-                "s": {"a": 0, "k": [w, h]},
-                "p": {"a": 0, "k": [x + w / 2, y + h / 2]},
-                "r": {"a": 0, "k": 0},
-                "nm": "Rect",
-            })
-        elif tag == "circle":
-            cx = float(elem.get("cx", "0"))
-            cy = float(elem.get("cy", "0"))
-            r = float(elem.get("r", "0"))
-            shape["it"].append({
-                "ty": "el",
-                "d": 1,
-                "s": {"a": 0, "k": [r * 2, r * 2]},
-                "p": {"a": 0, "k": [cx, cy]},
-                "nm": "Ellipse",
-            })
-        elif tag == "polygon":
-            pts = elem.get("points", "")
-            # Convert polygon points to a simple path representation
-            if pts:
-                shape["it"].append({
+            shape["it"].append(
+                {
                     "ty": "sh",
                     "ks": {
                         "a": 0,
@@ -627,36 +619,90 @@ class LottieExporter:
                             "i": [],
                             "o": [],
                             "v": [],
-                            "c": True,
+                            "c": False,
                         },
                     },
-                    "nm": "Polygon",
-                    "_svg_points": pts,
-                })
+                    "nm": "Path",
+                }
+            )
+            # Store raw path data as a custom field for reference
+            shape["it"][0]["_svg_d"] = d
+        elif tag == "rect":
+            x = float(elem.get("x", "0"))
+            y = float(elem.get("y", "0"))
+            w = float(elem.get("width", "0"))
+            h = float(elem.get("height", "0"))
+            shape["it"].append(
+                {
+                    "ty": "rc",
+                    "d": 1,
+                    "s": {"a": 0, "k": [w, h]},
+                    "p": {"a": 0, "k": [x + w / 2, y + h / 2]},
+                    "r": {"a": 0, "k": 0},
+                    "nm": "Rect",
+                }
+            )
+        elif tag == "circle":
+            cx = float(elem.get("cx", "0"))
+            cy = float(elem.get("cy", "0"))
+            r = float(elem.get("r", "0"))
+            shape["it"].append(
+                {
+                    "ty": "el",
+                    "d": 1,
+                    "s": {"a": 0, "k": [r * 2, r * 2]},
+                    "p": {"a": 0, "k": [cx, cy]},
+                    "nm": "Ellipse",
+                }
+            )
+        elif tag == "polygon":
+            pts = elem.get("points", "")
+            # Convert polygon points to a simple path representation
+            if pts:
+                shape["it"].append(
+                    {
+                        "ty": "sh",
+                        "ks": {
+                            "a": 0,
+                            "k": {
+                                "i": [],
+                                "o": [],
+                                "v": [],
+                                "c": True,
+                            },
+                        },
+                        "nm": "Polygon",
+                        "_svg_points": pts,
+                    }
+                )
 
         # Fill
         fill_color = self._extract_color(elem, "fill")
         if fill_color:
             r, g, b = _hex_to_rgb(fill_color)
-            shape["it"].append({
-                "ty": "fl",
-                "c": {"a": 0, "k": [r / 255, g / 255, b / 255, 1]},
-                "o": {"a": 0, "k": 100},
-                "nm": "Fill",
-            })
+            shape["it"].append(
+                {
+                    "ty": "fl",
+                    "c": {"a": 0, "k": [r / 255, g / 255, b / 255, 1]},
+                    "o": {"a": 0, "k": 100},
+                    "nm": "Fill",
+                }
+            )
 
         # Stroke
         stroke_color = self._extract_color(elem, "stroke")
         stroke_width = elem.get("stroke-width", "1")
         if stroke_color:
             r, g, b = _hex_to_rgb(stroke_color)
-            shape["it"].append({
-                "ty": "st",
-                "c": {"a": 0, "k": [r / 255, g / 255, b / 255, 1]},
-                "o": {"a": 0, "k": 100},
-                "w": {"a": 0, "k": float(stroke_width)},
-                "nm": "Stroke",
-            })
+            shape["it"].append(
+                {
+                    "ty": "st",
+                    "c": {"a": 0, "k": [r / 255, g / 255, b / 255, 1]},
+                    "o": {"a": 0, "k": 100},
+                    "w": {"a": 0, "k": float(stroke_width)},
+                    "nm": "Stroke",
+                }
+            )
 
         # Transform
         transform = {
@@ -731,7 +777,12 @@ class LottieExporter:
                 layer["ks"]["o"] = {
                     "a": 1,
                     "k": [
-                        {"i": {"x": [0.833], "y": [0.833]}, "o": {"x": [0.167], "y": [0.167]}, "t": 0, "s": [0]},
+                        {
+                            "i": {"x": [0.833], "y": [0.833]},
+                            "o": {"x": [0.167], "y": [0.167]},
+                            "t": 0,
+                            "s": [0],
+                        },
                         {"t": 30, "s": [100]},
                     ],
                 }
@@ -849,22 +900,33 @@ class LottieExporter:
                     if fill_rgb:
                         draw.rectangle([x, y, x + rw, y + rh], fill=(*fill_rgb, int(255 * opacity)))
                     if stroke_rgb:
-                        draw.rectangle([x, y, x + rw, y + rh], outline=(*stroke_rgb, int(255 * opacity)))
+                        draw.rectangle(
+                            [x, y, x + rw, y + rh], outline=(*stroke_rgb, int(255 * opacity))
+                        )
                 elif tag == "circle":
                     cx = float(attribs.get("cx", "0"))
                     cy = float(attribs.get("cy", "0"))
                     r = float(attribs.get("r", "0"))
                     if fill_rgb:
-                        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*fill_rgb, int(255 * opacity)))
+                        draw.ellipse(
+                            [cx - r, cy - r, cx + r, cy + r], fill=(*fill_rgb, int(255 * opacity))
+                        )
                     if stroke_rgb:
-                        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(*stroke_rgb, int(255 * opacity)))
+                        draw.ellipse(
+                            [cx - r, cy - r, cx + r, cy + r],
+                            outline=(*stroke_rgb, int(255 * opacity)),
+                        )
                 elif tag == "path":
                     d = attribs.get("d", "")
                     # Simple path draw: scale opacity by draw progress
                     draw_opacity = opacity
                     for anim in self._lottie_animations:
                         if anim["type"] == "draw":
-                            draw_opacity = min(1.0, max(0.0, t - anim.get("delay", 0.0) / duration) / (anim.get("duration", duration) / duration))
+                            draw_opacity = min(
+                                1.0,
+                                max(0.0, t - anim.get("delay", 0.0) / duration)
+                                / (anim.get("duration", duration) / duration),
+                            )
                     pts = self._parse_path_to_points(d)
                     if pts and fill_rgb:
                         draw.polygon(pts, fill=(*fill_rgb, int(255 * draw_opacity)))
@@ -1000,9 +1062,13 @@ class AnimationBuilder:
             anim = SVGAnimation(self._svg_path)
             for a in self._animations:
                 if a["type"] == "draw":
-                    anim.add_draw_animation(a.get("path_selector", "path"), a.get("duration", 2.0), a.get("delay", 0.0))
+                    anim.add_draw_animation(
+                        a.get("path_selector", "path"), a.get("duration", 2.0), a.get("delay", 0.0)
+                    )
                 elif a["type"] == "fade":
-                    anim.add_fade_animation(a.get("element_selector", "path"), a.get("duration", 1.0))
+                    anim.add_fade_animation(
+                        a.get("element_selector", "path"), a.get("duration", 1.0)
+                    )
                 elif a["type"] == "color":
                     anim.add_color_animation(
                         a.get("element_selector", "path"),
@@ -1022,9 +1088,13 @@ class AnimationBuilder:
             anim = SVGAnimation(self._svg_path)
             for a in self._animations:
                 if a["type"] == "draw":
-                    anim.add_draw_animation(a.get("path_selector", "path"), a.get("duration", 2.0), a.get("delay", 0.0))
+                    anim.add_draw_animation(
+                        a.get("path_selector", "path"), a.get("duration", 2.0), a.get("delay", 0.0)
+                    )
                 elif a["type"] == "fade":
-                    anim.add_fade_animation(a.get("element_selector", "path"), a.get("duration", 1.0))
+                    anim.add_fade_animation(
+                        a.get("element_selector", "path"), a.get("duration", 1.0)
+                    )
                 elif a["type"] == "color":
                     anim.add_color_animation(
                         a.get("element_selector", "path"),
@@ -1037,13 +1107,17 @@ class AnimationBuilder:
         if format == "lottie":
             exporter = LottieExporter(self._svg_path)
             for a in self._animations:
-                exporter.add_lottie_animation(a["type"], **{k: v for k, v in a.items() if k != "type"})
+                exporter.add_lottie_animation(
+                    a["type"], **{k: v for k, v in a.items() if k != "type"}
+                )
             return exporter.export_lottie(output_path)
 
         if format == "gif":
             exporter = LottieExporter(self._svg_path)
             for a in self._animations:
-                exporter.add_lottie_animation(a["type"], **{k: v for k, v in a.items() if k != "type"})
+                exporter.add_lottie_animation(
+                    a["type"], **{k: v for k, v in a.items() if k != "type"}
+                )
             return exporter.export_gif(output_path)
 
         raise ValueError(f"Unsupported export format: {format}")

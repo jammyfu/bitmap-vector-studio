@@ -3,6 +3,8 @@
 通过mDNS/UDP广播自动发现局域网内的Worker节点.
 """
 
+from __future__ import annotations
+
 import json
 import socket
 import threading
@@ -48,7 +50,7 @@ class WorkerDiscovery:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind(('', self.DISCOVERY_PORT))
+        self._sock.bind(("", self.DISCOVERY_PORT))
 
         # 广播线程
         t1 = threading.Thread(target=self._broadcast_loop, daemon=True)
@@ -79,16 +81,18 @@ class WorkerDiscovery:
     def _broadcast_loop(self) -> None:
         while self._running:
             try:
-                msg = json.dumps({
-                    'type': 'announce',
-                    'worker_id': self.worker_id,
-                    'port': self.port,
-                    'capacity': self.capacity,
-                    'load': self.current_load,
-                    'version': '3.1.0',
-                })
+                msg = json.dumps(
+                    {
+                        "type": "announce",
+                        "worker_id": self.worker_id,
+                        "port": self.port,
+                        "capacity": self.capacity,
+                        "load": self.current_load,
+                        "version": "3.1.0",
+                    }
+                )
                 if self._sock:
-                    self._sock.sendto(msg.encode(), ('<broadcast>', self.DISCOVERY_PORT))
+                    self._sock.sendto(msg.encode(), ("<broadcast>", self.DISCOVERY_PORT))
             except Exception:
                 pass
             time.sleep(self.BROADCAST_INTERVAL)
@@ -100,17 +104,17 @@ class WorkerDiscovery:
                     break
                 data, addr = self._sock.recvfrom(1024)
                 msg = json.loads(data.decode())
-                if msg.get('type') == 'announce' and msg.get('worker_id') != self.worker_id:
+                if msg.get("type") == "announce" and msg.get("worker_id") != self.worker_id:
                     worker = WorkerInfo(
-                        worker_id=msg['worker_id'],
+                        worker_id=msg["worker_id"],
                         host=addr[0],
-                        port=msg['port'],
-                        capacity=msg['capacity'],
-                        current_load=msg['load'],
-                        version=msg.get('version', 'unknown'),
+                        port=msg["port"],
+                        capacity=msg["capacity"],
+                        current_load=msg["load"],
+                        version=msg.get("version", "unknown"),
                         last_seen=time.time(),
                     )
-                    event = 'join' if worker.worker_id not in self._peers else 'update'
+                    event = "join" if worker.worker_id not in self._peers else "update"
                     self._peers[worker.worker_id] = worker
                     for cb in self._callbacks:
                         cb(worker, event)
@@ -125,4 +129,4 @@ class WorkerDiscovery:
             for wid in stale:
                 worker = self._peers.pop(wid)
                 for cb in self._callbacks:
-                    cb(worker, 'leave')
+                    cb(worker, "leave")

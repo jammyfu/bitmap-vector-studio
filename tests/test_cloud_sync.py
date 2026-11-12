@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-import json
+import json as json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
@@ -114,7 +114,9 @@ class TestGitHubGistBackend:
             "files": {"gh.svg": {"raw_url": "https://gist.githubusercontent.com/raw/gh.svg"}}
         }
         with patch("vector_studio.cloud_sync._http_json_request", return_value=gist_meta):
-            with patch("vector_studio.cloud_sync._http_request_bytes", return_value=b"<svg>raw</svg>"):
+            with patch(
+                "vector_studio.cloud_sync._http_request_bytes", return_value=b"<svg>raw</svg>"
+            ):
                 backend.download("gist-123", out)
         assert out.read_text() == "<svg>raw</svg>"
 
