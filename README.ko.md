@@ -1,5 +1,9 @@
 # Bitmap Vector Studio
 
+![프로젝트 콘셉트 배너](.github/assets/project-hero.png)
+
+<sub>AI로 만든 콘셉트 이미지이며 제품 스크린샷이 아닙니다. 실제 사용 방법과 예제는 아래에서 확인하세요.</sub>
+
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文（台灣）](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 **VTracer**로 비트맵을 편집 가능한 SVG 경로로 변환합니다. 로컬 CLI에서 결과를 확인한 뒤 일괄 처리나 Streamlit UI를 사용할 수 있습니다.

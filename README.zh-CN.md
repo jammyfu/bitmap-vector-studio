@@ -1,5 +1,9 @@
 # Bitmap Vector Studio
 
+![项目概念头图](.github/assets/project-hero.png)
+
+<sub>AI 生成的概念头图，不是产品截图；真实流程与示例见下方。</sub>
+
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文（台灣）](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 使用 **VTracer** 把位图转换成可编辑的 SVG 路径。从本地命令行转换开始，检查效果，再使用批量处理或 Streamlit 界面。

@@ -1,5 +1,9 @@
 # Bitmap Vector Studio
 
+![プロジェクトのコンセプトバナー](.github/assets/project-hero.png)
+
+<sub>AI で生成したコンセプト画像です。製品画面ではありません。実際の手順・実例は下記をご覧ください。</sub>
+
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文（台灣）](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 **VTracer** でビットマップを編集可能な SVG パスに変換します。ローカル CLI で結果を確認してから、バッチ処理や Streamlit UI を利用できます。

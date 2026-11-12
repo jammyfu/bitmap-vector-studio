@@ -1,5 +1,9 @@
 # Bitmap Vector Studio
 
+![專案概念主視覺](.github/assets/project-hero.png)
+
+<sub>AI 產生的概念主視覺，不是產品截圖；實際流程與範例請見下方。</sub>
+
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文（台灣）](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 使用 **VTracer** 將點陣圖片轉換為可編輯的 SVG 路徑。先從本機命令列轉換、檢查結果，再使用批次處理或 Streamlit 介面。
